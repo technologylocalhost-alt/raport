@@ -1,0 +1,648 @@
+'use client';
+
+import { useEffect, useState, FormEvent } from 'react';
+import { Plus, Trash2, X, AlertCircle, CheckCircle, ArrowLeft, BookOpen, Users } from 'lucide-react';
+
+interface Class {
+  id: string;
+  name: string;
+  levelId: string;
+  levelName?: string;
+  capacity: number;
+}
+
+interface ClassSubject {
+  id: string;
+  subject: {
+    id: string;
+    code: string;
+    name: string;
+    description?: string;
+    creditHours?: number;
+  };
+}
+
+interface ClassTeacher {
+  id: string;
+  teacher: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  subject: {
+    id: string;
+    code: string;
+    name: string;
+  };
+}
+
+interface Teacher {
+  id: string;
+  name: string;
+  email: string;
+}
+
+interface Subject {
+  id: string;
+  code: string;
+  name: string;
+  description?: string;
+  creditHours?: number;
+}
+
+interface SubjectFormData {
+  subjectId: string;
+}
+
+interface TeacherFormData {
+  teacherId: string;
+  subjectId: string;
+}
+
+type TabType = 'subjects' | 'teachers';
+
+export default function WaliKelasClassManagementPage() {
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [classSubjects, setClassSubjects] = useState<ClassSubject[]>([]);
+  const [classTeachers, setClassTeachers] = useState<ClassTeacher[]>([]);
+  const [allTeachers, setTeachers] = useState<Teacher[]>([]);
+  const [allSubjects, setAllSubjects] = useState<Subject[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  const [selectedClassName, setSelectedClassName] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<TabType>('subjects');
+  const [showSubjectForm, setShowSubjectForm] = useState(false);
+  const [showTeacherForm, setShowTeacherForm] = useState(false);
+  const [subjectFormData, setSubjectFormData] = useState<SubjectFormData>({ subjectId: '' });
+  const [teacherFormData, setTeacherFormData] = useState<TeacherFormData>({ teacherId: '', subjectId: '' });
+
+  useEffect(() => {
+    const user = localStorage.getItem('user');
+    if (user) {
+      const parsedUser = JSON.parse(user);
+      fetchClasses(parsedUser.id);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedClassId) {
+      fetchClassSubjects();
+      fetchClassTeachers();
+    }
+  }, [selectedClassId]);
+
+  async function fetchClasses(waliKelasId: string) {
+    try {
+      setIsLoading(true);
+      const token = localStorage.getItem('accessToken');
+      const headers = { Authorization: `Bearer ${token}` };
+
+      const response = await fetch(`/api/admin/classes?limit=100&waliKelasId=${waliKelasId}`, { headers });
+      const data = await response.json();
+
+      if (response.ok) {
+        // Transform classes to extract nested object values
+        const transformedClasses = (data.data || []).map((c: any) => ({
+          ...c,
+          levelName: c.level?.name || '-',
+        }));
+        setClasses(transformedClasses);
+      } else {
+        setErrorMessage('Gagal memuat daftar kelas');
+      }
+    } catch (error) {
+      console.error('Error fetching classes:', error);
+      setErrorMessage('Gagal memuat daftar kelas');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function fetchClassSubjects() {
+    if (!selectedClassId) return;
+    try {
+      const token = localStorage.getItem('accessToken');
+      const headers = { Authorization: `Bearer ${token}` };
+      const response = await fetch(`/api/admin/classes/${selectedClassId}/subjects`, { headers });
+      const data = await response.json();
+      if (response.ok) {
+        setClassSubjects(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching subjects:', error);
+    }
+  }
+
+  async function fetchClassTeachers() {
+    if (!selectedClassId) return;
+    try {
+      const token = localStorage.getItem('accessToken');
+      const headers = { Authorization: `Bearer ${token}` };
+      const response = await fetch(`/api/admin/classes/${selectedClassId}/teachers`, { headers });
+      const data = await response.json();
+      if (response.ok) {
+        setClassTeachers(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching teachers:', error);
+    }
+  }
+
+  async function fetchAllSubjects() {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const headers = { Authorization: `Bearer ${token}` };
+      const response = await fetch(`/api/admin/subjects?limit=100`, { headers });
+      const data = await response.json();
+      if (response.ok) {
+        setAllSubjects(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching subjects:', error);
+    }
+  }
+
+  async function fetchAllTeachers() {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const headers = { Authorization: `Bearer ${token}` };
+      const response = await fetch(`/api/admin/users?limit=100&role=TEACHER`, { headers });
+      const data = await response.json();
+      if (response.ok) {
+        setTeachers(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching teachers:', error);
+    }
+  }
+
+  async function handleAddSubject(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!subjectFormData.subjectId) {
+      setErrorMessage('Pilih mata pelajaran');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('accessToken');
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      };
+
+      const response = await fetch(`/api/admin/classes/${selectedClassId}/subjects`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(subjectFormData),
+      });
+
+      if (response.ok) {
+        setSuccessMessage('Mata pelajaran berhasil ditambahkan');
+        setShowSubjectForm(false);
+        setSubjectFormData({ subjectId: '' });
+        fetchClassSubjects();
+      } else {
+        const error = await response.json();
+        setErrorMessage(error.error || 'Terjadi kesalahan');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      setErrorMessage('Terjadi kesalahan');
+    }
+  }
+
+  async function handleAddTeacher(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!teacherFormData.teacherId || !teacherFormData.subjectId) {
+      setErrorMessage('Pilih guru dan mata pelajaran');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('accessToken');
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      };
+
+      const response = await fetch(`/api/admin/classes/${selectedClassId}/teachers`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(teacherFormData),
+      });
+
+      if (response.ok) {
+        setSuccessMessage('Guru berhasil ditambahkan');
+        setShowTeacherForm(false);
+        setTeacherFormData({ teacherId: '', subjectId: '' });
+        fetchClassTeachers();
+      } else {
+        const error = await response.json();
+        setErrorMessage(error.error || 'Terjadi kesalahan');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      setErrorMessage('Terjadi kesalahan');
+    }
+  }
+
+  async function handleDeleteSubject(subjectId: string) {
+    if (!confirm('Hapus mata pelajaran?')) return;
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`/api/admin/classes/${selectedClassId}/subjects/${subjectId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (response.ok) {
+        setSuccessMessage('Mata pelajaran berhasil dihapus');
+        fetchClassSubjects();
+      } else {
+        setErrorMessage('Gagal menghapus');
+      }
+    } catch (error) {
+      setErrorMessage('Terjadi kesalahan');
+    }
+  }
+
+  async function handleDeleteTeacher(teacherId: string) {
+    if (!confirm('Hapus guru?')) return;
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`/api/admin/classes/${selectedClassId}/teachers/${teacherId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (response.ok) {
+        setSuccessMessage('Guru berhasil dihapus');
+        fetchClassTeachers();
+      } else {
+        setErrorMessage('Gagal menghapus');
+      }
+    } catch (error) {
+      setErrorMessage('Terjadi kesalahan');
+    }
+  }
+
+  // View: Classes List
+  if (!selectedClassId) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Manajemen Kelas</h1>
+          <p className="text-gray-600 mt-1">Kelola mata pelajaran dan guru untuk setiap kelas</p>
+        </div>
+
+        {errorMessage && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
+            <AlertCircle size={20} />
+            {errorMessage}
+            <button onClick={() => setErrorMessage('')} className="ml-auto">
+              <X size={18} />
+            </button>
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500">Memuat data kelas...</p>
+          </div>
+        ) : classes.length === 0 ? (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+            <p className="text-yellow-800">Anda belum ditugaskan sebagai Wali Kelas.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {classes.map((classItem) => (
+              <div
+                key={classItem.id}
+                onClick={() => {
+                  setSelectedClassId(classItem.id);
+                  setSelectedClassName(classItem.name);
+                  setActiveTab('subjects');
+                  fetchAllSubjects();
+                }}
+                className="bg-white rounded-lg shadow-lg hover:shadow-xl transition-all cursor-pointer border-l-4 border-emerald-500 p-6 group"
+              >
+                <h3 className="text-xl font-semibold text-gray-900 group-hover:text-emerald-600 transition-colors">
+                  {classItem.name}
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">{classItem.levelName}</p>
+                <div className="mt-4 text-emerald-600 group-hover:translate-x-1 transition-transform">
+                  Klik untuk manage →
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // View: Management
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => {
+              setSelectedClassId(null);
+              setSelectedClassName('');
+              setShowSubjectForm(false);
+              setShowTeacherForm(false);
+            }}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <ArrowLeft size={24} className="text-gray-600" />
+          </button>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">
+              Manajemen Kelas - {selectedClassName}
+            </h1>
+            <p className="text-gray-600 mt-1">Kelola mata pelajaran dan guru pengajar</p>
+          </div>
+        </div>
+      </div>
+
+      {successMessage && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
+          <CheckCircle size={20} />
+          {successMessage}
+          <button onClick={() => setSuccessMessage('')} className="ml-auto">
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
+          <AlertCircle size={20} />
+          {errorMessage}
+          <button onClick={() => setErrorMessage('')} className="ml-auto">
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="bg-white rounded-t-lg border-b">
+        <div className="flex gap-8 px-6">
+          <button
+            onClick={() => {
+              setActiveTab('subjects');
+              if (!allSubjects.length) fetchAllSubjects();
+            }}
+            className={`py-4 font-semibold flex items-center gap-2 transition-colors ${
+              activeTab === 'subjects'
+                ? 'text-emerald-600 border-b-2 border-emerald-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <BookOpen size={20} />
+            Mata Pelajaran ({classSubjects.length})
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('teachers');
+              if (!allTeachers.length) fetchAllTeachers();
+            }}
+            className={`py-4 font-semibold flex items-center gap-2 transition-colors ${
+              activeTab === 'teachers'
+                ? 'text-emerald-600 border-b-2 border-emerald-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Users size={20} />
+            Guru Pengajar ({classTeachers.length})
+          </button>
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      <div className="bg-white rounded-b-lg p-6">
+        {/* Subjects Tab */}
+        {activeTab === 'subjects' && (
+          <div className="space-y-6">
+            {!showSubjectForm && (
+              <button
+                onClick={() => {
+                  setShowSubjectForm(true);
+                  setSubjectFormData({ subjectId: '' });
+                }}
+                className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 flex items-center gap-2 transition-colors"
+              >
+                <Plus size={20} /> Tambah Mata Pelajaran
+              </button>
+            )}
+
+            {showSubjectForm && (
+              <div className="bg-emerald-50 rounded-lg p-6 border-l-4 border-emerald-600">
+                <h3 className="text-lg font-semibold mb-4">Tambah Mata Pelajaran</h3>
+                <form onSubmit={handleAddSubject} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-900 mb-2">
+                      Pilih Mata Pelajaran <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={subjectFormData.subjectId}
+                      onChange={(e) => setSubjectFormData({ subjectId: e.target.value })}
+                      className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:border-emerald-500"
+                      required
+                    >
+                      <option value="">-- Pilih Mata Pelajaran --</option>
+                      {allSubjects.map((subject) => (
+                        <option key={subject.id} value={subject.id}>
+                          {subject.code} - {subject.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      type="submit"
+                      className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
+                    >
+                      Tambahkan
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowSubjectForm(false)}
+                      className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
+                    >
+                      Batal
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Subjects Table */}
+            <div className="overflow-hidden border rounded-lg">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Kode</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Nama</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Deskripsi</th>
+                    <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700">SKS</th>
+                    <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {classSubjects.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                        Belum ada mata pelajaran
+                      </td>
+                    </tr>
+                  ) : (
+                    classSubjects.map((cs) => (
+                      <tr key={cs.id} className="border-b hover:bg-gray-50">
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{cs.subject.code}</td>
+                        <td className="px-6 py-4 text-sm text-gray-700">{cs.subject.name}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">
+                          {cs.subject.description || '-'}
+                        </td>
+                        <td className="px-6 py-4 text-center text-sm">{cs.subject.creditHours || '-'}</td>
+                        <td className="px-6 py-4 text-center">
+                          <button
+                            onClick={() => handleDeleteSubject(cs.subject.id)}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Teachers Tab */}
+        {activeTab === 'teachers' && (
+          <div className="space-y-6">
+            {!showTeacherForm && (
+              <button
+                onClick={() => {
+                  setShowTeacherForm(true);
+                  setTeacherFormData({ teacherId: '', subjectId: '' });
+                  if (!allTeachers.length) fetchAllTeachers();
+                }}
+                className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 flex items-center gap-2 transition-colors"
+              >
+                <Plus size={20} /> Tambah Guru
+              </button>
+            )}
+
+            {showTeacherForm && (
+              <div className="bg-emerald-50 rounded-lg p-6 border-l-4 border-emerald-600">
+                <h3 className="text-lg font-semibold mb-4">Tambah Guru Pengajar</h3>
+                <form onSubmit={handleAddTeacher} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-bold text-gray-900 mb-2">
+                        Guru <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={teacherFormData.teacherId}
+                        onChange={(e) => setTeacherFormData({ ...teacherFormData, teacherId: e.target.value })}
+                        className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:border-emerald-500"
+                        required
+                      >
+                        <option value="">-- Pilih Guru --</option>
+                        {allTeachers.map((teacher) => (
+                          <option key={teacher.id} value={teacher.id}>
+                            {teacher.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-gray-900 mb-2">
+                        Mata Pelajaran <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={teacherFormData.subjectId}
+                        onChange={(e) => setTeacherFormData({ ...teacherFormData, subjectId: e.target.value })}
+                        className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:border-emerald-500"
+                        required
+                      >
+                        <option value="">-- Pilih Mata Pelajaran --</option>
+                        {classSubjects.map((cs) => (
+                          <option key={cs.subject.id} value={cs.subject.id}>
+                            {cs.subject.code} - {cs.subject.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      type="submit"
+                      className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
+                    >
+                      Tambahkan
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowTeacherForm(false)}
+                      className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
+                    >
+                      Batal
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Teachers Table */}
+            <div className="overflow-hidden border rounded-lg">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Nama Guru</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Email</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Mata Pelajaran</th>
+                    <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {classTeachers.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
+                        Belum ada guru
+                      </td>
+                    </tr>
+                  ) : (
+                    classTeachers.map((ct) => (
+                      <tr key={ct.id} className="border-b hover:bg-gray-50">
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{ct.teacher.name}</td>
+                        <td className="px-6 py-4 text-sm text-gray-700">{ct.teacher.email}</td>
+                        <td className="px-6 py-4 text-sm text-gray-700">
+                          {ct.subject.code} - {ct.subject.name}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <button
+                            onClick={() => handleDeleteTeacher(ct.id)}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

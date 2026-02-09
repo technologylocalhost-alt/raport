@@ -1,0 +1,339 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==================== Auth Models ====================
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String   // bcrypt hashed
+  role      UserRole
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshTokens RefreshToken[]
+  classes       ClassTeacher[]
+  grades        Grade[]
+  classesAsWaliKelas Class[] @relation("ClassWaliKelas")
+
+  @@index([schoolId])
+  @@index([role])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+enum UserRole {
+  ADMIN
+  TEACHER
+  PRINCIPAL
+  WALI_KELAS
+}
+
+// ==================== School & Structure ====================
+
+model School {
+  id           String   @id @default(cuid())
+  name         String
+  address      String?
+  phone        String?
+  email        String?
+  npsn         String?  // Nomor Pokok Sekolah Nasional
+  levels       Level[]
+  users        User[]
+  schoolYears  SchoolYear[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Level {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name      String   // "SD", "SMP", "SMA", "Aliyah"
+  code      String   // Short code: "SD", "SMP", "SMA", "ALY"
+  gradeList Grade[]  // Grade 1-6 for SD, 7-9 for SMP, etc.
+  classes   Class[]
+  subjects  Subject[]
+  reportConfigs ReportConfig[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, code])
+  @@index([schoolId])
+}
+
+model SchoolYear {
+  id       String   @id @default(cuid())
+  schoolId String
+  school   School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  year     String   // "2024/2025"
+  startDate DateTime
+  endDate  DateTime
+  isActive Boolean  @default(true)
+
+  semesters Semester[]
+  classes   Class[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, year])
+  @@index([schoolId])
+}
+
+model Semester {
+  id           String   @id @default(cuid())
+  schoolYearId String
+  schoolYear   SchoolYear @relation(fields: [schoolYearId], references: [id], onDelete: Cascade)
+  number       Int      // 1 or 2
+  startDate    DateTime
+  endDate      DateTime
+  isActive     Boolean  @default(true)
+
+  classes      Class[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([schoolYearId, number])
+  @@index([schoolYearId])
+}
+
+model Class {
+  id         String   @id @default(cuid())
+  levelId    String
+  level      Level    @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  schoolYearId String
+  schoolYear SchoolYear @relation(fields: [schoolYearId], references: [id], onDelete: Cascade)
+  semesterId String
+  semester   Semester @relation(fields: [semesterId], references: [id], onDelete: Cascade)
+  name       String   // "1A", "2B", etc
+  capacity   Int      @default(40)
+  waliKelasId String? // Wali Kelas (Class Advisor) User ID
+  waliKelas  User?    @relation("ClassWaliKelas", fields: [waliKelasId], references: [id], onDelete: SetNull)
+
+  students     Student[]
+  teachers     ClassTeacher[]
+  subjects     ClassSubject[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([levelId, schoolYearId, semesterId, name])
+  @@index([levelId])
+  @@index([schoolYearId])
+  @@index([semesterId])
+  @@index([waliKelasId])
+}
+
+model ClassTeacher {
+  id        String   @id @default(cuid())
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  teacherId String
+  teacher   User     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subjectId String
+  subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([classId, teacherId, subjectId])
+  @@index([classId])
+  @@index([teacherId])
+  @@index([subjectId])
+}
+
+// ==================== Student ====================
+
+model Student {
+  id           String   @id @default(cuid())
+  classId      String
+  class        Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  studentNo    String   // NIS/NISN
+  name         String
+  email        String?
+  phone        String?
+  birthDate    DateTime?
+  address      String?
+  parentPhoneNo String?
+  
+  grades       Grade[]
+  attendances  Attendance[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([classId, studentNo])
+  @@index([classId])
+}
+
+// ==================== Subject & Competency ====================
+
+model Subject {
+  id          String   @id @default(cuid())
+  levelId     String?  // Optional: applicable to specific level
+  level       Level?   @relation(fields: [levelId], references: [id], onDelete: SetNull)
+  code        String   // "MTK", "IPA", etc
+  name        String   // "Matematika", "Ilmu Pengetahuan Alam", etc
+  description String?  // Subject description
+  creditHours Int?     // Credit hours
+  
+  classSubjects ClassSubject[]
+  teachers      ClassTeacher[]
+  competencies  Competency[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([levelId])
+}
+
+model ClassSubject {
+  id        String   @id @default(cuid())
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId String
+  subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([classId, subjectId])
+  @@index([classId])
+  @@index([subjectId])
+}
+
+model Competency {
+  id         String   @id @default(cuid())
+  subjectId  String
+  subject    Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  code       String   // "3.1", "4.2", etc
+  name       String   // Competency description
+  type       CompetencyType // KNOWLEDGE, SKILL, ATTITUDE
+  order      Int      @default(0) // For ordering in reports
+
+  grades     Grade[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([subjectId, code])
+  @@index([subjectId])
+}
+
+enum CompetencyType {
+  KNOWLEDGE      // Pengetahuan (KI-3)
+  SKILL          // Keterampilan (KI-4)
+  ATTITUDE       // Sikap (KI-1, KI-2)
+}
+
+// ==================== Assessment & Grades ====================
+
+model Grade {
+  id            String   @id @default(cuid())
+  studentId     String
+  student       Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  competencyId  String
+  competency    Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  levelId       String
+  level         Level    @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  teacherId     String
+  teacher       User     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  // Flexible scoring: Can be numeric (1-4, 0-100) or text (A-D, E-A)
+  score         String   // Will be validated based on assessment type
+  scoringType   ScoringType // Type of scoring used
+  assessmentType AssessmentType // Type of assessment (UH, UTS, UAS, etc)
+  
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([studentId, competencyId, teacherId, assessmentType])
+  @@index([studentId])
+  @@index([competencyId])
+  @@index([levelId])
+  @@index([teacherId])
+}
+
+enum ScoringType {
+  NUMERIC_1_4      // 1-4 skala (SD, SMP, SMA)
+  NUMERIC_0_100    // 0-100 (alternative)
+  LETTER_A_D       // A, B, C, D (SMA, Aliyah)
+  LETTER_E_A       // E, D, C, B, A (alternative)
+}
+
+enum AssessmentType {
+  QUIZ             // Kuis
+  MIDTERM          // UTS
+  FINAL            // UAS
+  TASK             // Tugas
+  PROJECT          // Proyek
+  DAILY            // Penilaian Harian
+}
+
+// ==================== Attendance ====================
+
+model Attendance {
+  id        String   @id @default(cuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  date      DateTime
+  status    AttendanceStatus
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, date])
+  @@index([studentId])
+}
+
+enum AttendanceStatus {
+  HADIR
+  SAKIT
+  IZIN
+  ALFA
+}
+
+// ==================== Report Configuration ====================
+
+model ReportConfig {
+  id      String  @id @default(cuid())
+  levelId String  @unique
+  level   Level   @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  
+  // Scoring configuration for this level
+  scoringType          ScoringType
+  minScore             String   // Minimum passing score
+  maxScore             String   // Maximum possible score
+  
+  // Components for final grade calculation
+  includeAttitude      Boolean  @default(true)
+  includeSkills        Boolean  @default(true)
+  includeKnowledge     Boolean  @default(true)
+  
+  // Weights (in percentage): sum should be 100
+  weightAttitude       Int      @default(10)
+  weightSkills         Int      @default(45)
+  weightKnowledge      Int      @default(45)
+  
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
