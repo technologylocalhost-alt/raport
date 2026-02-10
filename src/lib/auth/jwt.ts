@@ -13,8 +13,15 @@ interface TokenResponse {
   refreshToken: string;
 }
 
-const JWT_ACCESS_SECRET: string = process.env.JWT_ACCESS_SECRET || 'access-secret-key';
-const JWT_REFRESH_SECRET: string = process.env.JWT_REFRESH_SECRET || 'refresh-secret-key';
+if (!process.env.JWT_ACCESS_SECRET) {
+  throw new Error('JWT_ACCESS_SECRET environment variable is not set');
+}
+if (!process.env.JWT_REFRESH_SECRET) {
+  throw new Error('JWT_REFRESH_SECRET environment variable is not set');
+}
+
+const JWT_ACCESS_SECRET: string = process.env.JWT_ACCESS_SECRET;
+const JWT_REFRESH_SECRET: string = process.env.JWT_REFRESH_SECRET;
 const JWT_ACCESS_EXPIRY = (process.env.JWT_ACCESS_EXPIRY || '15m') as string;
 const JWT_REFRESH_EXPIRY = (process.env.JWT_REFRESH_EXPIRY || '7d') as string;
 

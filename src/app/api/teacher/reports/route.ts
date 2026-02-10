@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verify } from 'jsonwebtoken';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+import { verifyAccessToken } from '@/lib/auth/jwt';
 
 async function getTeacher(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -11,15 +9,16 @@ async function getTeacher(req: NextRequest) {
   }
 
   const token = authHeader.slice(7);
-  try {
-    const decoded = verify(token, JWT_SECRET) as any;
-    const teacher = await prisma.user.findUnique({
-      where: { id: decoded.id },
-    });
-    return teacher;
-  } catch {
+  const payload = verifyAccessToken(token);
+  
+  if (!payload) {
     return null;
   }
+
+  const teacher = await prisma.user.findUnique({
+    where: { id: payload.userId },
+  });
+  return teacher;
 }
 
 export async function GET(req: NextRequest) {
