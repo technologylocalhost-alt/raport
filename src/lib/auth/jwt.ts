@@ -22,6 +22,14 @@ if (!process.env.JWT_REFRESH_SECRET) {
 
 const JWT_ACCESS_SECRET: string = process.env.JWT_ACCESS_SECRET;
 const JWT_REFRESH_SECRET: string = process.env.JWT_REFRESH_SECRET;
+
+// Debug logs
+console.log('[JWT Config]', {
+  access_secret_length: JWT_ACCESS_SECRET.length,
+  access_secret_start: JWT_ACCESS_SECRET.substring(0, 10),
+  refresh_secret_length: JWT_REFRESH_SECRET.length,
+  refresh_secret_start: JWT_REFRESH_SECRET.substring(0, 10),
+});
 const JWT_ACCESS_EXPIRY = (process.env.JWT_ACCESS_EXPIRY || '15m') as string;
 const JWT_REFRESH_EXPIRY = (process.env.JWT_REFRESH_EXPIRY || '7d') as string;
 
@@ -45,8 +53,18 @@ export function generateTokens(payload: TokenPayload): TokenResponse {
  */
 export function verifyAccessToken(token: string): TokenPayload | null {
   try {
-    return jwt.verify(token, JWT_ACCESS_SECRET as any) as TokenPayload;
-  } catch {
+    console.log('[Verify AccessToken]', {
+      token_length: token.length,
+      token_start: token.substring(0, 20),
+      secret_length: JWT_ACCESS_SECRET.length,
+      secret_start: JWT_ACCESS_SECRET.substring(0, 10),
+    });
+    
+    const decoded = jwt.verify(token, JWT_ACCESS_SECRET as any) as TokenPayload;
+    console.log('[Token Verified OK]', { userId: decoded.userId, role: decoded.role });
+    return decoded;
+  } catch (error) {
+    console.error('[Token Verify Failed]', error instanceof Error ? error.message : String(error));
     return null;
   }
 }
