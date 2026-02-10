@@ -123,15 +123,7 @@ export async function DELETE(
     const competency = await prisma.competency.findUnique({
       where: { id },
       include: {
-        subject: {
-          include: {
-            classTeachers: {
-              where: {
-                teacherId: decoded.userId,
-              },
-            },
-          },
-        },
+        subject: true,
       },
     });
 
@@ -142,7 +134,7 @@ export async function DELETE(
       );
     }
 
-    if (!competency.subject || competency.subject.classTeachers.length === 0) {
+    if (!competency.subject) {
       return NextResponse.json(
         { success: false, message: 'Anda tidak authorized untuk kompetensi ini' },
         { status: 403 }
