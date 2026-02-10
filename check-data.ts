@@ -24,7 +24,7 @@ async function main() {
 
   console.log('\n=== GRADES ===');
   console.log(`Total: ${grades.length}`);
-  grades.forEach(g => {
+  grades.forEach((g: any) => {
     console.log(`- ${g.competency?.subject?.name}: ${g.score} (${g.assessmentType})`);
   });
 
