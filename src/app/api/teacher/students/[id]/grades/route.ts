@@ -28,10 +28,19 @@ export async function GET(
     const subjectId = request.nextUrl.searchParams.get('subjectId');
 
     // Get grades for this student
-    let gradesQuery: any = {
-      where: {
-        studentId: id,
-      },
+    const gradesQueryWhere: any = {
+      studentId: id,
+    };
+
+    // Filter by subject if provided
+    if (subjectId) {
+      gradesQueryWhere.competency = {
+        subjectId: subjectId,
+      };
+    }
+
+    const grades = await prisma.grade.findMany({
+      where: gradesQueryWhere,
       include: {
         competency: {
           select: {
@@ -43,16 +52,7 @@ export async function GET(
         },
       },
       orderBy: { createdAt: 'desc' },
-    };
-
-    // Filter by subject if provided
-    if (subjectId) {
-      gradesQuery.where.competency = {
-        subjectId: subjectId,
-      };
-    }
-
-    const grades = await prisma.grade.findMany(gradesQuery);
+    });
 
     return NextResponse.json({
       success: true,
