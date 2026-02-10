@@ -224,17 +224,18 @@ model ClassSubject {
 }
 
 model Competency {
-  id         String   @id @default(cuid())
-  subjectId  String
-  subject    Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  code       String   // "3.1", "4.2", etc
-  name       String   // Competency description
-  type       CompetencyType // KNOWLEDGE, SKILL, ATTITUDE
-  order      Int      @default(0) // For ordering in reports
+  id          String   @id @default(cuid())
+  subjectId   String
+  subject     Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  code        String   // "3.1", "4.2", etc
+  name        String   // Competency description
+  description String   @default("") // Extended description
+  type        CompetencyType // KNOWLEDGE, SKILL, ATTITUDE
+  order       Int      @default(0) // For ordering in reports
 
-  grades     Grade[]
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  grades      Grade[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@unique([subjectId, code])
   @@index([subjectId])
