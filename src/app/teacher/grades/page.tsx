@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, ChevronLeft, ChevronRight, BookOpen, AlertCircle, CheckCircle } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, BookOpen, AlertCircle, CheckCircle } from 'lucide-react';
 
 interface Grade {
   id: string;
   studentId: string;
   studentName: string;
+  studentNisn: string;
+  className: string;
   competencyId: string;
   competencyName: string;
   subjectName: string;
@@ -32,6 +34,12 @@ export default function GradesPage() {
   const [grades, setGrades] = useState<Grade[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [filterClass, setFilterClass] = useState('');
+  const [filterSubject, setFilterSubject] = useState('');
+  const [filterAssessmentType, setFilterAssessmentType] = useState('');
+  const [availableClasses, setAvailableClasses] = useState<{ id: string; name: string }[]>([]);
+  const [availableSubjects, setAvailableSubjects] = useState<{ id: string; name: string }[]>([]);
+  const [filterLoading, setFilterLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [showForm, setShowForm] = useState(false);
@@ -54,7 +62,7 @@ export default function GradesPage() {
 
   useEffect(() => {
     fetchGrades();
-  }, [page, search]);
+  }, [page, search, filterClass, filterSubject, filterAssessmentType]);
 
   useEffect(() => {
     if (showForm && students.length === 0) {
@@ -63,11 +71,8 @@ export default function GradesPage() {
   }, [showForm]);
 
   useEffect(() => {
-    // Ensure options are loaded whenever form opens
-    if (showForm && (students.length === 0 || competencies.length === 0)) {
-      fetchOptions();
-    }
-  }, [showForm, students.length, competencies.length]);
+    fetchFilterOptions();
+  }, []);
 
   async function fetchGrades() {
     try {
@@ -78,6 +83,9 @@ export default function GradesPage() {
         page: page.toString(),
         limit: '10',
         ...(search && { search }),
+        ...(filterClass && { classId: filterClass }),
+        ...(filterSubject && { subjectId: filterSubject }),
+        ...(filterAssessmentType && { assessmentType: filterAssessmentType }),
       });
 
       const response = await fetch(`/api/teacher/grades?${params}`, {
@@ -121,6 +129,30 @@ export default function GradesPage() {
       setErrorMessage('Gagal memuat data siswa dan kompetensi');
     } finally {
       setOptionsLoading(false);
+    }
+  }
+
+  async function fetchFilterOptions() {
+    try {
+      setFilterLoading(true);
+      const token = localStorage.getItem('accessToken');
+
+      // Fetch classes and subjects filter options
+      const response = await fetch('/api/teacher/grades/filter-options', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setAvailableClasses(data.classes || []);
+        setAvailableSubjects(data.subjects || []);
+      }
+    } catch (error) {
+      console.error('Error fetching filter options:', error);
+    } finally {
+      setFilterLoading(false);
     }
   }
 
@@ -245,10 +277,12 @@ export default function GradesPage() {
   };
 
   const getSelectedStudentName = () => {
+    if (!students || students.length === 0) return '';
     return students.find((s) => s.id === formData.studentId)?.name || '';
   };
 
   const getSelectedCompetencyName = () => {
+    if (!competencies || competencies.length === 0) return '';
     const comp = competencies.find((c) => c.id === formData.competencyId);
     return comp ? `${comp.subjectName} - ${comp.name}` : '';
   };
@@ -256,24 +290,9 @@ export default function GradesPage() {
   return (
     <div className="space-y-6">
       {/* Header Section */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Input Nilai Siswa</h1>
-          <p className="text-gray-600 text-sm mt-1">Kelola nilai siswa berdasarkan kompetensi dan jenis penilaian</p>
-        </div>
-        {!showForm && (
-          <button
-            onClick={() => {
-              setEditingId(null);
-              setFormData({ studentId: '', competencyId: '', score: '', assessmentType: 'DAILY', notes: '' });
-              setShowForm(true);
-            }}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition-colors shadow-lg hover:shadow-xl font-medium"
-          >
-            <Plus size={20} />
-            Tambah Nilai
-          </button>
-        )}
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Input Nilai Siswa</h1>
+        <p className="text-gray-600 text-sm mt-1">Kelola nilai siswa berdasarkan kompetensi dan jenis penilaian</p>
       </div>
 
       {/* Alert Messages */}
@@ -293,19 +312,88 @@ export default function GradesPage() {
 
       {/* Search Section */}
       {!showForm && (
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white rounded-lg shadow-lg p-6 border-l-4 border-indigo-500 space-y-4">
+          <label className="block text-sm font-semibold text-gray-900">Filter Nilai</label>
+          
+          {/* Search Input */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-indigo-500" size={20} />
             <input
               type="text"
-              placeholder="Cari nama siswa atau mata pelajaran..."
+              placeholder="Masukkan nama siswa atau mata pelajaran..."
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+              className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all hover:border-gray-400 bg-white text-gray-900 font-medium"
             />
+          </div>
+
+          {/* Filter Dropdowns */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Class Filter */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-2 uppercase">Kelas</label>
+              <select
+                value={filterClass}
+                onChange={(e) => {
+                  setFilterClass(e.target.value);
+                  setPage(1);
+                }}
+                disabled={filterLoading}
+                className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white text-gray-900 font-medium disabled:bg-gray-100"
+              >
+                <option value="">Semua Kelas</option>
+                {availableClasses.map((cls) => (
+                  <option key={cls.id} value={cls.id}>
+                    {cls.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Subject Filter */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-2 uppercase">Mata Pelajaran</label>
+              <select
+                value={filterSubject}
+                onChange={(e) => {
+                  setFilterSubject(e.target.value);
+                  setPage(1);
+                }}
+                disabled={filterLoading}
+                className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white text-gray-900 font-medium disabled:bg-gray-100"
+              >
+                <option value="">Semua Mata Pelajaran</option>
+                {availableSubjects.map((subj) => (
+                  <option key={subj.id} value={subj.id}>
+                    {subj.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Assessment Type Filter */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-2 uppercase">Jenis Penilaian</label>
+              <select
+                value={filterAssessmentType}
+                onChange={(e) => {
+                  setFilterAssessmentType(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white text-gray-900 font-medium"
+              >
+                <option value="">Semua Jenis Penilaian</option>
+                <option value="DAILY">Penilaian Harian</option>
+                <option value="QUIZ">Kuis</option>
+                <option value="TASK">Tugas</option>
+                <option value="PROJECT">Proyek</option>
+                <option value="MIDTERM">UTS</option>
+                <option value="FINAL">UAS</option>
+              </select>
+            </div>
           </div>
         </div>
       )}
@@ -336,7 +424,7 @@ export default function GradesPage() {
                   required
                 >
                   <option value="">-- Pilih Siswa --</option>
-                  {students.map((student) => (
+                  {students && students.map((student) => (
                     <option key={student.id} value={student.id}>
                       {student.name}
                     </option>
@@ -360,7 +448,7 @@ export default function GradesPage() {
                   required
                 >
                   <option value="">-- Pilih Kompetensi --</option>
-                  {competencies.map((comp) => (
+                  {competencies && competencies.map((comp) => (
                     <option key={comp.id} value={comp.id}>
                       {comp.subjectName} - {comp.name}
                     </option>
@@ -466,21 +554,30 @@ export default function GradesPage() {
               <table className="w-full">
                 <thead className="bg-gradient-to-r from-slate-50 to-slate-100 border-b">
                   <tr>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">NIM</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Nama Siswa</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Kelas</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Mata Pelajaran</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Kompetensi</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Nilai</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Jenis Penilaian</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Tanggal</th>
-                    <th className="px-6 py-4 text-right text-sm font-semibold text-gray-700">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {grades.map((grade) => (
                     <tr key={grade.id} className="hover:bg-indigo-50 transition-colors">
+                      <td className="px-6 py-4 text-sm">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
+                          {grade.studentNisn}
+                        </span>
+                      </td>
                       <td className="px-6 py-4 text-sm font-medium text-gray-900">{grade.studentName}</td>
+                      <td className="px-6 py-4 text-sm">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                          {grade.className}
+                        </span>
+                      </td>
                       <td className="px-6 py-4 text-sm text-gray-600">{grade.subjectName}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{grade.competencyName}</td>
                       <td className="px-6 py-4 text-sm">
                         <span className={`inline-block px-4 py-2 rounded-full font-bold text-base ${getScoreBadgeColor(grade.score)}`}>
                           {grade.score}
@@ -495,22 +592,6 @@ export default function GradesPage() {
                         {grade.assessmentType === 'FINAL' && 'UAS'}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">{grade.date}</td>
-                      <td className="px-6 py-4 text-right space-x-2">
-                        <button
-                          onClick={() => handleEdit(grade)}
-                          className="bg-blue-100 text-blue-700 px-3 py-2 rounded-lg hover:bg-blue-200 transition-all font-medium text-sm inline-flex items-center gap-1"
-                        >
-                          <Edit size={16} />
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(grade.id)}
-                          className="bg-red-100 text-red-700 px-3 py-2 rounded-lg hover:bg-red-200 transition-all font-medium text-sm inline-flex items-center gap-1"
-                        >
-                          <Trash2 size={16} />
-                          Hapus
-                        </button>
-                      </td>
                     </tr>
                   ))}
                 </tbody>

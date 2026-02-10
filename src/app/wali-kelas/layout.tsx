@@ -41,6 +41,7 @@ export default function WaliKelasLayout({ children }: WaliKelasLayoutProps) {
       title: 'Laporan',
       items: [
         { title: 'Raport Siswa', icon: FileText, href: '/wali-kelas/reports' },
+        { title: 'Penilaian', icon: CheckCircle, href: '/wali-kelas/penilaian' },
       ],
     },
   ];
@@ -63,9 +64,13 @@ export default function WaliKelasLayout({ children }: WaliKelasLayoutProps) {
     }
   }
 
+  // Check if we're on detail report page - hide sidebar
+  const isDetailReportPage = pathname.includes('/reports/detail');
+
   return (
     <div className="flex h-screen bg-gray-100">
-      {/* Sidebar */}
+      {/* Sidebar - Hidden on detail report page */}
+      {!isDetailReportPage && (
       <aside
         className={`${
           sidebarOpen ? 'w-64' : 'w-20'
@@ -151,12 +156,11 @@ export default function WaliKelasLayout({ children }: WaliKelasLayoutProps) {
           </button>
         </div>
       </aside>
+      )}
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto">
-        <div className="p-8">
-          {children}
-        </div>
+      <main className={`overflow-auto ${isDetailReportPage ? 'w-full' : 'flex-1'}`}>
+        {isDetailReportPage ? children : <div className="p-8">{children}</div>}
       </main>
     </div>
   );

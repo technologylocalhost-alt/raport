@@ -5,6 +5,7 @@ import { Plus, Edit, Trash2, ChevronDown, ChevronUp, Calendar } from 'lucide-rea
 
 interface SchoolYear {
   id: string;
+  schoolId: string;
   year: string;
   startDate: string;
   endDate: string;
@@ -28,9 +29,16 @@ interface SchoolYearWithSemesters extends SchoolYear {
   semesters: Semester[];
 }
 
+interface School {
+  id: string;
+  name: string;
+}
+
 export default function AcademicStructurePage() {
   const [schoolYears, setSchoolYears] = useState<SchoolYearWithSemesters[]>([]);
+  const [schools, setSchools] = useState<School[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [schoolsLoading, setSchoolsLoading] = useState(true);
   const [expandedYear, setExpandedYear] = useState<string | null>(null);
   const [showYearForm, setShowYearForm] = useState(false);
   const [editingYearId, setEditingYearId] = useState<string | null>(null);
@@ -38,6 +46,7 @@ export default function AcademicStructurePage() {
   const [editingSemesterId, setEditingSemesterId] = useState<string | null>(null);
 
   const [yearFormData, setYearFormData] = useState({
+    schoolId: '',
     year: '',
     startDate: '',
     endDate: '',
@@ -52,8 +61,28 @@ export default function AcademicStructurePage() {
   });
 
   useEffect(() => {
+    fetchSchools();
     fetchAcademicStructure();
   }, []);
+
+  async function fetchSchools() {
+    try {
+      setSchoolsLoading(true);
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch('/api/admin/schools?limit=100', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      setSchools(data.data || []);
+    } catch (error) {
+      console.error('Failed to fetch schools:', error);
+    } finally {
+      setSchoolsLoading(false);
+    }
+  }
 
   async function fetchAcademicStructure() {
     try {
@@ -92,8 +121,8 @@ export default function AcademicStructurePage() {
   async function handleSaveYear(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!yearFormData.year || !yearFormData.startDate || !yearFormData.endDate) {
-      alert('Tahun akademik dan tanggal harus diisi!');
+    if (!yearFormData.schoolId || !yearFormData.year || !yearFormData.startDate || !yearFormData.endDate) {
+      alert('Sekolah, tahun akademik dan tanggal harus diisi!');
       return;
     }
 
@@ -111,13 +140,27 @@ export default function AcademicStructurePage() {
         ? `/api/admin/school-years/${editingYearId}`
         : '/api/admin/school-years';
 
+      // Format dates as ISO datetime: YYYY-MM-DDTHH:MM:SSZ
+      const startDateTime = `${yearFormData.startDate}T00:00:00Z`;
+      const endDateTime = `${yearFormData.endDate}T00:00:00Z`;
+
+      const payload = {
+        schoolId: yearFormData.schoolId.trim(),
+        year: yearFormData.year.trim(),
+        startDate: startDateTime,
+        endDate: endDateTime,
+        isActive: yearFormData.isActive,
+      };
+
+      console.log('Year payload:', JSON.stringify(payload, null, 2));
+
       const response = await fetch(url, {
         method: editingYearId ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(yearFormData),
+        body: JSON.stringify(payload),
       });
 
       const result = await response.json();
@@ -128,6 +171,7 @@ export default function AcademicStructurePage() {
         setShowYearForm(false);
         setEditingYearId(null);
         setYearFormData({
+          schoolId: '',
           year: '',
           startDate: '',
           endDate: '',
@@ -137,7 +181,7 @@ export default function AcademicStructurePage() {
       } else {
         let errorMsg = result.error || 'Gagal menyimpan tahun akademik';
         if (result.details && Array.isArray(result.details)) {
-          errorMsg = result.details.map((d: any) => `${d.field}: ${d.message}`).join('\n');
+          errorMsg = result.details.map((d: any) => `${d.message}`).join(', ');
         }
         alert(`❌ ${errorMsg}`);
       }
@@ -194,16 +238,25 @@ export default function AcademicStructurePage() {
         ? `/api/admin/semesters/${editingSemesterId}`
         : '/api/admin/semesters';
 
+      // Format dates as ISO datetime: YYYY-MM-DDTHH:MM:SSZ
+      const startDateTime = `${semesterFormData.startDate}T00:00:00Z`;
+      const endDateTime = `${semesterFormData.endDate}T00:00:00Z`;
+
+      const payload = {
+        schoolYearId,
+        number: semesterFormData.number,
+        startDate: startDateTime,
+        endDate: endDateTime,
+        isActive: semesterFormData.isActive,
+      };
+
       const response = await fetch(url, {
         method: editingSemesterId ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          schoolYearId,
-          ...semesterFormData,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const result = await response.json();
@@ -260,6 +313,7 @@ export default function AcademicStructurePage() {
 
   function handleEditYear(year: SchoolYear) {
     setYearFormData({
+      schoolId: year.schoolId,
       year: year.year,
       startDate: year.startDate.split('T')[0],
       endDate: year.endDate.split('T')[0],
@@ -301,6 +355,7 @@ export default function AcademicStructurePage() {
           onClick={() => {
             setEditingYearId(null);
             setYearFormData({
+              schoolId: '',
               year: '',
               startDate: '',
               endDate: '',
@@ -325,6 +380,35 @@ export default function AcademicStructurePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Sekolah <span className="text-red-500">*</span>
+                </label>
+                {schoolsLoading ? (
+                  <div className="w-full px-4 py-3 bg-gray-100 border-2 border-gray-200 rounded-lg text-gray-600">
+                    Loading sekolah...
+                  </div>
+                ) : schools.length === 0 ? (
+                  <div className="w-full px-4 py-3 bg-red-50 border-2 border-red-200 rounded-lg text-red-600">
+                    Tidak ada sekolah tersedia
+                  </div>
+                ) : (
+                  <select
+                    value={yearFormData.schoolId}
+                    onChange={(e) => setYearFormData({ ...yearFormData, schoolId: e.target.value })}
+                    className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-lg text-gray-900 text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-300 focus:outline-none transition-all"
+                    required
+                  >
+                    <option value="">-- Pilih Sekolah --</option>
+                    {schools.map((school) => (
+                      <option key={school.id} value={school.id}>
+                        {school.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Tahun Akademik <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -336,18 +420,18 @@ export default function AcademicStructurePage() {
                   required
                 />
               </div>
+            </div>
 
-              <div className="flex items-end gap-3">
-                <label className="flex items-center gap-3 h-full">
-                  <input
-                    type="checkbox"
-                    checked={yearFormData.isActive}
-                    onChange={(e) => setYearFormData({ ...yearFormData, isActive: e.target.checked })}
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                  />
-                  <span className="text-sm font-semibold text-gray-700">Aktif</span>
-                </label>
-              </div>
+            <div className="flex items-center">
+              <label className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={yearFormData.isActive}
+                  onChange={(e) => setYearFormData({ ...yearFormData, isActive: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-sm font-semibold text-gray-700">Aktif</span>
+              </label>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -391,6 +475,7 @@ export default function AcademicStructurePage() {
                   setShowYearForm(false);
                   setEditingYearId(null);
                   setYearFormData({
+                    schoolId: '',
                     year: '',
                     startDate: '',
                     endDate: '',

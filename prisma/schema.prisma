@@ -135,6 +135,7 @@ model Class {
   students     Student[]
   teachers     ClassTeacher[]
   subjects     ClassSubject[]
+  studentNotes StudentNote[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -179,6 +180,7 @@ model Student {
   
   grades       Grade[]
   attendances  Attendance[]
+  studentNotes StudentNote[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -310,6 +312,31 @@ enum AttendanceStatus {
   SAKIT
   IZIN
   ALFA
+}
+
+// ==================== Student Notes ====================
+
+model StudentNote {
+  id        String   @id @default(cuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  semesterId String?  // Optional: specific semester
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  
+  // Development notes/Catatan Perkembangan
+  developmentNotes String?
+  // Achieved competencies/Pencapaian Kompetensi
+  achievedCompetencies String?
+  // Areas for improvement/Aspek yang perlu dikembangkan
+  improvementAreas String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, classId, semesterId])
+  @@index([studentId])
+  @@index([classId])
 }
 
 // ==================== Report Configuration ====================

@@ -24,7 +24,7 @@ const gradeSchema = z.object({
   notes: z.string().optional(),
 });
 
-async function getTeacher(req: NextRequest) {
+async function getUser(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
   if (!authHeader?.startsWith('Bearer ')) {
     return null;
@@ -37,41 +37,62 @@ async function getTeacher(req: NextRequest) {
     return null;
   }
 
-  const teacher = await prisma.user.findUnique({
+  const user = await prisma.user.findUnique({
     where: { id: payload.userId },
   });
 
-  if (teacher && teacher.role === 'TEACHER') {
-    return teacher;
+  if (user && (user.role === 'TEACHER' || user.role === 'WALI_KELAS')) {
+    return user;
   }
   return null;
 }
 
 /**
  * GET /api/teacher/grades
- * Get grades for the current teacher with pagination
+ * Get grades for the current teacher/wali-kelas with pagination
  */
 export async function GET(request: NextRequest) {
   try {
-    const teacher = await getTeacher(request);
-    if (!teacher) {
+    const user = await getUser(request);
+    if (!user) {
       return errorResponse('Unauthorized', 401);
     }
 
     const searchParams = request.nextUrl.searchParams;
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const pageParam = parseInt(searchParams.get('page') || '1');
+    const page = isNaN(pageParam) ? 1 : pageParam;
+    const limitParam = parseInt(searchParams.get('limit') || '10');
+    const limit = isNaN(limitParam) ? 10 : limitParam;
     const search = searchParams.get('search') || '';
+    const classId = searchParams.get('classId') || '';
+    const subjectId = searchParams.get('subjectId') || '';
+    const assessmentType = searchParams.get('assessmentType') || '';
+    const studentId = searchParams.get('studentId') || '';
 
-    const skip = (page - 1) * limit;
+    const skip = Math.max(0, (page - 1) * limit);
 
     // Build where clause
-    const whereClause: any = {
-      teacher: {
-        id: teacher.id,
-      },
-    };
+    const whereClause: any = {};
 
+    // Teachers can only see their own grades; wali-kelas can see grades for their classes
+    if (user.role === 'TEACHER') {
+      whereClause.teacher = {
+        id: user.id,
+      };
+    } else if (user.role === 'WALI_KELAS' && classId) {
+      // Wali-kelas can only see grades for their classes
+      whereClause.student = {
+        classId: classId,
+        class: {
+          waliKelasId: user.id,
+        },
+      };
+    } else if (user.role === 'WALI_KELAS') {
+      // If no classId specified for wali-kelas, reject
+      return errorResponse('classId is required for wali-kelas', 400);
+    }
+
+    // Apply additional filters
     if (search) {
       whereClause.OR = [
         { student: { name: { contains: search, mode: 'insensitive' } } },
@@ -80,15 +101,34 @@ export async function GET(request: NextRequest) {
       ];
     }
 
+    // Apply studentId filter for both TEACHER and WALI_KELAS
+    if (studentId && (user.role === 'TEACHER' || user.role === 'WALI_KELAS')) {
+      whereClause.studentId = studentId;
+    }
+
+    if (subjectId) {
+      if (!whereClause.competency) whereClause.competency = {};
+      whereClause.competency.subjectId = subjectId;
+    }
+
+    if (assessmentType) {
+      whereClause.assessmentType = assessmentType;
+    }
+
     const grades = await prisma.grade.findMany({
       where: whereClause,
       include: {
-        student: true,
+        student: {
+          include: {
+            class: true,
+          },
+        },
         competency: {
           include: {
             subject: true,
           },
         },
+        teacher: true,
       },
       skip,
       take: limit,
@@ -102,11 +142,16 @@ export async function GET(request: NextRequest) {
         id: g.id,
         studentId: g.studentId,
         studentName: g.student.name,
+        studentNo: g.student.studentNo || '-',
+        studentNisn: g.student.studentNo || '-',
+        className: g.student.class?.name || '-',
         competencyId: g.competencyId,
         competencyName: g.competency.name,
         subjectName: g.competency.subject.name,
         score: g.score,
         assessmentType: g.assessmentType,
+        teacherId: g.teacherId,
+        teacherName: g.teacher?.name || '-',
         notes: g.notes || '',
         date: g.createdAt?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0],
       })),
@@ -126,8 +171,8 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const teacher = await getTeacher(request);
-    if (!teacher) {
+    const user = await getUser(request);
+    if (!user || user.role !== 'TEACHER') {
       return errorResponse('Unauthorized', 401);
     }
 
@@ -137,7 +182,7 @@ export async function POST(request: NextRequest) {
     // Verify that student exists in a class taught by this teacher
     const classTeacher = await prisma.classTeacher.findFirst({
       where: {
-        teacherId: teacher.id,
+        teacherId: user.id,
         class: {
           students: {
             some: {
@@ -171,7 +216,7 @@ export async function POST(request: NextRequest) {
         score: String(validatedData.score),
         assessmentType: validatedData.assessmentType,
         notes: validatedData.notes,
-        teacherId: teacher.id,
+        teacherId: user.id,
         levelId: competency.subject.levelId || '',
         scoringType: 'NUMERIC_0_100',
       },

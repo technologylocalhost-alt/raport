@@ -9,10 +9,11 @@ import {
   LogOut,
   Home,
   BookOpen,
-  Users,
   FileText,
   CheckCircle,
   BarChart3,
+  Library,
+  Target,
 } from 'lucide-react';
 
 interface TeacherLayoutProps {
@@ -33,10 +34,11 @@ export default function TeacherLayout({ children }: TeacherLayoutProps) {
     {
       title: 'Fitur Utama',
       items: [
+        { title: 'Mata Pelajaran', icon: Library, href: '/teacher/subjects' },
         { title: 'Input Nilai', icon: BookOpen, href: '/teacher/grades' },
-        { title: 'Daftar Siswa', icon: Users, href: '/teacher/students' },
         { title: 'Absensi', icon: CheckCircle, href: '/teacher/attendance' },
         { title: 'Generate Raport', icon: FileText, href: '/teacher/reports' },
+        { title: 'Kompetensi', icon: Target, href: '/teacher/competencies' },
       ],
     },
     {
