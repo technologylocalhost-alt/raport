@@ -12,6 +12,7 @@ interface Competency {
   subjectCode?: string;
   subjectId?: string;
   type?: string;
+  description?: string;
 }
 
 interface Subject {

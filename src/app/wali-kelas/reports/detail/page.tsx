@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Printer } from 'lucide-react';
 
@@ -48,7 +48,7 @@ interface ReportData {
   school: School;
 }
 
-export default function ReportDetailPage() {
+function ReportDetailContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const classId = searchParams.get('classId');
@@ -695,5 +695,13 @@ export default function ReportDetailPage() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function ReportDetailPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
+      <ReportDetailContent />
+    </Suspense>
   );
 }
