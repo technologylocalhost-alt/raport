@@ -129,23 +129,7 @@ export default function TeacherDashboard() {
             </div>
           </Link>
 
-          {/* Generate Raport */}
-          <Link href="/teacher/reports">
-            <div className="bg-white rounded-lg shadow-md hover:shadow-xl transition-all border-l-4 border-orange-600 p-6 hover:translate-y-[-2px] cursor-pointer">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <div className="bg-orange-100 p-3 rounded-lg mb-3">
-                    <FileText className="text-orange-600" size={28} />
-                  </div>
-                  <h3 className="text-lg font-bold text-gray-900">Generate Raport</h3>
-                  <p className="text-gray-600 text-sm mt-1">Buat dan download raport siswa dalam format PDF</p>
-                </div>
-              </div>
-              <div className="flex items-center text-orange-600 font-medium text-sm group">
-                Generate <ArrowRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-          </Link>
+
 
           {/* Kompetensi */}
           <Link href="/teacher/competencies">

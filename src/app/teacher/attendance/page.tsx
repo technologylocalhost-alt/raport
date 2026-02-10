@@ -8,8 +8,20 @@ interface AttendanceRecord {
   studentName: string;
   nisn: string;
   date: string;
-  status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED';
+  status: 'HADIR' | 'ALFA' | 'SAKIT' | 'IZIN';
   notes?: string;
+}
+
+interface Subject {
+  id: string;
+  name: string;
+  code: string;
+}
+
+interface Student {
+  id: string;
+  name: string;
+  nisn: string;
 }
 
 export default function AttendancePage() {
@@ -20,9 +32,16 @@ export default function AttendancePage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [showForm, setShowForm] = useState(false);
+  
+  // New states for subjects and students
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+  
   const [formData, setFormData] = useState({
+    subjectId: '',
     studentId: '',
-    status: 'PRESENT' as const,
+    status: 'HADIR' as 'HADIR' | 'ALFA' | 'SAKIT' | 'IZIN',
     notes: '',
   });
 
@@ -31,7 +50,55 @@ export default function AttendancePage() {
 
   useEffect(() => {
     fetchAttendance();
+    fetchSubjects();
   }, [page, search, filterDate]);
+
+  async function fetchSubjects() {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch('/api/teacher/subjects', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (data.success && data.data) {
+        setSubjects(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching subjects:', error);
+    }
+  }
+
+  async function fetchStudentsBySubject(subjectId: string) {
+    if (!subjectId) {
+      setStudents([]);
+      return;
+    }
+
+    try {
+      setLoadingStudents(true);
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`/api/teacher/subjects/${subjectId}/students`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (data.success && data.data) {
+        setStudents(data.data);
+      } else {
+        setStudents([]);
+      }
+    } catch (error) {
+      console.error('Error fetching students:', error);
+      setStudents([]);
+    } finally {
+      setLoadingStudents(false);
+    }
+  }
 
   async function fetchAttendance() {
     try {
@@ -73,6 +140,7 @@ export default function AttendancePage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
+          subjectId: formData.subjectId,
           studentId: formData.studentId,
           date: filterDate,
           status: formData.status,
@@ -82,7 +150,8 @@ export default function AttendancePage() {
 
       if (response.ok) {
         setShowForm(false);
-        setFormData({ studentId: '', status: 'PRESENT', notes: '' });
+        setFormData({ subjectId: '', studentId: '', status: 'HADIR', notes: '' });
+        setStudents([]);
         fetchAttendance();
       }
     } catch (error) {
@@ -90,7 +159,7 @@ export default function AttendancePage() {
     }
   };
 
-  const handleStatusChange = async (id: string, newStatus: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED') => {
+  const handleStatusChange = async (id: string, newStatus: 'HADIR' | 'ALFA' | 'SAKIT' | 'IZIN') => {
     try {
       const token = localStorage.getItem('accessToken');
       const response = await fetch(`/api/teacher/attendance/${id}`, {
@@ -111,17 +180,17 @@ export default function AttendancePage() {
   };
 
   const statusColors = {
-    PRESENT: 'bg-green-100 text-green-700 border-green-300',
-    ABSENT: 'bg-red-100 text-red-700 border-red-300',
-    LATE: 'bg-yellow-100 text-yellow-700 border-yellow-300',
-    EXCUSED: 'bg-blue-100 text-blue-700 border-blue-300',
+    HADIR: 'bg-green-100 text-green-700 border-green-300',
+    ALFA: 'bg-red-100 text-red-700 border-red-300',
+    SAKIT: 'bg-yellow-100 text-yellow-700 border-yellow-300',
+    IZIN: 'bg-blue-100 text-blue-700 border-blue-300',
   };
 
   const statusLabels = {
-    PRESENT: '✓ Hadir',
-    ABSENT: '❌ Alfa',
-    LATE: '⏰ Terlambat',
-    EXCUSED: '📝 Izin',
+    HADIR: '✓ Hadir',
+    ALFA: '❌ Alfa',
+    SAKIT: '🤒 Sakit',
+    IZIN: '📝 Izin',
   };
 
   return (
@@ -143,29 +212,36 @@ export default function AttendancePage() {
 
       {/* Filter & Search Section */}
       <div className="bg-white rounded-lg shadow p-4 space-y-4">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">🔍 Filter & Pencarian</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Cari Nama Siswa / NISN</label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <input
+                type="text"
+                placeholder="Ketik nama atau NISN..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-gray-900"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Tanggal</label>
             <input
-              type="text"
-              placeholder="Cari nama siswa atau NISN..."
-              value={search}
+              type="date"
+              value={filterDate}
               onChange={(e) => {
-                setSearch(e.target.value);
+                setFilterDate(e.target.value);
                 setPage(1);
               }}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-gray-900"
             />
           </div>
-          <input
-            type="date"
-            value={filterDate}
-            onChange={(e) => {
-              setFilterDate(e.target.value);
-              setPage(1);
-            }}
-            className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-          />
         </div>
       </div>
 
@@ -175,36 +251,83 @@ export default function AttendancePage() {
           <h2 className="text-xl font-bold text-gray-900 mb-6">➕ Tambah Data Absensi</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input
-                type="text"
-                placeholder="Student ID"
-                value={formData.studentId}
-                onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
-                className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                required
-              />
-              <select
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-              >
-                <option value="PRESENT">✓ Hadir</option>
-                <option value="ABSENT">❌ Alfa</option>
-                <option value="LATE">⏰ Terlambat</option>
-                <option value="EXCUSED">📝 Izin</option>
-              </select>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Mata Pelajaran <span className="text-red-500">*</span></label>
+                <select
+                  value={formData.subjectId}
+                  onChange={(e) => {
+                    const newSubjectId = e.target.value;
+                    setFormData({ ...formData, subjectId: newSubjectId, studentId: '' });
+                    if (newSubjectId) {
+                      fetchStudentsBySubject(newSubjectId);
+                    } else {
+                      setStudents([]);
+                    }
+                  }}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-gray-900"
+                  required
+                >
+                  <option value="">-- Pilih Mata Pelajaran --</option>
+                  {subjects.map((subject) => (
+                    <option key={subject.id} value={subject.id}>
+                      {subject.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Siswa <span className="text-red-500">*</span>
+                  {loadingStudents && <span className="text-xs text-gray-500"> (memuat...)</span>}
+                </label>
+                <select
+                  value={formData.studentId}
+                  onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  required
+                  disabled={!formData.subjectId || loadingStudents}
+                >
+                  <option value="">
+                    {!formData.subjectId ? '-- Pilih mata pelajaran terlebih dahulu --' : 'Pilih Siswa --'}
+                  </option>
+                  {students.map((student) => (
+                    <option key={student.id} value={student.id}>
+                      {student.name} ({student.nisn})
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <input
-              type="text"
-              placeholder="Catatan (opsional)"
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Status <span className="text-red-500">*</span></label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value as 'HADIR' | 'ALFA' | 'SAKIT' | 'IZIN' })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-gray-900"
+                >
+                  <option value="HADIR">✓ Hadir</option>
+                  <option value="ALFA">❌ Alfa</option>
+                  <option value="SAKIT">🤒 Sakit</option>
+                  <option value="IZIN">📝 Izin</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Catatan (Opsional)</label>
+                <input
+                  type="text"
+                  placeholder="Tambahkan catatan jika diperlukan"
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-gray-900"
+                />
+              </div>
+            </div>
             <div className="flex gap-3 pt-2">
               <button
                 type="submit"
-                className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors font-medium shadow-lg"
+                disabled={!formData.subjectId || !formData.studentId}
+                className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors font-medium shadow-lg disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
                 Simpan
               </button>
@@ -259,13 +382,13 @@ export default function AttendancePage() {
                     <td className="px-6 py-4 text-sm">
                       <select
                         value={record.status}
-                        onChange={(e) => handleStatusChange(record.id, e.target.value as any)}
+                        onChange={(e) => handleStatusChange(record.id, e.target.value as 'HADIR' | 'ALFA' | 'SAKIT' | 'IZIN')}
                         className={`px-3 py-2 rounded-lg font-semibold text-sm border-2 cursor-pointer transition-all ${statusColors[record.status]}`}
                       >
-                        <option value="PRESENT">✓ Hadir</option>
-                        <option value="ABSENT">❌ Alfa</option>
-                        <option value="LATE">⏰ Terlambat</option>
-                        <option value="EXCUSED">📝 Izin</option>
+                        <option value="HADIR">✓ Hadir</option>
+                        <option value="ALFA">❌ Alfa</option>
+                        <option value="SAKIT">🤒 Sakit</option>
+                        <option value="IZIN">📝 Izin</option>
                       </select>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">{record.notes || '-'}</td>

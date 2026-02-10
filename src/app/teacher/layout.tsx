@@ -35,9 +35,8 @@ export default function TeacherLayout({ children }: TeacherLayoutProps) {
       title: 'Fitur Utama',
       items: [
         { title: 'Mata Pelajaran', icon: Library, href: '/teacher/subjects' },
-        { title: 'Input Nilai', icon: BookOpen, href: '/teacher/grades' },
+        { title: 'Daftar Nilai', icon: BookOpen, href: '/teacher/grades' },
         { title: 'Absensi', icon: CheckCircle, href: '/teacher/attendance' },
-        { title: 'Generate Raport', icon: FileText, href: '/teacher/reports' },
         { title: 'Kompetensi', icon: Target, href: '/teacher/competencies' },
       ],
     },
