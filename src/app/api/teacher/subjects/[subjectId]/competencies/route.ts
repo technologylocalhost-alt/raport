@@ -7,26 +7,48 @@ export async function GET(
   { params }: { params: Promise<{ subjectId: string }> }
 ) {
   try {
+    // Validation: Check token
     const token = request.headers.get('Authorization')?.replace('Bearer ', '');
 
     if (!token) {
       return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
+        { success: false, message: 'Token tidak ditemukan' },
         { status: 401 }
       );
     }
 
+    // Validation: Verify token validity
     const decoded = verifyAccessToken(token);
     if (!decoded || !decoded.userId) {
       return NextResponse.json(
-        { success: false, message: 'Invalid token' },
+        { success: false, message: 'Token tidak valid atau expired' },
         { status: 401 }
       );
     }
 
     const { subjectId } = await params;
 
-    // Verify that the teacher teaches this subject
+    // Validation: Check subjectId format
+    if (!subjectId || subjectId.trim() === '') {
+      return NextResponse.json(
+        { success: false, message: 'ID Mata Pelajaran tidak valid' },
+        { status: 400 }
+      );
+    }
+
+    // Validation: Verify subject exists
+    const subject = await prisma.subject.findUnique({
+      where: { id: subjectId },
+    });
+
+    if (!subject) {
+      return NextResponse.json(
+        { success: false, message: 'Mata Pelajaran tidak ditemukan' },
+        { status: 404 }
+      );
+    }
+
+    // Validation: Verify that the teacher teaches this subject
     const teacherSubject = await prisma.classTeacher.findFirst({
       where: {
         teacherId: decoded.userId,
@@ -36,7 +58,7 @@ export async function GET(
 
     if (!teacherSubject) {
       return NextResponse.json(
-        { success: false, message: 'Anda tidak authorized untuk subject ini' },
+        { success: false, message: 'Anda tidak memiliki akses untuk mata pelajaran ini' },
         { status: 403 }
       );
     }
@@ -73,7 +95,7 @@ export async function GET(
   } catch (error) {
     console.error('Error fetching competencies:', error);
     return NextResponse.json(
-      { success: false, message: 'Gagal memuat kompetensi' },
+      { success: false, message: 'Gagal memuat data kompetensi. Silakan coba lagi' },
       { status: 500 }
     );
   }

@@ -42,6 +42,7 @@ export default function WaliKelasLayout({ children }: WaliKelasLayoutProps) {
       items: [
         { title: 'Raport Siswa', icon: FileText, href: '/wali-kelas/reports' },
         { title: 'Penilaian', icon: CheckCircle, href: '/wali-kelas/penilaian' },
+        { title: 'Raport Arab', icon: Home, href: '/wali-kelas/raport-arab' },
       ],
     },
   ];

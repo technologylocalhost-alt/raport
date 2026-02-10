@@ -58,7 +58,21 @@ function ReportDetailContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Validation: Check required parameters on mount
   useEffect(() => {
+    // Validation: classId and studentId must exist
+    if (!classId || classId.trim() === '') {
+      setError('ID Kelas tidak valid');
+      setIsLoading(false);
+      return;
+    }
+    
+    if (!studentId || studentId.trim() === '') {
+      setError('ID Siswa tidak valid');
+      setIsLoading(false);
+      return;
+    }
+
     if (classId && studentId) {
       fetchReportData();
     }
@@ -66,19 +80,22 @@ function ReportDetailContent() {
 
   async function fetchReportData() {
     try {
+      setError('');
       setIsLoading(true);
       const token = localStorage.getItem('accessToken');
+
+      // Validation: Check token
+      if (!token || token.trim() === '') {
+        setError('Sesi Anda telah berakhir. Silakan login kembali');
+        setTimeout(() => router.push('/login'), 1500);
+        setIsLoading(false);
+        return;
+      }
 
       console.log('📋 Fetching report data...');
       console.log('classId:', classId);
       console.log('studentId:', studentId);
       console.log('token exists:', !!token);
-
-      if (!token) {
-        setError('Token tidak ditemukan. Silakan login ulang');
-        setIsLoading(false);
-        return;
-      }
 
       // Fetch class data to get school
       const classResponse = await fetch(`/api/admin/classes/${classId}`, {
@@ -89,8 +106,22 @@ function ReportDetailContent() {
 
       console.log('✓ Class API response:', classResponse.status);
 
+      // Validation: Check class response status
       if (classResponse.status === 401) {
-        setError('Token expired. Silakan login ulang');
+        setError('Sesi Anda telah berakhir. Silakan login kembali');
+        setTimeout(() => router.push('/login'), 1500);
+        setIsLoading(false);
+        return;
+      }
+
+      if (classResponse.status === 403) {
+        setError('Anda tidak memiliki akses untuk melihat laporan kelas ini');
+        setIsLoading(false);
+        return;
+      }
+
+      if (classResponse.status === 404) {
+        setError('Kelas tidak ditemukan');
         setIsLoading(false);
         return;
       }
@@ -127,22 +158,44 @@ function ReportDetailContent() {
 
       console.log('✓ Student API response:', studentResponse.status);
 
+      // Validation: Check student response status
       if (studentResponse.status === 401) {
-        setError('Token expired. Silakan login ulang');
+        setError('Sesi Anda telah berakhir. Silakan login kembali');
+        setTimeout(() => router.push('/login'), 1500);
+        setIsLoading(false);
+        return;
+      }
+
+      if (studentResponse.status === 403) {
+        setError('Anda tidak memiliki akses untuk melihat data siswa ini');
+        setIsLoading(false);
+        return;
+      }
+
+      if (studentResponse.status === 404) {
+        setError('Siswa tidak ditemukan');
         setIsLoading(false);
         return;
       }
 
       if (!studentResponse.ok) {
-        setError(`Gagal memuat data siswa: ${studentResponse.status}`);
+        setError(`Gagal memuat data siswa (Error: ${studentResponse.status})`);
         setIsLoading(false);
         return;
       }
 
       const studentData = await studentResponse.json();
+      
+      // Validation: Check student data format
+      if (!studentData.data || !studentData.data.id) {
+        setError('Format data siswa tidak valid');
+        setIsLoading(false);
+        return;
+      }
+
       const student = {
         id: studentData.data.id,
-        name: studentData.data.name,
+        name: studentData.data.name || 'Unknown',
         studentNo: studentData.data.nisn || '-',
         birthDate: studentData.data.birthDate || '-',
       };
@@ -162,18 +215,33 @@ function ReportDetailContent() {
       console.log('✓ Grades API response:', gradesResponse.status);
 
       let grades: any[] = [];
+      
+      // Validation: Grade API response
+      if (gradesResponse.status === 401) {
+        setError('Sesi Anda telah berakhir. Silakan login kembali');
+        setTimeout(() => router.push('/login'), 1500);
+        setIsLoading(false);
+        return;
+      }
+
       if (!gradesResponse.ok) {
         console.warn('⚠️ Grades API response not ok:', gradesResponse.status);
       } else {
         const gradesData = await gradesResponse.json();
-        grades = (gradesData.data || []).map((grade: any) => ({
-          id: grade.id,
-          competencyName: grade.competencyName || 'N/A',
-          subjectName: grade.subjectName || 'N/A',
-          score: String(grade.score || 0),
-          assessmentType: grade.assessmentType || 'DAILY',
-        }));
-        console.log(`✓ Loaded ${grades.length} grades`);
+        
+        // Validation: Check grades data format
+        if (gradesData.success && Array.isArray(gradesData.data)) {
+          grades = (gradesData.data || []).map((grade: any) => ({
+            id: grade.id,
+            competencyName: grade.competencyName || 'N/A',
+            subjectName: grade.subjectName || 'N/A',
+            score: String(grade.score || 0),
+            assessmentType: grade.assessmentType || 'DAILY',
+          }));
+          console.log(`✓ Loaded ${grades.length} grades`);
+        } else {
+          console.warn('⚠️ Grades data format invalid');
+        }
       }
 
       // Fetch attendance data
@@ -193,10 +261,19 @@ function ReportDetailContent() {
         ALFA: 0,
       };
 
-      if (attendanceResponse.ok) {
+      // Validation: Attendance API response
+      if (attendanceResponse.status === 401) {
+        console.warn('⚠️ Attendance API: Unauthorized');
+      } else if (attendanceResponse.ok) {
         const attendanceData = await attendanceResponse.json();
-        attendance = attendanceData.data.summary;
-        console.log('✓ Attendance data loaded:', attendance);
+        
+        // Validation: Check attendance data format
+        if (attendanceData.success && attendanceData.data?.summary) {
+          attendance = attendanceData.data.summary;
+          console.log('✓ Attendance data loaded:', attendance);
+        } else {
+          console.warn('⚠️ Attendance data format invalid');
+        }
       } else {
         console.warn('⚠️ Attendance API response not ok:', attendanceResponse.status);
       }
@@ -217,10 +294,19 @@ function ReportDetailContent() {
         improvementAreas: '',
       };
 
-      if (notesResponse.ok) {
+      // Validation: Notes API response
+      if (notesResponse.status === 401) {
+        console.warn('⚠️ Notes API: Unauthorized');
+      } else if (notesResponse.ok) {
         const notesData = await notesResponse.json();
-        studentNotes = notesData.data;
-        console.log('✓ Student notes loaded');
+        
+        // Validation: Check notes data format
+        if (notesData.success && notesData.data) {
+          studentNotes = notesData.data;
+          console.log('✓ Student notes loaded');
+        } else {
+          console.warn('⚠️ Notes data format invalid');
+        }
       } else {
         console.warn('⚠️ Notes API response not ok:', notesResponse.status);
       }
@@ -239,7 +325,7 @@ function ReportDetailContent() {
       setIsLoading(false);
     } catch (err) {
       console.error('Error fetching report:', err);
-      setError('Gagal memuat data laporan');
+      setError('Terjadi kesalahan saat memuat laporan. Periksa koneksi Anda dan coba lagi');
       setIsLoading(false);
     }
   }

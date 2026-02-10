@@ -48,6 +48,18 @@ export default function ClassStudentsPage() {
   const searchParams = useSearchParams();
   const classId = params.classId as string;
   const subjectId = searchParams.get('subjectId');
+
+  // Validate required parameters
+  useEffect(() => {
+    if (!classId) {
+      setError('ID Kelas tidak valid');
+      return;
+    }
+    if (!subjectId) {
+      setError('ID Mata Pelajaran diperlukan');
+      return;
+    }
+  }, [classId, subjectId]);
   
   // Mapping assessment type to Indonesian labels
   const assessmentTypeLabels: { [key: string]: string } = {
@@ -93,9 +105,22 @@ export default function ClassStudentsPage() {
 
   async function fetchClassStudents() {
     try {
+      // Validate classId format
+      if (!classId || classId.trim() === '') {
+        setError('ID Kelas tidak valid');
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
       setError('');
       const token = localStorage.getItem('accessToken');
+
+      if (!token) {
+        setError('Token tidak ditemukan. Silakan login kembali');
+        setIsLoading(false);
+        return;
+      }
       
       const response = await fetch(`/api/teacher/classes/${classId}/students`, {
         headers: {
@@ -104,11 +129,32 @@ export default function ClassStudentsPage() {
       });
 
       const data: ApiResponse = await response.json();
+
+      if (response.status === 401) {
+        setError('Anda tidak terautentikasi. Silakan login kembali');
+        return;
+      }
+
+      if (response.status === 403) {
+        setError('Anda tidak memiliki akses ke kelas ini');
+        return;
+      }
+
+      if (response.status === 404) {
+        setError('Kelas tidak ditemukan');
+        return;
+      }
       
       if (data.success && data.data) {
+        // Validate response data
+        if (!Array.isArray(data.data)) {
+          setError('Format data siswa tidak valid');
+          return;
+        }
+        
         setStudents(data.data);
         // Try to get class name from first student if available
-        if (data.data.length > 0) {
+        if (data.data.length > 0 && data.data[0].className) {
           setClassName(data.data[0].className);
         }
       } else {
@@ -116,7 +162,7 @@ export default function ClassStudentsPage() {
       }
     } catch (error) {
       console.error('Failed to fetch students:', error);
-      setError('Terjadi kesalahan saat memuat data siswa');
+      setError('Terjadi kesalahan saat memuat data siswa. Periksa koneksi Anda');
     } finally {
       setIsLoading(false);
     }
@@ -171,13 +217,22 @@ export default function ClassStudentsPage() {
 
   const fetchCompetencies = async () => {
     try {
+      // Validation: Check if subjectId exists
+      if (!subjectId || subjectId.trim() === '') {
+        setGradeError('ID Mata Pelajaran tidak valid. Silakan kembali dan pilih mata pelajaran');
+        return;
+      }
+
       setCompetenciesLoading(true);
       const token = localStorage.getItem('accessToken');
+
+      if (!token) {
+        setGradeError('Sesi Anda telah berakhir. Silakan login kembali');
+        return;
+      }
       
-      // Use subject-specific competencies endpoint if subjectId is available
-      const endpoint = subjectId 
-        ? `/api/teacher/subjects/${subjectId}/competencies`
-        : '/api/teacher/grades/options';
+      // Use subject-specific competencies endpoint
+      const endpoint = `/api/teacher/subjects/${subjectId}/competencies`;
       
       const response = await fetch(endpoint, {
         headers: {
@@ -185,20 +240,38 @@ export default function ClassStudentsPage() {
         },
       });
 
+      // Handle different response statuses
+      if (response.status === 401) {
+        setGradeError('Sesi Anda telah berakhir. Silakan login kembali');
+        return;
+      }
+
+      if (response.status === 403) {
+        setGradeError('Anda tidak memiliki akses untuk mata pelajaran ini');
+        return;
+      }
+
+      if (response.status === 404) {
+        setGradeError('Mata Pelajaran tidak ditemukan');
+        return;
+      }
+
       const data: any = await response.json();
       
-      // Handle different response structures
+      // Validation: Check response format
       if (data.success) {
-        const competenciesList = data.competencies || (data.data?.competencies);
-        if (competenciesList) {
+        const competenciesList = data.competencies;
+        if (Array.isArray(competenciesList)) {
           setCompetencies(competenciesList);
+        } else {
+          setGradeError('Format data kompetensi tidak valid');
         }
       } else {
-        setGradeError('Gagal memuat data kompetensi');
+        setGradeError(data.message || 'Gagal memuat data kompetensi');
       }
     } catch (error) {
       console.error('Failed to fetch competencies:', error);
-      setGradeError('Terjadi kesalahan saat memuat kompetensi');
+      setGradeError('Terjadi kesalahan saat memuat kompetensi. Periksa koneksi Anda');
     } finally {
       setCompetenciesLoading(false);
     }
@@ -209,21 +282,48 @@ export default function ClassStudentsPage() {
     setGradeError('');
     setGradeSuccess('');
 
-    // Validation
-    if (!gradeFormData.competencyId || !gradeFormData.score || !gradeFormData.assessmentType) {
-      setGradeError('Mohon isi semua field yang wajib');
+    // Validation: Check required fields
+    if (!gradeFormData.competencyId) {
+      setGradeError('Mohon pilih kompetensi');
       return;
     }
 
+    if (!gradeFormData.score) {
+      setGradeError('Mohon masukkan nilai');
+      return;
+    }
+
+    if (!gradeFormData.assessmentType) {
+      setGradeError('Mohon pilih jenis penilaian');
+      return;
+    }
+
+    // Validation: Check student selection
+    if (!selectedStudent || !selectedStudent.id) {
+      setGradeError('Data siswa tidak valid');
+      return;
+    }
+
+    // Validation: Score format and range
     const score = parseFloat(gradeFormData.score);
-    if (isNaN(score) || score < 0 || score > 100) {
-      setGradeError('Nilai harus antara 0-100');
+    if (isNaN(score)) {
+      setGradeError('Nilai harus berupa angka');
+      return;
+    }
+
+    if (score < 1 || score > 10) {
+      setGradeError('Nilai harus antara 1-10');
+      return;
+    }
+
+    // Validation: Check token exists
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      setGradeError('Sesi Anda telah berakhir. Silakan login kembali');
       return;
     }
 
     try {
-      const token = localStorage.getItem('accessToken');
-      
       const response = await fetch('/api/teacher/grades', {
         method: 'POST',
         headers: {
@@ -241,19 +341,37 @@ export default function ClassStudentsPage() {
 
       const data = await response.json();
 
+      // Handle different response statuses
+      if (response.status === 401) {
+        setGradeError('Sesi Anda telah berakhir. Silakan login kembali');
+        return;
+      }
+
+      if (response.status === 403) {
+        setGradeError('Anda tidak memiliki akses untuk menginput nilai siswa ini');
+        return;
+      }
+
+      if (response.status === 404) {
+        setGradeError('Siswa atau kompetensi tidak ditemukan');
+        return;
+      }
+
       if (response.ok && data.success) {
         setGradeSuccess('Nilai berhasil disimpan');
         setTimeout(() => {
           setShowGradeModal(false);
           setSelectedStudent(null);
           setGradeFormData({ competencyId: '', score: '', assessmentType: 'DAILY', notes: '' });
+          // Refresh the grades list
+          fetchClassStudents();
         }, 1500);
       } else {
-        setGradeError(data.message || 'Gagal menyimpan nilai');
+        setGradeError(data.message || 'Gagal menyimpan nilai. Periksa kembali data Anda');
       }
     } catch (error) {
       console.error('Error saving grade:', error);
-      setGradeError('Terjadi kesalahan saat menyimpan nilai');
+      setGradeError('Terjadi kesalahan saat menyimpan nilai. Periksa koneksi Anda');
     }
   };
 
@@ -502,18 +620,19 @@ export default function ClassStudentsPage() {
                 {/* Score Input */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nilai (0-100) <span className="text-red-500">*</span>
+                    Nilai (1-10) <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
-                    min="0"
-                    max="100"
-                    step="1"
+                    min="1"
+                    max="10"
+                    step="0.01"
                     value={gradeFormData.score}
                     onChange={(e) => setGradeFormData({ ...gradeFormData, score: e.target.value })}
-                    placeholder="Masukkan nilai"
+                    placeholder="Contoh: 8.5"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white text-gray-900"
                   />
+                  <p className="text-xs text-gray-500 mt-1">Masukkan nilai antara 1-10</p>
                 </div>
 
                 {/* Assessment Type */}

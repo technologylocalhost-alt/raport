@@ -8,8 +8,8 @@ const gradeUpdateSchema = z.object({
   score: z
     .union([z.string(), z.number()])
     .transform((val) => parseFloat(String(val)))
-    .refine((val) => !isNaN(val) && val >= 0 && val <= 100, {
-      message: 'Score must be a number between 0 and 100',
+    .refine((val) => !isNaN(val) && val >= 1 && val <= 10, {
+      message: 'Score must be a number between 1 and 10',
     })
     .optional(),
   assessmentType: z.enum(['QUIZ', 'MIDTERM', 'FINAL', 'TASK', 'PROJECT', 'DAILY']).optional(),

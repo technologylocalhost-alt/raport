@@ -48,15 +48,28 @@ export async function GET(
   try {
     const user = await verifyAdmin(request);
     if (!user) {
-      return errorResponse('Unauthorized', 401);
+      return errorResponse('Token tidak valid atau expired', 401);
     }
 
     const { id } = await params;
+
+    // Validation: Check id format
+    if (!id || id.trim() === '') {
+      return errorResponse('ID Kelas tidak valid', 400);
+    }
 
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
     const search = searchParams.get('search') || '';
+
+    // Validation: Check pagination parameters
+    if (page < 1) {
+      return errorResponse('Nomor halaman tidak valid', 400);
+    }
+    if (limit < 1 || limit > 1000) {
+      return errorResponse('Limit harus antara 1-1000', 400);
+    }
 
     const skip = (page - 1) * limit;
 
@@ -67,19 +80,19 @@ export async function GET(
     });
 
     if (!classData) {
-      return errorResponse('Class not found', 404);
+      return errorResponse('Kelas tidak ditemukan', 404);
     }
 
     // If user is WALI_KELAS, verify they own this class
     if (user.role === 'WALI_KELAS' && classData.waliKelasId !== user.id) {
-      return errorResponse('Unauthorized', 403);
+      return errorResponse('Anda tidak memiliki akses ke kelas ini', 403);
     }
 
     const where: any = {
       classId: id,
     };
 
-    if (search) {
+    if (search && search.trim() !== '') {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { studentNo: { contains: search, mode: 'insensitive' } },
@@ -113,7 +126,7 @@ export async function GET(
     return paginatedResponse(students, total, page, limit);
   } catch (error) {
     console.error('Get class students error:', error);
-    return errorResponse('Failed to fetch students', 500);
+    return errorResponse('Gagal memuat data siswa', 500);
   }
 }
 

@@ -25,37 +25,122 @@ export default function WaliKelasReportsPage() {
   async function fetchStudents() {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('accessToken');
-      const user = localStorage.getItem('user');
+      setErrorMessage('');
       
-      if (!user) {
-        router.push('/login');
+      // Validation: Check token
+      const token = localStorage.getItem('accessToken');
+      if (!token || token.trim() === '') {
+        setErrorMessage('Sesi Anda telah berakhir. Silakan login kembali');
+        setTimeout(() => router.push('/login'), 1500);
+        setIsLoading(false);
         return;
       }
 
-      const { id: userId } = JSON.parse(user);
+      // Validation: Check user data
+      const userStr = localStorage.getItem('user');
+      if (!userStr) {
+        setErrorMessage('Data user tidak ditemukan. Silakan login kembali');
+        setTimeout(() => router.push('/login'), 1500);
+        setIsLoading(false);
+        return;
+      }
+
+      // Validation: Parse user data safely
+      let userId: string;
+      try {
+        const user = JSON.parse(userStr);
+        userId = user?.id;
+        if (!userId || userId.trim() === '') {
+          setErrorMessage('ID user tidak valid. Silakan login kembali');
+          setTimeout(() => router.push('/login'), 1500);
+          setIsLoading(false);
+          return;
+        }
+      } catch (parseError) {
+        console.error('Error parsing user data:', parseError);
+        setErrorMessage('Data user tidak valid. Silakan login kembali');
+        setTimeout(() => router.push('/login'), 1500);
+        setIsLoading(false);
+        return;
+      }
+
       const headers = { Authorization: `Bearer ${token}` };
 
       // Get all classes for this wali kelas
       const classesResponse = await fetch(`/api/admin/classes?limit=100&waliKelasId=${userId}`, { headers });
-      const classesData = await classesResponse.json();
+      
+      // Validation: Check response status
+      if (classesResponse.status === 401) {
+        setErrorMessage('Sesi Anda telah berakhir. Silakan login kembali');
+        setTimeout(() => router.push('/login'), 1500);
+        setIsLoading(false);
+        return;
+      }
+
+      if (classesResponse.status === 403) {
+        setErrorMessage('Anda tidak memiliki akses untuk melihat laporan');
+        setIsLoading(false);
+        return;
+      }
 
       if (!classesResponse.ok) {
-        setErrorMessage('Gagal memuat daftar kelas');
+        setErrorMessage(`Gagal memuat daftar kelas (Error: ${classesResponse.status})`);
+        setIsLoading(false);
+        return;
+      }
+
+      const classesData = await classesResponse.json();
+
+      // Validation: Check response format
+      if (!classesData.success || !Array.isArray(classesData.data)) {
+        setErrorMessage('Format data kelas tidak valid');
         setIsLoading(false);
         return;
       }
 
       const classes = classesData.data || [];
       
+      // Validation: Check if wali-kelas has any classes
+      if (classes.length === 0) {
+        setStudents([]);
+        setIsLoading(false);
+        return;
+      }
+      
       // Collect all students from all classes
       const allStudents: Student[] = [];
       
       for (const cls of classes) {
+        // Validation: Check class object
+        if (!cls.id || cls.id.trim() === '') {
+          console.warn('Invalid class ID encountered, skipping...');
+          continue;
+        }
+
         const studentsResponse = await fetch(`/api/admin/classes/${cls.id}/students?limit=1000`, { headers });
+        
+        // Validation: Check response status
+        if (studentsResponse.status === 401) {
+          setErrorMessage('Sesi Anda telah berakhir. Silakan login kembali');
+          setTimeout(() => router.push('/login'), 1500);
+          setIsLoading(false);
+          return;
+        }
+
+        if (studentsResponse.status === 403) {
+          console.warn(`Tidak memiliki akses ke kelas ${cls.name}`);
+          continue;
+        }
+
+        if (!studentsResponse.ok) {
+          console.warn(`Gagal memuat siswa untuk kelas ${cls.name}`);
+          continue;
+        }
+
         const studentsData = await studentsResponse.json();
         
-        if (studentsData.success) {
+        // Validation: Check response format
+        if (studentsData.success && Array.isArray(studentsData.data)) {
           const classStudents = (studentsData.data || []).map((student: any) => ({
             id: student.id,
             name: student.name,
@@ -64,13 +149,17 @@ export default function WaliKelasReportsPage() {
             className: cls.name,
           }));
           allStudents.push(...classStudents);
+        } else {
+          console.warn(`Format data siswa tidak valid untuk kelas ${cls.name}`);
         }
       }
 
       setStudents(allStudents);
+      setIsLoading(false);
     } catch (error) {
       console.error('Error fetching students:', error);
-      setErrorMessage('Gagal memuat data siswa');
+      setErrorMessage('Terjadi kesalahan saat memuat data siswa. Periksa koneksi Anda dan coba lagi');
+      setIsLoading(false);
     } finally {
       setIsLoading(false);
     }

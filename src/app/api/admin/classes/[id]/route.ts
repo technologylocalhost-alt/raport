@@ -47,11 +47,18 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const admin = await verifyAdmin(request);
-    if (!admin) {
-      return errorResponse('Unauthorized', 401);
+    
+    // Validation: Check id format
+    if (!id || id.trim() === '') {
+      return errorResponse('ID Kelas tidak valid', 400);
     }
 
+    const admin = await verifyAdmin(request);
+    if (!admin) {
+      return errorResponse('Token tidak valid atau expired', 401);
+    }
+
+    // Verify class exists
     const classData = await prisma.class.findUnique({
       where: { id },
       include: {
@@ -82,10 +89,15 @@ export async function GET(
       return errorResponse('Kelas tidak ditemukan', 404);
     }
 
+    // If user is WALI_KELAS, verify they own this class
+    if (admin.role === 'WALI_KELAS' && classData.waliKelasId !== admin.id) {
+      return errorResponse('Anda tidak memiliki akses ke kelas ini', 403);
+    }
+
     return successResponse(classData);
   } catch (error) {
     console.error('Get class error:', error);
-    return errorResponse('Failed to fetch class', 500);
+    return errorResponse('Gagal memuat data kelas', 500);
   }
 }
 

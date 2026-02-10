@@ -168,8 +168,8 @@ export default function GradesPage() {
     }
 
     const score = parseFloat(formData.score);
-    if (isNaN(score) || score < 0 || score > 100) {
-      setErrorMessage('Nilai harus antara 0-100');
+    if (isNaN(score) || score < 1 || score > 10) {
+      setErrorMessage('Nilai harus antara 1-10');
       return;
     }
 
@@ -271,8 +271,8 @@ export default function GradesPage() {
   };
 
   const getScoreBadgeColor = (score: number) => {
-    if (score >= 85) return 'bg-green-500 text-white';
-    if (score >= 70) return 'bg-yellow-500 text-white';
+    if (score >= 8) return 'bg-green-500 text-white';
+    if (score >= 6) return 'bg-yellow-500 text-white';
     return 'bg-red-500 text-white';
   };
 
@@ -462,23 +462,23 @@ export default function GradesPage() {
               {/* Score Input */}
               <div>
                 <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Nilai (0-100) <span className="text-red-500">*</span>
+                  Nilai (1-10) <span className="text-red-500">*</span>
                 </label>
                 {formData.score && (
                   <p className="text-xs text-indigo-600 font-medium mb-2">Nilai saat ini: {formData.score}</p>
                 )}
                 <input
                   type="number"
-                  min="0"
-                  max="100"
+                  min="1"
+                  max="10"
                   step="0.01"
-                  placeholder="Contoh: 85"
+                  placeholder="Contoh: 8.5"
                   value={formData.score}
                   onChange={(e) => setFormData({ ...formData, score: e.target.value })}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                   required
                 />
-                <p className="text-xs text-gray-500 mt-1">Masukkan nilai dengan desimal jika diperlukan</p>
+                <p className="text-xs text-gray-500 mt-1">Masukkan nilai antara 1-10 dengan desimal jika diperlukan</p>
               </div>
 
               {/* Assessment Type */}
