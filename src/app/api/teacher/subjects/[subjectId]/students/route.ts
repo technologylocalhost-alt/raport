@@ -4,9 +4,11 @@ import { verifyAccessToken } from '@/lib/auth/jwt';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { subjectId: string } }
+  { params }: { params: Promise<{ subjectId: string }> }
 ) {
   try {
+    const { subjectId } = await params;
+
     // Verify token
     const authHeader = request.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
@@ -41,7 +43,7 @@ export async function GET(
     const classTeachers = await prisma.classTeacher.findMany({
       where: {
         teacherId: teacher.id,
-        subjectId: params.subjectId,
+        subjectId: subjectId,
       },
       include: {
         class: {
