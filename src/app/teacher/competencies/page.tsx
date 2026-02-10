@@ -42,6 +42,7 @@ export default function CompetenciesPage() {
     code: '',
     subjectId: '',
     type: '',
+    description: '',
   });
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
@@ -119,6 +120,7 @@ export default function CompetenciesPage() {
         code: competency.code || '',
         subjectId: competency.subjectId || '',
         type: competency.type || '',
+        description: competency.description || '',
       });
     } else {
       setEditingId(null);
@@ -127,6 +129,7 @@ export default function CompetenciesPage() {
         code: '',
         subjectId: '',
         type: '',
+        description: '',
       });
     }
     setShowModal(true);
@@ -135,7 +138,7 @@ export default function CompetenciesPage() {
   const handleCloseModal = () => {
     setShowModal(false);
     setEditingId(null);
-    setFormData({ name: '', code: '', subjectId: '', type: '' });
+    setFormData({ name: '', code: '', subjectId: '', type: '', description: '' });
     setFormError('');
     setFormSuccess('');
   };
@@ -348,6 +351,7 @@ export default function CompetenciesPage() {
                                   code: comp.code || '',
                                   subjectId: comp.subjectId || '',
                                   type: comp.type || '',
+                                  description: comp.description || '',
                                 });
                                 setShowModal(true);
                                 setFormError('');
