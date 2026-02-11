@@ -546,6 +546,13 @@ function RaportArabDetailContent() {
           width: 100%;
         }
 
+        /* Hide sidebar on raport detail page */
+        aside,
+        nav:not(.a4-wrapper nav),
+        .sidebar {
+          display: none !important;
+        }
+
         @media print {
           * {
             margin: 0 !important;
@@ -679,6 +686,10 @@ function RaportArabDetailContent() {
           margin-top: 3px;
           margin-bottom: 1px;
           font-size: 13px;
+        }
+
+        .footer-section table td {
+          border: none !important;
         }
 
         @media print {
@@ -854,40 +865,40 @@ function RaportArabDetailContent() {
           
           <div className="footer-section">
             {/* TTD dan Info Footer */}
-            <table className="ar" style={{ marginTop: '2px', width: '100%' }}>
+            <table className="ar" style={{ marginTop: '2px', width: '100%', border: 'none' }}>
             <tbody>
               <tr style={{ height: 'auto' }}>
-                {/* Kolom kanan (tanggal laporan) */}
-                <td style={{ width: '33%', textAlign: 'right', padding: '8px', border: '1px solid #000', fontSize: '12px', fontFamily: "'Amiri', 'Traditional Arabic', serif", verticalAlign: 'top' }}>
-                <div style={{ marginBottom: '50px', paddingTop: '8px' }}>
-                  تقرير بدار السلام لاهات، في 21 يونيو 2026
-                </div>
-                </td>
+              {/* Kolom kanan (tanggal laporan) */}
+              <td style={{ width: '33%', textAlign: 'right', padding: '8px', fontSize: '12px', fontFamily: "'Amiri', 'Traditional Arabic', serif", verticalAlign: 'top', border: 'none' }}>
+              <div style={{ marginBottom: '50px', paddingTop: '8px' }}>
+                تقرير بدار السلام لاهات، في 21 يونيو 2026
+              </div>
+              </td>
 
               {/* Kolom tengah (pimpinan + nama) */}
-                <td style={{ width: '34%', textAlign: 'center', padding: '8px', border: '1px solid #000', fontSize: '12px', fontFamily: "'Amiri', 'Traditional Arabic', serif", verticalAlign: 'top' }}>
-                <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>
-                مدير المعهد دار السلام لاهات
-                </div>
-                
-                <div style={{ borderTop: '1px solid #000', marginTop: '45px', paddingTop: '8px' }}></div>
-                <div style={{ marginTop: '2px', fontSize: '12px' }}>
-                الأستاذ محمد رومي أوكتاريوس،
-                </div>
-                </td>
+              <td style={{ width: '34%', textAlign: 'center', padding: '8px', fontSize: '12px', fontFamily: "'Amiri', 'Traditional Arabic', serif", verticalAlign: 'top', border: 'none' }}>
+              <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>
+              مدير المعهد دار السلام لاهات
+              </div>
+              
+              <div style={{ borderTop: '1px solid #000', marginTop: '45px', paddingTop: '8px' }}></div>
+              <div style={{ marginTop: '2px', fontSize: '12px' }}>
+              الأستاذ محمد رومي أوكتاريوس،
+              </div>
+              </td>
 
               {/* Kolom kiri (catatan + nilai) */}
-              <td style={{ width: '33%', textAlign: 'center', padding: '8px', border: '1px solid #000', fontSize: '12px', fontFamily: "'Amiri', 'Traditional Arabic', serif", verticalAlign: 'top' }}>
-                
-                <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>
-                الملاحظة
-                </div>
-                <div style={{ fontSize: '14px', marginBottom: '12px', fontWeight: 'bold' }}>
-                ضعيف جدًا
-                </div>
-                <div style={{ fontSize: '10px', marginTop: '40px', paddingTop: '8px', borderTop: '1px solid #ccc' }}>
-                SERIAL: UAS-SMT-2-24/25-PA-31
-                </div>
+              <td style={{ width: '33%', textAlign: 'center', padding: '8px', fontSize: '12px', fontFamily: "'Amiri', 'Traditional Arabic', serif", verticalAlign: 'top', border: 'none' }}>
+              
+              <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>
+              الملاحظة
+              </div>
+              <div style={{ fontSize: '14px', marginBottom: '12px', fontWeight: 'bold' }}>
+              ضعيف جدًا
+              </div>
+              <div style={{ fontSize: '10px', marginTop: '40px', paddingTop: '8px', borderTop: '1px solid #ccc' }}>
+              SERIAL: UAS-SMT-2-24/25-PA-31
+              </div>
               </td>
               </tr>
             </tbody>

@@ -156,23 +156,23 @@ export async function POST(request: NextRequest) {
                 z-index: 10;
             }
             h1 {
-                font-size: 16px;
-                margin-top: 12px;
-                margin-bottom: 4px;
+                font-size: 18px;
+                margin-top: 8px;
+                margin-bottom: 3px;
                 text-align: center;
                 font-weight: bold;
             }
             table {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 13px;
-                margin-top: 4px;
+                font-size: 14px;
+                margin-top: 3px;
             }
             th, td {
-                border: 1px solid #000;
                 padding: 5px;
                 text-align: center;
                 vertical-align: middle;
+                border: 1px solid #000;
             }
             thead th {
                 background: #e9e9e9;
@@ -189,15 +189,21 @@ export async function POST(request: NextRequest) {
             .center { text-align: center; }
             .right { text-align: right; }
             .info-table {
-                margin-bottom: 2px;
+                margin-bottom: 1px;
             }
             .info-table td {
-                font-size: 12px;
+                font-size: 13px;
                 padding: 2px 0;
                 border: none;
             }
             .info-table td.label {
                 font-weight: bold;
+            }
+            .footer-section table td {
+                border: none !important;
+            }
+            .footer-section table td div {
+                padding-bottom: 8px;
             }
         </style>
     </head>
@@ -208,7 +214,6 @@ export async function POST(request: NextRequest) {
             </div>
             <div class="page-content">
                 <h1>بسم الله الرحمن الرحيم</h1>
-                
                 <table class="info-table">
                     <tr>
                         <td class="label">الاسم</td>
