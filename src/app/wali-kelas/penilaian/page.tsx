@@ -37,6 +37,7 @@ export default function PenilaianPage() {
   const [error, setError] = useState('');
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [selectedStudent, setSelectedStudent] = useState<string>('');
+  const [selectedAssessmentType, setSelectedAssessmentType] = useState<string>('');
 
   const subjects = Array.from(new Set(grades.map((g) => g.subjectName))).sort();
   const students = Array.from(
@@ -46,6 +47,15 @@ export default function PenilaianPage() {
   )
     .map((s) => JSON.parse(s))
     .sort((a, b) => a.name.localeCompare(b.name));
+  
+  const assessmentTypes = [
+    { code: 'DAILY', label: 'Harian' },
+    { code: 'QUIZ', label: 'Kuis' },
+    { code: 'TASK', label: 'Tugas' },
+    { code: 'PROJECT', label: 'Proyek' },
+    { code: 'MIDTERM', label: 'UTS' },
+    { code: 'FINAL', label: 'UAS' },
+  ].filter((type) => grades.some((g) => g.assessmentType === type.code));
 
   useEffect(() => {
     fetchGrades();
@@ -62,8 +72,12 @@ export default function PenilaianPage() {
       filtered = filtered.filter((g) => g.studentNo === selectedStudent);
     }
 
+    if (selectedAssessmentType) {
+      filtered = filtered.filter((g) => g.assessmentType === selectedAssessmentType);
+    }
+
     setFilteredGrades(filtered);
-  }, [grades, selectedSubject, selectedStudent]);
+  }, [grades, selectedSubject, selectedStudent, selectedAssessmentType]);
 
   async function fetchGrades() {
     try {
@@ -189,15 +203,15 @@ export default function PenilaianPage() {
           <h2 className="text-lg font-semibold text-gray-900">Filter Data</h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-semibold text-gray-900 mb-2">
               Mata Pelajaran
             </label>
             <select
               value={selectedSubject}
               onChange={(e) => setSelectedSubject(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-gray-900 bg-white"
             >
               <option value="">-- Semua Mata Pelajaran --</option>
               {subjects.map((subject) => (
@@ -209,13 +223,13 @@ export default function PenilaianPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-semibold text-gray-900 mb-2">
               Siswa
             </label>
             <select
               value={selectedStudent}
               onChange={(e) => setSelectedStudent(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-gray-900 bg-white"
             >
               <option value="">-- Semua Siswa --</option>
               {students.map((student) => (
@@ -225,104 +239,25 @@ export default function PenilaianPage() {
               ))}
             </select>
           </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-900 mb-2">
+              Jenis Penilaian
+            </label>
+            <select
+              value={selectedAssessmentType}
+              onChange={(e) => setSelectedAssessmentType(e.target.value)}
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-gray-900 bg-white"
+            >
+              <option value="">-- Semua Jenis Penilaian --</option>
+              {assessmentTypes.map((type) => (
+                <option key={type.code} value={type.code}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-      </div>
-
-      {/* Grades Table - Grouped by Assessment Type */}
-      <div className="space-y-6">
-        {(() => {
-          // Group grades by assessment type
-          const groupedByType = new Map<string, Grade[]>();
-          const assessmentTypeOrder = ['DAILY', 'QUIZ', 'TASK', 'PROJECT', 'MIDTERM', 'FINAL'];
-
-          filteredGrades.forEach((grade) => {
-            if (!groupedByType.has(grade.assessmentType)) {
-              groupedByType.set(grade.assessmentType, []);
-            }
-            groupedByType.get(grade.assessmentType)?.push(grade);
-          });
-
-          // Sort by assessment type order
-          const sortedTypes = Array.from(groupedByType.keys()).sort(
-            (a, b) =>
-              assessmentTypeOrder.indexOf(a) - assessmentTypeOrder.indexOf(b)
-          );
-
-          if (sortedTypes.length === 0) {
-            return (
-              <div className="bg-white rounded-lg shadow-md p-8 text-center text-gray-500">
-                Tidak ada data penilaian
-              </div>
-            );
-          }
-
-          return sortedTypes.map((assessmentType) => {
-            const grades = groupedByType.get(assessmentType) || [];
-            const typeColor: { [key: string]: string } = {
-              DAILY: 'bg-blue-50 border-blue-500',
-              QUIZ: 'bg-purple-50 border-purple-500',
-              TASK: 'bg-orange-50 border-orange-500',
-              PROJECT: 'bg-green-50 border-green-500',
-              MIDTERM: 'bg-red-50 border-red-500',
-              FINAL: 'bg-indigo-50 border-indigo-500',
-            };
-
-            return (
-              <div key={assessmentType} className={`bg-white rounded-lg shadow-md overflow-hidden border-l-4 ${typeColor[assessmentType]}`}>
-                <div className="bg-gray-100 px-6 py-3 border-b border-gray-200">
-                  <h3 className="text-lg font-bold text-gray-900">
-                    Penilaian {translateAssessmentType(assessmentType)}
-                  </h3>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Total: {grades.length} data
-                  </p>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200">
-                        <th className="px-6 py-3 text-left font-semibold text-gray-700">No.</th>
-                        <th className="px-6 py-3 text-left font-semibold text-gray-700">Nama Siswa</th>
-                        <th className="px-6 py-3 text-left font-semibold text-gray-700">No. Induk</th>
-                        <th className="px-6 py-3 text-left font-semibold text-gray-700">Mata Pelajaran</th>
-                        <th className="px-6 py-3 text-left font-semibold text-gray-700">Guru Pengajar</th>
-                        <th className="px-6 py-3 text-left font-semibold text-gray-700">Kompetensi</th>
-                        <th className="px-6 py-3 text-center font-semibold text-gray-700">Nilai</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {grades.map((grade, idx) => (
-                        <tr
-                          key={grade.id}
-                          className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
-                        >
-                          <td className="px-6 py-4 text-gray-900 font-medium">{idx + 1}</td>
-                          <td className="px-6 py-4 text-gray-900 font-medium">
-                            {grade.studentName}
-                          </td>
-                          <td className="px-6 py-4 text-gray-600">{grade.studentNo}</td>
-                          <td className="px-6 py-4 text-gray-900">
-                            <span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-sm font-medium">
-                              {grade.subjectName}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-gray-600">{grade.teacherName}</td>
-                          <td className="px-6 py-4 text-gray-600 text-sm">
-                            {grade.competencyName}
-                          </td>
-                          <td className="px-6 py-4 text-center font-bold text-lg text-emerald-600">
-                            {grade.score}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            );
-          });
-        })()}
       </div>
 
       {/* Summary Statistics */}
@@ -352,6 +287,72 @@ export default function PenilaianPage() {
           </div>
         </div>
       )}
+
+      {/* Grades Table */}
+      <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div className="bg-gray-100 px-6 py-3 border-b border-gray-200">
+          <h3 className="text-lg font-bold text-gray-900">
+            Data Penilaian
+          </h3>
+          <p className="text-sm text-gray-600 mt-1">
+            Total: {filteredGrades.length} data
+          </p>
+        </div>
+
+        {filteredGrades.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            Tidak ada data penilaian
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="px-6 py-3 text-left font-semibold text-gray-700">No.</th>
+                  <th className="px-6 py-3 text-left font-semibold text-gray-700">Nama Siswa</th>
+                  <th className="px-6 py-3 text-left font-semibold text-gray-700">No. Induk</th>
+                  <th className="px-6 py-3 text-left font-semibold text-gray-700">Mata Pelajaran</th>
+                  <th className="px-6 py-3 text-left font-semibold text-gray-700">Guru Pengajar</th>
+                  <th className="px-6 py-3 text-left font-semibold text-gray-700">Jenis Penilaian</th>
+                  <th className="px-6 py-3 text-left font-semibold text-gray-700">Kompetensi</th>
+                  <th className="px-6 py-3 text-center font-semibold text-gray-700">Nilai</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredGrades.map((grade, idx) => (
+                  <tr
+                    key={grade.id}
+                    className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
+                  >
+                    <td className="px-6 py-4 text-gray-900 font-medium">{idx + 1}</td>
+                    <td className="px-6 py-4 text-gray-900 font-medium">
+                      {grade.studentName}
+                    </td>
+                    <td className="px-6 py-4 text-gray-600">{grade.studentNo}</td>
+                    <td className="px-6 py-4 text-gray-900">
+                      <span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-sm font-medium">
+                        {grade.subjectName}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-gray-600">{grade.teacherName}</td>
+                    <td className="px-6 py-4 text-gray-600">
+                      <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                        {translateAssessmentType(grade.assessmentType)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-gray-600 text-sm">
+                      {grade.competencyName}
+                    </td>
+                    <td className="px-6 py-4 text-center font-bold text-lg text-emerald-600">
+                      {grade.score}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

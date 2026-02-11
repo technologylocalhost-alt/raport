@@ -19,9 +19,12 @@ interface Subject {
 interface PaginatedResponse {
   success: boolean;
   data: Subject[];
-  page: number;
-  limit: number;
-  total: number;
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
 }
 
 interface Level {
@@ -88,7 +91,7 @@ export default function SubjectsPage() {
 
       const data: PaginatedResponse = await response.json();
       setSubjects(data.data || []);
-      setTotal(data.total || 0);
+      setTotal(data.pagination?.total || 0);
     } catch (error) {
       console.error('Failed to fetch subjects:', error);
     } finally {
@@ -216,7 +219,7 @@ export default function SubjectsPage() {
       {/* Search Section */}
       <div className="bg-white rounded-lg shadow p-4">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" size={20} />
           <input
             type="text"
             placeholder="Cari mata pelajaran..."
@@ -225,7 +228,7 @@ export default function SubjectsPage() {
               setSearch(e.target.value);
               setPage(1);
             }}
-            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
+            className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 rounded-lg text-gray-900 font-medium placeholder:text-gray-600 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
           />
         </div>
       </div>
@@ -408,14 +411,14 @@ export default function SubjectsPage() {
 
             {/* Pagination */}
             <div className="px-6 py-4 border-t bg-gray-50 flex items-center justify-between">
-              <span className="text-sm text-gray-600 font-medium">
+              <span className="text-sm text-gray-900 font-semibold">
                 Halaman <span className="text-orange-600 font-bold">{page}</span> dari {totalPages} ({total} total)
               </span>
               <div className="flex gap-2">
                 <button
                   onClick={() => setPage(Math.max(1, page - 1))}
                   disabled={page === 1}
-                  className="flex items-center gap-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
+                  className="flex items-center gap-1 px-4 py-2 border-2 border-gray-300 rounded-lg text-gray-900 font-bold hover:bg-gray-100 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                   <ChevronLeft size={16} />
                   Sebelumnya
@@ -423,7 +426,7 @@ export default function SubjectsPage() {
                 <button
                   onClick={() => setPage(Math.min(totalPages, page + 1))}
                   disabled={page === totalPages}
-                  className="flex items-center gap-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
+                  className="flex items-center gap-1 px-4 py-2 border-2 border-gray-300 rounded-lg text-gray-900 font-bold hover:bg-gray-100 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                   Selanjutnya
                   <ChevronRight size={16} />
