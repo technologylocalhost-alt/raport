@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Printer } from 'lucide-react';
+import { ArrowLeft, Printer, Download } from 'lucide-react';
 
 interface Student {
   id: string;
@@ -398,6 +398,42 @@ function RaportArabDetailContent() {
     window.print();
   };
 
+  const handleDownloadPDF = async () => {
+    try {
+      if (!reportData) {
+        alert('Data raport tidak tersedia');
+        return;
+      }
+
+      const response = await fetch('/api/wali-kelas/generate-pdf-puppeteer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(reportData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('API Error:', errorData);
+        throw new Error(errorData.error || 'Gagal membuat PDF');
+      }
+
+      const { pdf, fileName } = await response.json();
+
+      // Download PDF
+      const link = document.createElement('a');
+      link.href = pdf;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      alert(`Gagal membuat PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -425,6 +461,8 @@ function RaportArabDetailContent() {
   return (
     <>
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap');
+        
         * {
           margin: 0;
           padding: 0;
@@ -436,7 +474,7 @@ function RaportArabDetailContent() {
           height: 100%;
           margin: 0;
           padding: 0;
-          font-family: 'Traditional Arabic', serif;
+          font-family: 'Amiri', 'Traditional Arabic', 'Arial Unicode MS', serif;
           color: black;
           background: white;
           overflow-x: hidden;
@@ -455,15 +493,25 @@ function RaportArabDetailContent() {
 
         .a4-page {
           width: 215mm;
-          height: 330mm;
           background: white;
           box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-          padding: 25px 20px;
-          font-size: 14px;
-          line-height: 1.3;
-          font-family: 'Traditional Arabic', serif;
+          padding: 6px 6px;
+          font-size: 12px;
+          line-height: 1.2;
+          font-family: 'Amiri', 'Traditional Arabic', serif;
+          direction: rtl;
           position: relative;
-          overflow: hidden;
+          overflow: visible;
+          display: flex;
+          flex-direction: column;
+        }
+        
+        .page-content {
+          overflow: visible;
+        }
+        
+        .footer-section {
+          margin-top: auto;
         }
 
         .toolbar {
@@ -482,13 +530,32 @@ function RaportArabDetailContent() {
         }
 
         @media print {
-          html, body {
-            width: 100%;
-            margin: 0;
-            padding: 0;
+          * {
+            margin: 0 !important;
+            padding: 0 !important;
           }
 
-          body > div:first-child > aside {
+          html, body {
+            width: 215mm !important;
+            height: 330mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+          }
+
+          body > * {
+            display: none !important;
+          }
+
+          body > div:nth-child(n) {
+            display: block !important;
+          }
+
+          body > div > .a4-wrapper {
+            display: flex !important;
+          }
+
+          aside, nav, .sidebar, .navbar, .toolbar, footer {
             display: none !important;
           }
 
@@ -497,19 +564,26 @@ function RaportArabDetailContent() {
           }
 
           .a4-wrapper {
-            background: white;
+            background: white !important;
             padding: 0 !important;
-            min-height: auto;
-            margin: 0;
+            min-height: auto !important;
+            margin: 0 !important;
+            width: 100% !important;
+            display: flex !important;
+            justify-content: center !important;
           }
 
           .a4-page {
             width: 215mm !important;
             height: 330mm !important;
-            padding: 25px 20px !important;
+            padding: 8px 8px !important;
             box-shadow: none !important;
             margin: 0 !important;
-            page-break-after: always;
+            background: white !important;
+            page-break-after: always !important;
+            display: block !important;
+            font-size: 12px !important;
+            line-height: 1.2 !important;
           }
 
           @page {
@@ -522,23 +596,39 @@ function RaportArabDetailContent() {
         table {
           width: 100%;
           border-collapse: collapse;
-          font-family: 'Traditional Arabic', serif;
-          font-size: 14px;
+          font-family: 'Amiri', 'Traditional Arabic', serif;
+          font-size: 13px;
+          margin-top: 3px;
         }
         
         th, td {
-          border: 2px solid #000;
-          padding: 6px;
+          border: 1px solid #000;
+          padding: 5px;
           text-align: center;
+          vertical-align: middle;
         }
         
         thead th {
           background: #e9e9e9;
+          font-weight: bold;
+          padding: 8px;
+        }
+        
+        tbody td {
+          padding: 4px 5px;
+        }
+        
+        h1 {
+          font-size: 16px;
+          margin-top: 18px;
+          margin-bottom: 1px;
+          text-align: center;
+          font-weight: bold;
         }
         
         .ar {
           direction: rtl;
-          font-family: 'Traditional Arabic', serif;
+          font-family: 'Amiri', 'Traditional Arabic', serif;
         }
         
         table.no-border td {
@@ -550,13 +640,43 @@ function RaportArabDetailContent() {
         .right { text-align: right; }
 
         .arabic-text {
-          font-family: 'Traditional Arabic', 'Arial', serif;
+          font-family: 'Amiri', 'Traditional Arabic', serif;
+        }
+
+        .info-table {
+          margin-bottom: 1px;
+        }
+        
+        .info-table td {
+          font-size: 12px;
+          padding: 2px 0;
+          border: none;
+        }
+        
+        .info-table td.label {
+          font-weight: bold;
+        }
+
+        .section-title {
+          font-weight: bold;
+          margin-top: 3px;
+          margin-bottom: 1px;
+          font-size: 13px;
         }
 
         @media print {
           * {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+          }
+          
+          h1 {
+            font-size: 19px !important;
+            margin-bottom: 8px !important;
+          }
+          
+          table {
+            margin-top: 8px !important;
           }
         }
       `}</style>
@@ -572,8 +692,15 @@ function RaportArabDetailContent() {
         <div className="h-6 w-px bg-gray-300"></div>
         <span className="text-gray-600 text-sm">Raport Peserta Didik Bahasa Arab - F4 (215 × 330 mm)</span>
         <button
+          onClick={handleDownloadPDF}
+          className="ml-auto flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 mr-2"
+        >
+          <Download size={20} />
+          Download PDF
+        </button>
+        <button
           onClick={handlePrint}
-          className="ml-auto flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700"
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
         >
           <Printer size={20} />
           Cetak
@@ -582,44 +709,45 @@ function RaportArabDetailContent() {
 
       <div className="a4-wrapper">
         <div className="a4-page">
+          <div className="page-content">
           {/* Header */}
-          <h1 className="arabic-text center" style={{ fontFamily: "'Traditional Arabic', serif", fontSize: '21px', marginBottom: '10px', textAlign: 'center' }}>بسم الله الرحمن الرحيم</h1>
+          <h1 className="arabic-text center" style={{ fontFamily: "'Amiri', 'Traditional Arabic', serif", fontSize: '19px', marginBottom: '8px', textAlign: 'center', fontWeight: 'bold' }}>بسم الله الرحمن الرحيم</h1>
           {/* Header Info */}
-          <table className="no-border ar">
+          <table className="no-border ar info-table" style={{ marginBottom: '1px' }}>
             <tbody>
               <tr>
-                <td>الاسم</td>
+                <td className="label">الاسم</td>
                 <td>: {reportData.student.name || '-'}</td>
-                <td className="right">رقم دفتر القيد</td>
+                <td className="right label">رقم دفتر القيد</td>
                 <td>: {reportData.student.studentNo}</td>
-                <td className="right">الفصل</td>
+                <td className="right label">الفصل</td>
                 <td>: {reportData.student.class || '-'}</td>
               </tr>
             </tbody>
           </table>
 
           {/* Tabel Nilai Format Arabic RTL */}
-          <table className="ar" style={{ marginTop: '10px' }}>
+          <table className="ar" style={{ marginTop: '2px' }}>
             <thead>
               <tr>
                 {/* BLOK KANAN (Column 1-4) */}
-                <th rowSpan={2} style={{ width: '15%' }} className="arabic-text">المواد</th>
-                <th colSpan={3} style={{ width: '35%' }} className="arabic-text">الدرجة</th>
+                <th rowSpan={2} style={{ width: '14%' }} className="arabic-text">المواد</th>
+                <th colSpan={3} style={{ width: '36%' }} className="arabic-text">الدرجة</th>
 
                 {/* BLOK KIRI (Column 5-8) */}
-                <th rowSpan={2} style={{ width: '15%' }} className="arabic-text">المواد</th>
-                <th colSpan={3} style={{ width: '35%' }} className="arabic-text">الدرجة</th>
+                <th rowSpan={2} style={{ width: '14%' }} className="arabic-text">المواد</th>
+                <th colSpan={3} style={{ width: '36%' }} className="arabic-text">الدرجة</th>
               </tr>
               <tr>
                 {/* Sub kolom kanan */}
-                <th className="arabic-text">المعدلة للفصل</th>
-                <th className="arabic-text">الأرقام</th>
-                <th className="arabic-text">الحروف</th>
+                <th className="arabic-text" style={{ width: '12%' }}>المعدلة للفصل</th>
+                <th className="arabic-text" style={{ width: '12%' }}>الأرقام</th>
+                <th className="arabic-text" style={{ width: '12%' }}>الحروف</th>
 
                 {/* Sub kolom kiri */}
-                <th className="arabic-text">المعدلة للفصل</th>
-                <th className="arabic-text">الأرقام</th>
-                <th className="arabic-text">الحروف</th>
+                <th className="arabic-text" style={{ width: '12%' }}>المعدلة للفصل</th>
+                <th className="arabic-text" style={{ width: '12%' }}>الأرقام</th>
+                <th className="arabic-text" style={{ width: '12%' }}>الحروف</th>
               </tr>
             </thead>
             <tbody>
@@ -658,7 +786,7 @@ function RaportArabDetailContent() {
           </table>
 
             {/* Rekap */}
-            <table style={{ marginTop: '10px' }} className="ar">
+            <table style={{ marginTop: '8px' }} className="ar">
             <tbody>
               <tr>
               <th>الرتبة</th>
@@ -674,7 +802,7 @@ function RaportArabDetailContent() {
             </table>
 
           {/* Rekap */}
-            <table style={{ marginTop: '10px' }} className="ar">
+            <table style={{ marginTop: '8px' }} className="ar">
             <tbody>
               <tr>
               <th>السلوك</th>
@@ -695,55 +823,58 @@ function RaportArabDetailContent() {
             </table>
 
           {/* Catatan */}
-          <table style={{ marginTop: '10px' }} className="ar">
+          <table style={{ marginTop: '2px', fontSize: '12px' }} className="ar">
             <tbody>
               <tr>
                 <th>تقدير الدرجات: ١–٣ : ضعيف جداً،   ٤–٥ : ضعيف، ٦ : مقبول، ٧ : جيد، ٨ : جيد جداً، ٩–١٠ : ممتاز </th>
               </tr>
             </tbody>
           </table>
-
+          </div> {/* end page-content */}
+          
+          <div className="footer-section">
             {/* TTD dan Info Footer */}
-            <table className="ar" style={{ marginTop: '30px', width: '100%' }}>
+            <table className="ar" style={{ marginTop: '2px', width: '100%' }}>
             <tbody>
-              <tr>
+              <tr style={{ height: 'auto' }}>
                 {/* Kolom kanan (tanggal laporan) */}
-                <td style={{ width: '33%', textAlign: 'right', padding: '10px 10px 30px 10px', border: '1px solid #000', fontSize: '12px', fontFamily: "'Traditional Arabic', serif" }}>
-                <div style={{ marginBottom: '40px' }}>
+                <td style={{ width: '33%', textAlign: 'right', padding: '8px', border: '1px solid #000', fontSize: '12px', fontFamily: "'Amiri', 'Traditional Arabic', serif", verticalAlign: 'top' }}>
+                <div style={{ marginBottom: '50px', paddingTop: '8px' }}>
                   تقرير بدار السلام لاهات، في 21 يونيو 2026
                 </div>
                 </td>
 
               {/* Kolom tengah (pimpinan + nama) */}
-                <td style={{ width: '44%', textAlign: 'center', padding: '10px', border: '1px solid #000', fontSize: '12px' }}>
-                <div style={{ fontFamily: "'Traditional Arabic', serif", marginBottom: '5px' }}>
+                <td style={{ width: '34%', textAlign: 'center', padding: '8px', border: '1px solid #000', fontSize: '12px', fontFamily: "'Amiri', 'Traditional Arabic', serif", verticalAlign: 'top' }}>
+                <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>
                 مدير المعهد دار السلام لاهات
                 </div>
                 
-                <div style={{ borderTop: '1px solid #000', marginTop: '40px', paddingTop: '5px' }}></div>
-                <div style={{ fontFamily: "'Traditional Arabic', serif", marginBottom: '20px', marginTop: '8px' }}>
+                <div style={{ borderTop: '1px solid #000', marginTop: '45px', paddingTop: '8px' }}></div>
+                <div style={{ marginTop: '2px', fontSize: '12px' }}>
                 الأستاذ محمد رومي أوكتاريوس،
                 </div>
                 </td>
 
               {/* Kolom kiri (catatan + nilai) */}
-              <td style={{ width: '23%', textAlign: 'center', padding: '10px', border: '1px solid #000', fontSize: '12px' }}>
+              <td style={{ width: '33%', textAlign: 'center', padding: '8px', border: '1px solid #000', fontSize: '12px', fontFamily: "'Amiri', 'Traditional Arabic', serif", verticalAlign: 'top' }}>
                 
-                <div style={{ fontFamily: "'Traditional Arabic', serif", marginBottom: '8px', fontWeight: 'bold' }}>
+                <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>
                 الملاحظة
                 </div>
-                <div style={{ fontFamily: "'Traditional Arabic', serif", fontSize: '14px', marginBottom: '8px', fontWeight: 'bold' }}>
+                <div style={{ fontSize: '14px', marginBottom: '12px', fontWeight: 'bold' }}>
                 ضعيف جدًا
                 </div>
-                <div style={{ fontSize: '10px', marginTop: '10px' }}>
+                <div style={{ fontSize: '10px', marginTop: '40px', paddingTop: '8px', borderTop: '1px solid #ccc' }}>
                 SERIAL: UAS-SMT-2-24/25-PA-31
                 </div>
               </td>
               </tr>
             </tbody>
             </table>
-        </div>
-      </div>
+          </div> {/* end footer-section */}
+        </div> {/* end a4-page */}
+      </div> {/* end a4-wrapper */}
     </>
   );
 }
