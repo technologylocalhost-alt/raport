@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import puppeteer from 'puppeteer';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 export async function POST(request: NextRequest) {
   let browser = null;
@@ -89,6 +91,16 @@ export async function POST(request: NextRequest) {
 
     const avgScore = (subjectScores.reduce((sum: number, s: any) => sum + s.averageScore, 0) / subjectScores.length).toFixed(1);
 
+    // Convert image to base64
+    let logoBase64 = '';
+    try {
+      const imagePath = join(process.cwd(), 'public', 'namapondok.png');
+      const imageBuffer = readFileSync(imagePath);
+      logoBase64 = imageBuffer.toString('base64');
+    } catch (err) {
+      console.log('Logo not found, continuing without it');
+    }
+
     const htmlContent = `
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
@@ -125,6 +137,23 @@ export async function POST(request: NextRequest) {
             }
             .footer-section {
                 margin-top: auto;
+            }
+            .watermark-bg {
+                position: absolute;
+                top: 35%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                opacity: 1;
+                z-index: 1;
+                pointer-events: none;
+            }
+            .watermark-bg img {
+                width: 650px;
+                height: auto;
+            }
+            .page-content {
+                position: relative;
+                z-index: 10;
             }
             h1 {
                 font-size: 16px;
@@ -174,6 +203,9 @@ export async function POST(request: NextRequest) {
     </head>
     <body>
         <div class="a4-page">
+            <div class="watermark-bg">
+                ${logoBase64 ? `<img src="data:image/png;base64,${logoBase64}" alt="Trademark" />` : ''}
+            </div>
             <div class="page-content">
                 <h1>بسم الله الرحمن الرحيم</h1>
                 

@@ -505,9 +505,26 @@ function RaportArabDetailContent() {
           display: flex;
           flex-direction: column;
         }
+
+        .watermark-bg {
+          position: absolute;
+          top: 40%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          opacity: 1;
+          z-index: 1;
+          pointer-events: none;
+        }
+
+        .watermark-bg img {
+          width: 1000px;
+          height: auto;
+        }
         
         .page-content {
           overflow: visible;
+          position: relative;
+          z-index: 10;
         }
         
         .footer-section {
@@ -709,6 +726,9 @@ function RaportArabDetailContent() {
 
       <div className="a4-wrapper">
         <div className="a4-page">
+          <div className="watermark-bg">
+            <img src="/namapondok.png" alt="Trademark" />
+          </div>
           <div className="page-content">
           {/* Header */}
           <h1 className="arabic-text center" style={{ fontFamily: "'Amiri', 'Traditional Arabic', serif", fontSize: '19px', marginBottom: '8px', textAlign: 'center', fontWeight: 'bold' }}>بسم الله الرحمن الرحيم</h1>
