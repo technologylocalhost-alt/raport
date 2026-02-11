@@ -46,6 +46,7 @@ interface Subject {
   id: string;
   code: string;
   name: string;
+  nameArabic?: string;
   description?: string;
   creditHours?: number;
 }
@@ -77,6 +78,9 @@ export default function WaliKelasClassManagementPage() {
   const [showTeacherForm, setShowTeacherForm] = useState(false);
   const [subjectFormData, setSubjectFormData] = useState<SubjectFormData>({ subjectId: '' });
   const [teacherFormData, setTeacherFormData] = useState<TeacherFormData>({ teacherId: '', subjectId: '' });
+  const [subjectCurrentPage, setSubjectCurrentPage] = useState(1);
+  const [teacherCurrentPage, setTeacherCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     const user = localStorage.getItem('user');
@@ -485,8 +489,8 @@ export default function WaliKelasClassManagementPage() {
                   <tr>
                     <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Kode</th>
                     <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Nama</th>
+                    <th className="px-6 py-3 text-center text-sm font-semibold text-emerald-700 bg-emerald-50">Mata Pelajaran Arab</th>
                     <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Deskripsi</th>
-                    <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700">SKS</th>
                     <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700">Aksi</th>
                   </tr>
                 </thead>
@@ -498,18 +502,20 @@ export default function WaliKelasClassManagementPage() {
                       </td>
                     </tr>
                   ) : (
-                    classSubjects.map((cs) => (
+                    classSubjects.slice((subjectCurrentPage - 1) * itemsPerPage, subjectCurrentPage * itemsPerPage).map((cs) => (
                       <tr key={cs.id} className="border-b hover:bg-gray-50">
                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{cs.subject.code}</td>
                         <td className="px-6 py-4 text-sm text-gray-700">{cs.subject.name}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">
+                        <td className="px-6 py-4 text-center text-sm font-semibold text-emerald-700 bg-emerald-50">
+                          {cs.subject.nameArabic || '-'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600 max-w-xs">
                           {cs.subject.description || '-'}
                         </td>
-                        <td className="px-6 py-4 text-center text-sm">{cs.subject.creditHours || '-'}</td>
                         <td className="px-6 py-4 text-center">
                           <button
                             onClick={() => handleDeleteSubject(cs.subject.id)}
-                            className="text-red-600 hover:text-red-900"
+                            className="text-red-600 hover:text-red-900 transition-colors"
                           >
                             <Trash2 size={18} />
                           </button>
@@ -520,6 +526,46 @@ export default function WaliKelasClassManagementPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Subjects Pagination */}
+            {classSubjects.length > itemsPerPage && (
+              <div className="flex items-center justify-between mt-6 px-2 bg-gray-50 py-4 rounded-lg">
+                <div className="text-sm font-medium text-gray-700">
+                  Menampilkan {(subjectCurrentPage - 1) * itemsPerPage + 1} - {Math.min(subjectCurrentPage * itemsPerPage, classSubjects.length)} dari {classSubjects.length} mata pelajaran
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSubjectCurrentPage(Math.max(1, subjectCurrentPage - 1))}
+                    disabled={subjectCurrentPage === 1}
+                    className="px-4 py-3 bg-white border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-emerald-50 hover:border-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-gray-300"
+                  >
+                    ← Sebelumnya
+                  </button>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.ceil(classSubjects.length / itemsPerPage) }, (_, i) => i + 1).map((page) => (
+                      <button
+                        key={page}
+                        onClick={() => setSubjectCurrentPage(page)}
+                        className={`px-3 py-2 rounded-lg font-semibold transition-colors ${
+                          page === subjectCurrentPage
+                            ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                            : 'border-2 border-gray-300 text-gray-700 hover:border-emerald-600 hover:text-emerald-600'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setSubjectCurrentPage(Math.min(Math.ceil(classSubjects.length / itemsPerPage), subjectCurrentPage + 1))}
+                    disabled={subjectCurrentPage === Math.ceil(classSubjects.length / itemsPerPage)}
+                    className="px-4 py-3 bg-white border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-emerald-50 hover:border-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-gray-300"
+                  >
+                    Selanjutnya →
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -619,7 +665,7 @@ export default function WaliKelasClassManagementPage() {
                       </td>
                     </tr>
                   ) : (
-                    classTeachers.map((ct) => (
+                    classTeachers.slice((teacherCurrentPage - 1) * itemsPerPage, teacherCurrentPage * itemsPerPage).map((ct) => (
                       <tr key={ct.id} className="border-b hover:bg-gray-50">
                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{ct.teacher.name}</td>
                         <td className="px-6 py-4 text-sm text-gray-700">{ct.teacher.email}</td>
@@ -640,6 +686,46 @@ export default function WaliKelasClassManagementPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Teachers Pagination */}
+            {classTeachers.length > itemsPerPage && (
+              <div className="flex items-center justify-between mt-6 px-2 bg-gray-50 py-4 rounded-lg">
+                <div className="text-sm font-medium text-gray-700">
+                  Menampilkan {(teacherCurrentPage - 1) * itemsPerPage + 1} - {Math.min(teacherCurrentPage * itemsPerPage, classTeachers.length)} dari {classTeachers.length} guru
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setTeacherCurrentPage(Math.max(1, teacherCurrentPage - 1))}
+                    disabled={teacherCurrentPage === 1}
+                    className="px-4 py-3 bg-white border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-emerald-50 hover:border-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-gray-300"
+                  >
+                    ← Sebelumnya
+                  </button>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.ceil(classTeachers.length / itemsPerPage) }, (_, i) => i + 1).map((page) => (
+                      <button
+                        key={page}
+                        onClick={() => setTeacherCurrentPage(page)}
+                        className={`px-3 py-2 rounded-lg font-semibold transition-colors ${
+                          page === teacherCurrentPage
+                            ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                            : 'border-2 border-gray-300 text-gray-700 hover:border-emerald-600 hover:text-emerald-600'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setTeacherCurrentPage(Math.min(Math.ceil(classTeachers.length / itemsPerPage), teacherCurrentPage + 1))}
+                    disabled={teacherCurrentPage === Math.ceil(classTeachers.length / itemsPerPage)}
+                    className="px-4 py-3 bg-white border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-emerald-50 hover:border-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-gray-300"
+                  >
+                    Selanjutnya →
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

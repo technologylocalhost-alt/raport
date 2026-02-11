@@ -154,6 +154,7 @@ export async function POST(
             id: true,
             code: true,
             name: true,
+            nameArabic: true,
             description: true,
             creditHours: true,
           },

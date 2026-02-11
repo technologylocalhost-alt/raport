@@ -94,7 +94,7 @@ async function main() {
     prisma.user.create({
       data: {
         email: 'walikelas1@sekolah.id',
-        name: 'Ibu Siti (Wali Kelas)',
+        name: 'Ibu Siti Wali Kelas',
         password: teacherPassword,
         role: 'WALI_KELAS',
         schoolId: school.id,
@@ -104,7 +104,7 @@ async function main() {
     prisma.user.create({
       data: {
         email: 'walikelas2@sekolah.id',
-        name: 'Pak Ahmad (Wali Kelas)',
+        name: 'Pak Ahmad Wali Kelas',
         password: teacherPassword,
         role: 'WALI_KELAS',
         schoolId: school.id,

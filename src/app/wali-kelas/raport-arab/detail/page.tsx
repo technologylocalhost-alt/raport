@@ -444,7 +444,7 @@ function RaportArabDetailContent() {
 
         .a4-wrapper {
           background: #f5f5f5;
-          padding: 60px 20px 20px 20px;
+          padding: 40px 20px 20px 20px;
           min-height: 100vh;
           display: flex;
           justify-content: center;
@@ -454,13 +454,13 @@ function RaportArabDetailContent() {
         }
 
         .a4-page {
-          width: 210mm;
+          width: 215mm;
           height: 330mm;
           background: white;
-          box-shadow: 0 0 10px rgba(0,0,0,0.3);
-          padding: 20px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+          padding: 25px 20px;
           font-size: 14px;
-          line-height: 1.4;
+          line-height: 1.3;
           font-family: 'Traditional Arabic', serif;
           position: relative;
           overflow: hidden;
@@ -504,16 +504,16 @@ function RaportArabDetailContent() {
           }
 
           .a4-page {
-            width: 210mm !important;
+            width: 215mm !important;
             height: 330mm !important;
-            padding: 20px !important;
+            padding: 25px 20px !important;
             box-shadow: none !important;
             margin: 0 !important;
             page-break-after: always;
           }
 
           @page {
-            size: 210mm 330mm;
+            size: 215mm 330mm;
             margin: 0;
             padding: 0;
           }
@@ -523,11 +523,12 @@ function RaportArabDetailContent() {
           width: 100%;
           border-collapse: collapse;
           font-family: 'Traditional Arabic', serif;
+          font-size: 14px;
         }
         
         th, td {
           border: 2px solid #000;
-          padding: 8px;
+          padding: 6px;
           text-align: center;
         }
         
@@ -569,7 +570,7 @@ function RaportArabDetailContent() {
           Kembali
         </button>
         <div className="h-6 w-px bg-gray-300"></div>
-        <span className="text-gray-600 text-sm">Raport Peserta Didik Bahasa Arab - A4</span>
+        <span className="text-gray-600 text-sm">Raport Peserta Didik Bahasa Arab - F4 (215 × 330 mm)</span>
         <button
           onClick={handlePrint}
           className="ml-auto flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700"
@@ -656,21 +657,42 @@ function RaportArabDetailContent() {
             </tbody>
           </table>
 
-          {/* Rekap */}
-          <table style={{ marginTop: '10px' }}>
+            {/* Rekap */}
+            <table style={{ marginTop: '10px' }} className="ar">
             <tbody>
               <tr>
-                <th>Total Nilai</th>
-                <td className="center">---</td>
-                <th>Rata-rata</th>
-                <td className="center">
-                  <strong>
-                    {toArabicNumerals((reportData.subjectScores.reduce((sum, s) => sum + s.averageScore, 0) / reportData.subjectScores.length).toFixed(1))}
-                  </strong>
-                </td>
+              <th>الرتبة</th>
+              <td className="center">---</td>
+              <th>المعدل العام</th>
+              <td className="center">
+                <strong>
+                {toArabicNumerals((reportData.subjectScores.reduce((sum, s) => sum + s.averageScore, 0) / reportData.subjectScores.length).toFixed(1))}
+                </strong>
+              </td>
               </tr>
             </tbody>
-          </table>
+            </table>
+
+          {/* Rekap */}
+            <table style={{ marginTop: '10px' }} className="ar">
+            <tbody>
+              <tr>
+              <th>السلوك</th>
+              <td className="center">٨</td>
+              <td className="center">ثمان</td>
+              </tr>
+              <tr>
+              <th>المواظبة</th>
+              <td className="center">٨</td>
+              <td className="center">ثمان</td>
+              </tr>
+              <tr>
+              <th>النظافة</th>
+              <td className="center">٨</td>
+              <td className="center">ثمان</td>
+              </tr>
+            </tbody>
+            </table>
 
           {/* Catatan */}
           <table style={{ marginTop: '10px' }} className="ar">
@@ -681,19 +703,45 @@ function RaportArabDetailContent() {
             </tbody>
           </table>
 
-          {/* TTD */}
-          <table className="no-border" style={{ marginTop: '40px' }}>
+            {/* TTD dan Info Footer */}
+            <table className="ar" style={{ marginTop: '30px', width: '100%' }}>
             <tbody>
               <tr>
-                <td className="center">Wali Kelas</td>
-                <td className="center">Orang Tua</td>
-              </tr>
-              <tr>
-                <td style={{ height: '60px' }}></td>
-                <td></td>
+                {/* Kolom kanan (tanggal laporan) */}
+                <td style={{ width: '33%', textAlign: 'right', padding: '10px 10px 30px 10px', border: '1px solid #000', fontSize: '12px', fontFamily: "'Traditional Arabic', serif" }}>
+                <div style={{ marginBottom: '40px' }}>
+                  تقرير بدار السلام لاهات، في 21 يونيو 2026
+                </div>
+                </td>
+
+              {/* Kolom tengah (pimpinan + nama) */}
+                <td style={{ width: '44%', textAlign: 'center', padding: '10px', border: '1px solid #000', fontSize: '12px' }}>
+                <div style={{ fontFamily: "'Traditional Arabic', serif", marginBottom: '5px' }}>
+                مدير المعهد دار السلام لاهات
+                </div>
+                
+                <div style={{ borderTop: '1px solid #000', marginTop: '40px', paddingTop: '5px' }}></div>
+                <div style={{ fontFamily: "'Traditional Arabic', serif", marginBottom: '20px', marginTop: '8px' }}>
+                الأستاذ محمد رومي أوكتاريوس،
+                </div>
+                </td>
+
+              {/* Kolom kiri (catatan + nilai) */}
+              <td style={{ width: '23%', textAlign: 'center', padding: '10px', border: '1px solid #000', fontSize: '12px' }}>
+                
+                <div style={{ fontFamily: "'Traditional Arabic', serif", marginBottom: '8px', fontWeight: 'bold' }}>
+                الملاحظة
+                </div>
+                <div style={{ fontFamily: "'Traditional Arabic', serif", fontSize: '14px', marginBottom: '8px', fontWeight: 'bold' }}>
+                ضعيف جدًا
+                </div>
+                <div style={{ fontSize: '10px', marginTop: '10px' }}>
+                SERIAL: UAS-SMT-2-24/25-PA-31
+                </div>
+              </td>
               </tr>
             </tbody>
-          </table>
+            </table>
         </div>
       </div>
     </>
