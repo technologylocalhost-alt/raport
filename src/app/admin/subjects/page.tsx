@@ -8,6 +8,7 @@ interface Subject {
   id: string;
   code: string;
   name: string;
+  nameArabic?: string;
   description?: string;
   creditHours?: number;
   level: {
@@ -46,6 +47,7 @@ export default function SubjectsPage() {
     levelId: '',
     code: '',
     name: '',
+    nameArabic: '',
     description: '',
     creditHours: '',
   });
@@ -180,6 +182,7 @@ export default function SubjectsPage() {
       levelId: subject.level.id,
       code: subject.code,
       name: subject.name,
+      nameArabic: subject.nameArabic || '',
       description: subject.description || '',
       creditHours: subject.creditHours?.toString() || '',
     });
@@ -204,6 +207,7 @@ export default function SubjectsPage() {
               levelId: '',
               code: '',
               name: '',
+              nameArabic: '',
               description: '',
               creditHours: '',
             });
@@ -291,7 +295,21 @@ export default function SubjectsPage() {
                 </div>
               </div>
               
-              {/* Row 3: Credit Hours */}
+              {/* Row 3: Arabic Name */}
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Nama Mata Pelajaran (Arab)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Masukkan nama mata pelajaran dalam bahasa arab (mis: الرياضيات, العلوم)"
+                  value={formData.nameArabic}
+                  onChange={(e) => setFormData({ ...formData, nameArabic: e.target.value })}
+                  className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-lg text-gray-900 text-base placeholder:text-gray-500 placeholder:font-normal focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-gray-300 focus:outline-none transition-all"
+                />
+              </div>
+              
+              {/* Row 4: Credit Hours */}
               <div className="mb-4">
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Jam Kredit
@@ -360,6 +378,9 @@ export default function SubjectsPage() {
                     Nama Mata Pelajaran
                   </th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
+                    Nama (Arab)
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
                     Kode
                   </th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
@@ -381,6 +402,9 @@ export default function SubjectsPage() {
                   <tr key={subject.id} className="hover:bg-orange-50 transition-colors">
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">
                       {subject.name}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {subject.nameArabic || '-'}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">{subject.code}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">{subject.level.name}</td>

@@ -30,6 +30,7 @@ async function verifyAdmin(req: NextRequest) {
 const subjectSchema = z.object({
   code: z.string().min(1, 'Subject code is required').optional(),
   name: z.string().min(1, 'Subject name is required').optional(),
+  nameArabic: z.string().optional(),
   description: z.string().optional(),
   creditHours: z.number().optional(),
 });

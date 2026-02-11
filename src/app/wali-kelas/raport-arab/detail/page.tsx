@@ -31,6 +31,8 @@ interface Grade {
 
 interface SubjectScore {
   subject: string;
+  subjectCode?: string;
+  subjectArabicName?: string;
   kkm: number;
   scores?: { type: string; score: number }[];
   averageScore: number;
@@ -83,7 +85,7 @@ function RaportArabDetailContent() {
 
   // Helper: Convert numeric score to Arabic text
   const scoreToArabicText = (score: number): string => {
-    const onesArabic = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة'];
+    const onesArabic = ['', 'واحد', 'اثنان', 'ثلاث', 'أربع', 'خمس', 'ست', 'سبع', 'ثمان', 'تسع'];
     const teensArabic = ['عشرة', 'احدى عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
     const tensArabic = ['', '', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
     
@@ -99,7 +101,13 @@ function RaportArabDetailContent() {
       if (int % 10 > 0) result = onesArabic[int % 10] + ' و' + result;
     } else if (int === 100) result = 'مئة';
 
-    if (decimal > 0) result += ' فاصلة ' + onesArabic[decimal];
+    if (decimal > 0) {
+      if (decimal === 5) {
+        result += ' و نصف';
+      } else {
+        result += ' و ' + onesArabic[decimal];
+      }
+    }
     return result;
   };
 
@@ -136,14 +144,24 @@ function RaportArabDetailContent() {
     return result;
   };
 
-  // Helper: Process subject scores
-  const processSubjectScores = (grades: Grade[]): SubjectScore[] => {
+  // Helper: Process subject scores with all class subjects
+  const processSubjectScores = (grades: Grade[], classSubjects: string[] = [], subjectCodeMap: { [key: string]: string } = {}, subjectArabicMap: { [key: string]: string } = {}): SubjectScore[] => {
     const subjectMap: { 
       [key: string]: { 
         scores: number[]; 
         assessmentScores: { type: string; score: number }[] 
       } 
     } = {};
+
+    // Initialize all class subjects
+    classSubjects.forEach(subject => {
+      if (!subjectMap[subject]) {
+        subjectMap[subject] = { 
+          scores: [], 
+          assessmentScores: [] 
+        };
+      }
+    });
 
     grades.forEach((grade) => {
       if (!subjectMap[grade.subjectName]) {
@@ -185,6 +203,8 @@ function RaportArabDetailContent() {
 
         return {
           subject,
+          subjectCode: subjectCodeMap[subject] || '',
+          subjectArabicName: subjectArabicMap[subject] || '',
           kkm: 6,
           scores: scoresArray,
           averageScore,
@@ -192,7 +212,14 @@ function RaportArabDetailContent() {
           predicate: getPredicate(letterGrade),
         };
       })
-      .sort((a, b) => a.subject.localeCompare(b.subject));
+      .sort((a, b) => {
+        // Sort by subject code alphanumeric (A1, A2, B1, B2, etc)
+        const codeA = a.subjectCode || '';
+        const codeB = b.subjectCode || '';
+        
+        // Alphanumeric sort
+        return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+      });
   };
 
   // Validation: Check required parameters on mount
@@ -297,6 +324,37 @@ function RaportArabDetailContent() {
         }
       }
 
+      // Fetch class subjects (all subjects registered in this class)
+      const classSubjectsResponse = await fetch(
+        `/api/admin/classes/${classId}/subjects`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      let classSubjects: string[] = [];
+      let subjectCodeMap: { [key: string]: string } = {};
+      let subjectArabicMap: { [key: string]: string } = {};
+      if (classSubjectsResponse.ok) {
+        const classSubjectsData = await classSubjectsResponse.json();
+        if (classSubjectsData.success && Array.isArray(classSubjectsData.data)) {
+          classSubjects = classSubjectsData.data
+            .map((cs: any) => cs.subject?.name || cs.subjectName || '')
+            .filter((s: string) => s);
+          
+          // Create mapping of subject name to code and arabic name for sorting and display
+          classSubjectsData.data.forEach((cs: any) => {
+            const subjectName = cs.subject?.name || cs.subjectName || '';
+            const subjectCode = cs.subject?.code || '';
+            const subjectArabic = cs.subject?.nameArabic || '';
+            if (subjectName && subjectCode) {
+              subjectCodeMap[subjectName] = subjectCode;
+            }
+            if (subjectName && subjectArabic) {
+              subjectArabicMap[subjectName] = subjectArabic;
+            }
+          });
+        }
+      }
+
       // Fetch attendance
       const attendanceResponse = await fetch(
         `/api/teacher/students/${studentId}/attendance?classId=${classId}`,
@@ -311,7 +369,7 @@ function RaportArabDetailContent() {
         }
       }
 
-      const subjectScores = processSubjectScores(grades);
+      const subjectScores = processSubjectScores(grades, classSubjects, subjectCodeMap, subjectArabicMap);
 
       setReportData({
         student,
@@ -378,7 +436,7 @@ function RaportArabDetailContent() {
           height: 100%;
           margin: 0;
           padding: 0;
-          font-family: "Times New Roman", serif;
+          font-family: 'Traditional Arabic', serif;
           color: black;
           background: white;
           overflow-x: hidden;
@@ -403,7 +461,7 @@ function RaportArabDetailContent() {
           padding: 20px;
           font-size: 14px;
           line-height: 1.4;
-          font-family: "Times New Roman", serif;
+          font-family: 'Traditional Arabic', serif;
           position: relative;
           overflow: hidden;
         }
@@ -464,7 +522,7 @@ function RaportArabDetailContent() {
         table {
           width: 100%;
           border-collapse: collapse;
-          font-family: "Times New Roman", serif;
+          font-family: 'Traditional Arabic', serif;
         }
         
         th, td {
@@ -479,6 +537,7 @@ function RaportArabDetailContent() {
         
         .ar {
           direction: rtl;
+          font-family: 'Traditional Arabic', serif;
         }
         
         table.no-border td {
@@ -530,7 +589,7 @@ function RaportArabDetailContent() {
               <tr>
                 <td>الاسم</td>
                 <td>: {reportData.student.name || '-'}</td>
-                <td className="right">الرقم</td>
+                <td className="right">رقم دفتر القيد</td>
                 <td>: {reportData.student.studentNo}</td>
                 <td className="right">الفصل</td>
                 <td>: {reportData.student.class || '-'}</td>
@@ -565,8 +624,8 @@ function RaportArabDetailContent() {
             <tbody>
               {(() => {
                 const subjects = reportData.subjectScores;
-                const leftColumn = subjects.slice(0, Math.ceil(subjects.length / 2));
-                const rightColumn = subjects.slice(Math.ceil(subjects.length / 2));
+                const rightColumn = subjects.slice(0, Math.ceil(subjects.length / 2));
+                const leftColumn = subjects.slice(Math.ceil(subjects.length / 2));
                 
                 const maxRows = Math.max(leftColumn.length, rightColumn.length);
                 const rows = [];
@@ -578,13 +637,13 @@ function RaportArabDetailContent() {
                   rows.push(
                     <tr key={i}>
                       {/* BLOK KANAN (Right side) */}
-                      <td>{rightSubject ? rightSubject.subject : '—'}</td>
+                      <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>{rightSubject ? (rightSubject.subjectArabicName || rightSubject.subject) : '—'}</td>
                       <td>{rightSubject ? toArabicNumerals(rightSubject.kkm) : '—'}</td>
                       <td><strong>{rightSubject ? toArabicNumerals(rightSubject.averageScore.toFixed(1)) : '—'}</strong></td>
                       <td><strong>{rightSubject ? scoreToArabicText(rightSubject.averageScore) : '—'}</strong></td>
 
                       {/* BLOK KIRI (Left side) */}
-                      <td>{leftSubject ? leftSubject.subject : '—'}</td>
+                      <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>{leftSubject ? (leftSubject.subjectArabicName || leftSubject.subject) : '—'}</td>
                       <td>{leftSubject ? toArabicNumerals(leftSubject.kkm) : '—'}</td>
                       <td><strong>{leftSubject ? toArabicNumerals(leftSubject.averageScore.toFixed(1)) : '—'}</strong></td>
                       <td><strong>{leftSubject ? scoreToArabicText(leftSubject.averageScore) : '—'}</strong></td>
@@ -614,7 +673,7 @@ function RaportArabDetailContent() {
           </table>
 
           {/* Catatan */}
-          <table style={{ marginTop: '10px' }}>
+          <table style={{ marginTop: '10px' }} className="ar">
             <tbody>
               <tr>
                 <th>تقدير الدرجات: ١–٣ : ضعيف جداً،   ٤–٥ : ضعيف، ٦ : مقبول، ٧ : جيد، ٨ : جيد جداً، ٩–١٠ : ممتاز </th>

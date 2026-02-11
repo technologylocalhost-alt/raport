@@ -128,7 +128,7 @@ export async function PUT(
     // Build update data, converting score to float if provided
     const updateData: any = {};
     if (validatedData.score !== undefined) {
-      updateData.score = validatedData.score;
+      updateData.score = String(validatedData.score);
     }
     if (validatedData.assessmentType !== undefined) {
       updateData.assessmentType = validatedData.assessmentType;

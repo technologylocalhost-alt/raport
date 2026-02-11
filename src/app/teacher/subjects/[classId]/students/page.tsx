@@ -2,7 +2,7 @@
 
 import { Fragment, useState, useEffect } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Users, PenTool, X, AlertCircle, CheckCircle, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Users, PenTool, X, AlertCircle, CheckCircle, ChevronDown, Edit2, Trash2 } from 'lucide-react';
 
 interface Student {
   id: string;
@@ -93,6 +93,8 @@ export default function ClassStudentsPage() {
     assessmentType: 'DAILY',
     notes: '',
   });
+  const [editingGradeId, setEditingGradeId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Grades states
   const [grades, setGrades] = useState<{ [key: string]: Grade[] }>({});
@@ -168,17 +170,6 @@ export default function ClassStudentsPage() {
     }
   }
 
-  const handleOpenGradeModal = async (student: Student) => {
-    setSelectedStudent(student);
-    setShowGradeModal(true);
-    setGradeError('');
-    setGradeSuccess('');
-    setGradeFormData({ competencyId: '', score: '', assessmentType: 'DAILY', notes: '' });
-    
-    // Fetch competencies for the subject
-    await fetchCompetencies();
-  };
-
   const fetchStudentGrades = async (studentId: string) => {
     try {
       setLoadingGrades((prev) => ({ ...prev, [studentId]: true }));
@@ -212,6 +203,75 @@ export default function ClassStudentsPage() {
       if (!grades[studentId]) {
         await fetchStudentGrades(studentId);
       }
+    }
+  };
+
+  const handleOpenGradeModal = (student: Student) => {
+    setSelectedStudent(student);
+    setEditingGradeId(null);
+    setGradeFormData({
+      competencyId: '',
+      score: '',
+      assessmentType: 'DAILY',
+      notes: '',
+    });
+    setGradeError('');
+    setGradeSuccess('');
+    setShowGradeModal(true);
+    // Fetch competencies when opening modal
+    fetchCompetencies();
+  };
+
+  const handleEditGrade = (student: Student, grade: Grade) => {
+    setSelectedStudent(student);
+    setEditingGradeId(grade.id);
+    setGradeFormData({
+      competencyId: '', // Not needed for edit, will be hidden
+      score: String(grade.score),
+      assessmentType: grade.assessmentType,
+      notes: grade.notes || '',
+    });
+    setGradeError('');
+    setGradeSuccess('');
+    setShowGradeModal(true);
+    // Fetch competencies when opening modal
+    fetchCompetencies();
+  };
+
+  const handleDeleteGrade = async (gradeId: string, studentId: string) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus nilai ini?')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        setGradeError('Sesi Anda telah berakhir. Silakan login kembali');
+        return;
+      }
+
+      const response = await fetch(`/api/teacher/grades/${gradeId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        // Remove from local state
+        setGrades((prev) => ({
+          ...prev,
+          [studentId]: prev[studentId].filter((g) => g.id !== gradeId),
+        }));
+        // Refresh grades
+        await fetchStudentGrades(studentId);
+      } else {
+        const data = await response.json();
+        alert('Gagal menghapus nilai: ' + (data.message || 'Kesalahan server'));
+      }
+    } catch (error) {
+      console.error('Error deleting grade:', error);
+      alert('Terjadi kesalahan saat menghapus nilai');
     }
   };
 
@@ -281,26 +341,31 @@ export default function ClassStudentsPage() {
     e.preventDefault();
     setGradeError('');
     setGradeSuccess('');
+    setIsSubmitting(true);
 
     // Validation: Check required fields
-    if (!gradeFormData.competencyId) {
+    if (!editingGradeId && !gradeFormData.competencyId) {
       setGradeError('Mohon pilih kompetensi');
+      setIsSubmitting(false);
       return;
     }
 
     if (!gradeFormData.score) {
       setGradeError('Mohon masukkan nilai');
+      setIsSubmitting(false);
       return;
     }
 
     if (!gradeFormData.assessmentType) {
       setGradeError('Mohon pilih jenis penilaian');
+      setIsSubmitting(false);
       return;
     }
 
     // Validation: Check student selection
     if (!selectedStudent || !selectedStudent.id) {
       setGradeError('Data siswa tidak valid');
+      setIsSubmitting(false);
       return;
     }
 
@@ -308,11 +373,13 @@ export default function ClassStudentsPage() {
     const score = parseFloat(gradeFormData.score);
     if (isNaN(score)) {
       setGradeError('Nilai harus berupa angka');
+      setIsSubmitting(false);
       return;
     }
 
     if (score < 1 || score > 10) {
       setGradeError('Nilai harus antara 1-10');
+      setIsSubmitting(false);
       return;
     }
 
@@ -320,23 +387,37 @@ export default function ClassStudentsPage() {
     const token = localStorage.getItem('accessToken');
     if (!token) {
       setGradeError('Sesi Anda telah berakhir. Silakan login kembali');
+      setIsSubmitting(false);
       return;
     }
 
     try {
-      const response = await fetch('/api/teacher/grades', {
-        method: 'POST',
+      // If editing, use PUT; otherwise use POST
+      const isEditing = !!editingGradeId;
+      const url = isEditing ? `/api/teacher/grades/${editingGradeId}` : '/api/teacher/grades';
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const requestBody = isEditing
+        ? {
+            score: score,
+            assessmentType: gradeFormData.assessmentType,
+            notes: gradeFormData.notes,
+          }
+        : {
+            studentId: selectedStudent?.id,
+            competencyId: gradeFormData.competencyId,
+            score: score,
+            assessmentType: gradeFormData.assessmentType,
+            notes: gradeFormData.notes,
+          };
+
+      const response = await fetch(url, {
+        method: method,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          studentId: selectedStudent?.id,
-          competencyId: gradeFormData.competencyId,
-          score: score,
-          assessmentType: gradeFormData.assessmentType,
-          notes: gradeFormData.notes,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
@@ -344,26 +425,33 @@ export default function ClassStudentsPage() {
       // Handle different response statuses
       if (response.status === 401) {
         setGradeError('Sesi Anda telah berakhir. Silakan login kembali');
+        setIsSubmitting(false);
         return;
       }
 
       if (response.status === 403) {
-        setGradeError('Anda tidak memiliki akses untuk menginput nilai siswa ini');
+        setGradeError('Anda tidak memiliki akses untuk mengubah nilai ini');
+        setIsSubmitting(false);
         return;
       }
 
       if (response.status === 404) {
-        setGradeError('Siswa atau kompetensi tidak ditemukan');
+        setGradeError('Nilai atau siswa tidak ditemukan');
+        setIsSubmitting(false);
         return;
       }
 
       if (response.ok && data.success) {
-        setGradeSuccess('Nilai berhasil disimpan');
+        setGradeSuccess(isEditing ? 'Nilai berhasil diperbarui' : 'Nilai berhasil disimpan');
         setTimeout(() => {
           setShowGradeModal(false);
           setSelectedStudent(null);
+          setEditingGradeId(null);
           setGradeFormData({ competencyId: '', score: '', assessmentType: 'DAILY', notes: '' });
           // Refresh the grades list
+          if (selectedStudent) {
+            fetchStudentGrades(selectedStudent.id);
+          }
           fetchClassStudents();
         }, 1500);
       } else {
@@ -372,6 +460,8 @@ export default function ClassStudentsPage() {
     } catch (error) {
       console.error('Error saving grade:', error);
       setGradeError('Terjadi kesalahan saat menyimpan nilai. Periksa koneksi Anda');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -518,13 +608,29 @@ export default function ClassStudentsPage() {
                                             {grade.score}
                                           </span>
                                         </div>
-                                        <div className="flex justify-between items-center text-xs text-gray-600">
+                                        <div className="flex justify-between items-center text-xs text-gray-600 mb-2">
                                           <span>{getAssessmentTypeLabel(grade.assessmentType)}</span>
                                           <span>{new Date(grade.createdAt).toLocaleDateString('id-ID')}</span>
                                         </div>
                                         {grade.notes && (
-                                          <p className="text-xs text-gray-600 mt-2 italic">"{grade.notes}"</p>
+                                          <p className="text-xs text-gray-600 mb-2 italic">"{grade.notes}"</p>
                                         )}
+                                        <div className="flex gap-2 pt-2 border-t border-amber-100">
+                                          <button
+                                            onClick={() => handleEditGrade(student, grade)}
+                                            className="flex-1 flex items-center justify-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded hover:bg-blue-200 transition-colors"
+                                          >
+                                            <Edit2 size={12} />
+                                            Edit
+                                          </button>
+                                          <button
+                                            onClick={() => handleDeleteGrade(grade.id, student.id)}
+                                            className="flex-1 flex items-center justify-center gap-1 px-2 py-1 bg-red-100 text-red-700 text-xs font-medium rounded hover:bg-red-200 transition-colors"
+                                          >
+                                            <Trash2 size={12} />
+                                            Hapus
+                                          </button>
+                                        </div>
                                       </div>
                                     ))}
                                   </div>
@@ -558,11 +664,14 @@ export default function ClassStudentsPage() {
             <div className="bg-white rounded-lg shadow sticky top-6">
               {/* Form Header */}
               <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-4 flex items-center justify-between">
-                <h3 className="text-lg font-bold text-white">Input Nilai</h3>
+                <h3 className="text-lg font-bold text-white">
+                  {editingGradeId ? 'Edit Nilai' : 'Input Nilai'}
+                </h3>
                 <button
                   onClick={() => {
                     setShowGradeModal(false);
                     setSelectedStudent(null);
+                    setEditingGradeId(null);
                   }}
                   className="text-white hover:bg-indigo-800 p-1 rounded-lg transition-colors"
                 >
@@ -595,27 +704,29 @@ export default function ClassStudentsPage() {
                   <p className="text-xs text-blue-700 mt-1">NISN: {selectedStudent.nisn}</p>
                 </div>
 
-                {/* Competency Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Kompetensi <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={gradeFormData.competencyId}
-                    onChange={(e) => setGradeFormData({ ...gradeFormData, competencyId: e.target.value })}
-                    disabled={competenciesLoading}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white text-gray-900 disabled:bg-gray-100"
-                  >
-                    <option value="">
-                      {competenciesLoading ? 'Memuat...' : 'Pilih kompetensi'}
-                    </option>
-                    {competencies.map((comp) => (
-                      <option key={comp.id} value={comp.id}>
-                        {comp.subjectName}
+                {/* Competency Selection - Hidden when editing */}
+                {!editingGradeId && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Kompetensi <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={gradeFormData.competencyId}
+                      onChange={(e) => setGradeFormData({ ...gradeFormData, competencyId: e.target.value })}
+                      disabled={competenciesLoading}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white text-gray-900 disabled:bg-gray-100"
+                    >
+                      <option value="">
+                        {competenciesLoading ? 'Memuat...' : 'Pilih kompetensi'}
                       </option>
-                    ))}
-                  </select>
-                </div>
+                      {competencies.map((comp) => (
+                        <option key={comp.id} value={comp.id}>
+                          {comp.subjectName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 {/* Score Input */}
                 <div>
@@ -675,6 +786,7 @@ export default function ClassStudentsPage() {
                     onClick={() => {
                       setShowGradeModal(false);
                       setSelectedStudent(null);
+                      setEditingGradeId(null);
                     }}
                     className="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors font-medium text-sm"
                   >
@@ -682,10 +794,19 @@ export default function ClassStudentsPage() {
                   </button>
                   <button
                     type="submit"
-                    disabled={competenciesLoading}
+                    disabled={competenciesLoading || isSubmitting || (editingGradeId === null && !gradeFormData.competencyId)}
                     className="flex-1 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:bg-gray-400"
                   >
-                    Simpan
+                    {isSubmitting ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Menyimpan...
+                      </span>
+                    ) : editingGradeId ? (
+                      'Perbarui Nilai'
+                    ) : (
+                      'Simpan'
+                    )}
                   </button>
                 </div>
               </form>

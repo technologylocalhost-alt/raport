@@ -196,6 +196,7 @@ model Subject {
   level       Level?   @relation(fields: [levelId], references: [id], onDelete: SetNull)
   code        String   // "MTK", "IPA", etc
   name        String   // "Matematika", "Ilmu Pengetahuan Alam", etc
+  nameArabic  String?  // Arabic name - "الرياضيات", "العلوم", etc
   description String?  // Subject description
   creditHours Int?     // Credit hours
   
