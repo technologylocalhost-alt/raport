@@ -63,6 +63,8 @@ function RaportArabDetailContent() {
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [allStudents, setAllStudents] = useState<Student[]>([]);
+  const [currentStudentIndex, setCurrentStudentIndex] = useState(-1);
 
   // Helper: Convert numeric score to letter grade (1-10 scale)
   const getLetterGrade = (score: number): string => {
@@ -291,6 +293,20 @@ function RaportArabDetailContent() {
       if (studentResponse.ok) {
         const studentData = await studentResponse.json();
         if (studentData.success && Array.isArray(studentData.data)) {
+          // Store all students for navigation
+          const students = studentData.data.map((s: any) => ({
+            id: s.id,
+            name: s.name || 'N/A',
+            studentNo: s.studentNo || 'N/A',
+            birthDate: s.birthDate || '',
+            class: classData.data?.name || '-',
+          }));
+          setAllStudents(students);
+          
+          // Find current student index
+          const index = students.findIndex((s) => s.id === studentId);
+          setCurrentStudentIndex(index >= 0 ? index : 0);
+          
           const foundStudent = studentData.data.find((s: any) => s.id === studentId);
           if (foundStudent) {
             student = {
@@ -432,6 +448,28 @@ function RaportArabDetailContent() {
       console.error('Error downloading PDF:', error);
       alert(`Gagal membuat PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  };
+
+  const handlePreviousStudent = () => {
+    if (currentStudentIndex > 0) {
+      const previousStudent = allStudents[currentStudentIndex - 1];
+      router.push(
+        `/wali-kelas/raport-arab/detail?classId=${classId}&studentId=${previousStudent.id}`
+      );
+    }
+  };
+
+  const handleNextStudent = () => {
+    if (currentStudentIndex < allStudents.length - 1) {
+      const nextStudent = allStudents[currentStudentIndex + 1];
+      router.push(
+        `/wali-kelas/raport-arab/detail?classId=${classId}&studentId=${nextStudent.id}`
+      );
+    }
+  };
+
+  const handleSeeAllStudents = () => {
+    router.push(`/wali-kelas/raport-arab/bulk-review`);
   };
 
   if (isLoading) {
@@ -719,16 +757,53 @@ function RaportArabDetailContent() {
         </button>
         <div className="h-6 w-px bg-gray-300"></div>
         <span className="text-gray-600 text-sm">Raport Peserta Didik Bahasa Arab - F4 (215 × 330 mm)</span>
+        
+        {/* Navigation Buttons */}
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={handlePreviousStudent}
+            disabled={currentStudentIndex <= 0}
+            className={`flex items-center gap-2 px-4 py-2 rounded ${
+              currentStudentIndex <= 0
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-gray-400 text-white hover:bg-gray-500'
+            }`}
+          >
+            ← Siswa Sebelumnya
+          </button>
+          
+          <button
+            onClick={handleSeeAllStudents}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+          >
+            Lihat Semua Siswa
+          </button>
+          
+          <button
+            onClick={handleNextStudent}
+            disabled={currentStudentIndex >= allStudents.length - 1}
+            className={`flex items-center gap-2 px-4 py-2 rounded ${
+              currentStudentIndex >= allStudents.length - 1
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-gray-400 text-white hover:bg-gray-500'
+            }`}
+          >
+            Siswa Berikutnya →
+          </button>
+        </div>
+
+        <div className="h-6 w-px bg-gray-300 ml-4"></div>
+        
         <button
           onClick={handleDownloadPDF}
-          className="ml-auto flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 mr-2"
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ml-4"
         >
           <Download size={20} />
           Download PDF
         </button>
         <button
           onClick={handlePrint}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ml-2"
         >
           <Printer size={20} />
           Cetak

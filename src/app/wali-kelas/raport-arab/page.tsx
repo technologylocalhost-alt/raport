@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Printer, Search } from 'lucide-react';
+import { ArrowLeft, Printer, Search, Download, Eye } from 'lucide-react';
 
 interface Class {
   id: string;
@@ -147,6 +147,31 @@ export default function RaportArabPage() {
             Kembali
           </button>
           <h1 className="text-3xl font-bold text-emerald-900">Raport Peserta Didik</h1>
+        </div>
+
+        {/* Menu Tabs */}
+        <div className="flex gap-4 mb-8">
+          <button
+            onClick={() => {}}
+            className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition-colors shadow-md"
+          >
+            <Printer size={20} />
+            Review Individual
+          </button>
+          <button
+            onClick={() => router.push('/wali-kelas/raport-arab/bulk-review')}
+            className="flex items-center gap-2 px-6 py-3 bg-white text-emerald-600 border-2 border-emerald-600 rounded-lg font-semibold hover:bg-emerald-50 transition-colors"
+          >
+            <Eye size={20} />
+            Review Keseluruhan
+          </button>
+          <button
+            onClick={() => router.push('/wali-kelas/raport-arab/bulk-download')}
+            className="flex items-center gap-2 px-6 py-3 bg-white text-emerald-600 border-2 border-emerald-600 rounded-lg font-semibold hover:bg-emerald-50 transition-colors"
+          >
+            <Download size={20} />
+            Download Semua
+          </button>
         </div>
 
         {/* Main Card */}
