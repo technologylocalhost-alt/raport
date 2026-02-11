@@ -8,6 +8,7 @@ interface Grade {
   id: string;
   studentName: string;
   studentNo: string;
+  className: string;
   competencyName: string;
   subjectName: string;
   score: string;
@@ -18,31 +19,38 @@ interface Grade {
 interface GradesSummary {
   studentName: string;
   studentNo: string;
+  className: string;
   subject: string;
-  teacher: string;
-  dailyScores: string[];
-  quizScores: string[];
-  taskScores: string[];
-  projectScores: string[];
-  midtermScore: string;
-  finalScore: string;
-  average: number;
+  [key: string]: string | number; // For dynamic assessment type columns
 }
 
 export default function PenilaianPage() {
   const router = useRouter();
   const [grades, setGrades] = useState<Grade[]>([]);
   const [filteredGrades, setFilteredGrades] = useState<Grade[]>([]);
+  const [gradesSummary, setGradesSummary] = useState<GradesSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [selectedClass, setSelectedClass] = useState<string>('');
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [selectedStudent, setSelectedStudent] = useState<string>('');
   const [selectedAssessmentType, setSelectedAssessmentType] = useState<string>('');
 
-  const subjects = Array.from(new Set(grades.map((g) => g.subjectName))).sort();
+  const classes = Array.from(new Set(grades.map((g) => g.className))).sort();
+  const subjects = Array.from(
+    new Set(
+      selectedClass
+        ? grades.filter((g) => g.className === selectedClass).map((g) => g.subjectName)
+        : grades.map((g) => g.subjectName)
+    )
+  ).sort();
   const students = Array.from(
     new Set(
-      grades.map((g) => JSON.stringify({ name: g.studentName, no: g.studentNo }))
+      selectedClass
+        ? grades
+            .filter((g) => g.className === selectedClass)
+            .map((g) => JSON.stringify({ name: g.studentName, no: g.studentNo }))
+        : grades.map((g) => JSON.stringify({ name: g.studentName, no: g.studentNo }))
     )
   )
     .map((s) => JSON.parse(s))
@@ -64,6 +72,10 @@ export default function PenilaianPage() {
   useEffect(() => {
     let filtered = [...grades];
 
+    if (selectedClass) {
+      filtered = filtered.filter((g) => g.className === selectedClass);
+    }
+
     if (selectedSubject) {
       filtered = filtered.filter((g) => g.subjectName === selectedSubject);
     }
@@ -77,7 +89,11 @@ export default function PenilaianPage() {
     }
 
     setFilteredGrades(filtered);
-  }, [grades, selectedSubject, selectedStudent, selectedAssessmentType]);
+  }, [grades, selectedClass, selectedSubject, selectedStudent, selectedAssessmentType]);
+
+  useEffect(() => {
+    setGradesSummary(createSummary());
+  }, [filteredGrades]);
 
   async function fetchGrades() {
     try {
@@ -99,6 +115,10 @@ export default function PenilaianPage() {
 
       const classData = await response.json();
       const classIds = classData.data.map((c: any) => c.id);
+      const classNameMap: { [key: string]: string } = {};
+      classData.data.forEach((c: any) => {
+        classNameMap[c.id] = c.name || 'N/A';
+      });
 
       // Fetch grades for all classes
       const gradesList: Grade[] = [];
@@ -119,6 +139,7 @@ export default function PenilaianPage() {
             id: grade.id,
             studentName: grade.studentName || 'N/A',
             studentNo: grade.studentNo || 'N/A',
+            className: classNameMap[classId] || 'N/A',
             competencyName: grade.competencyName || 'N/A',
             subjectName: grade.subjectName || 'N/A',
             score: String(grade.score || 0),
@@ -149,6 +170,72 @@ export default function PenilaianPage() {
       PROJECT: 'Proyek',
     };
     return translations[type] || type;
+  };
+
+  // Convert detailed grades to pivot summary
+  const createSummary = () => {
+    const summaryMap: { [key: string]: GradesSummary } = {};
+
+    filteredGrades.forEach((grade) => {
+      const key = grade.studentNo;
+      
+      if (!summaryMap[key]) {
+        summaryMap[key] = {
+          studentName: grade.studentName,
+          studentNo: grade.studentNo,
+          className: grade.className,
+          subject: '', // Will combine all subjects
+        };
+      }
+
+      // Create column key for subject + assessment type
+      const columnKey = `${grade.subjectName} - ${translateAssessmentType(grade.assessmentType)}`;
+      summaryMap[key][columnKey] = grade.score;
+    });
+
+    return Object.values(summaryMap).sort((a, b) => {
+      return a.studentNo.localeCompare(b.studentNo);
+    });
+  };
+
+  // Get all unique column names (assessment types)
+  const getAllColumns = (): string[] => {
+    const allKeys = new Set<string>();
+    gradesSummary.forEach((s) => {
+      Object.keys(s).forEach((k) => {
+        if (!['studentName', 'studentNo', 'className', 'subject', 'average'].includes(k)) {
+          allKeys.add(k);
+        }
+      });
+    });
+    return Array.from(allKeys).sort();
+  };
+
+  // Calculate average for each student
+  const getStudentAverage = (row: GradesSummary): number => {
+    const columns = getAllColumns();
+    const values = columns
+      .map((col) => {
+        const val = row[col];
+        return typeof val === 'string' ? parseFloat(val) : val;
+      })
+      .filter((val) => !isNaN(val));
+    
+    if (values.length === 0) return 0;
+    return values.reduce((a, b) => a + b, 0) / values.length;
+  };
+
+  // Calculate average for each column (subject)
+  const getColumnAverage = (columnKey: string): number => {
+    const values = gradesSummary
+      .map((row) => {
+        const val = row[columnKey];
+        return typeof val === 'string' ? parseFloat(val) : val;
+      })
+      .filter((val) => !isNaN(val));
+    
+    if (values.length === 0) return 0;
+    return values.reduce((a, b) => a + b, 0) / values.length;
   };
 
   if (isLoading) {
@@ -203,7 +290,25 @@ export default function PenilaianPage() {
           <h2 className="text-lg font-semibold text-gray-900">Filter Data</h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-900 mb-2">
+              Kelas
+            </label>
+            <select
+              value={selectedClass}
+              onChange={(e) => setSelectedClass(e.target.value)}
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-gray-900 bg-white"
+            >
+              <option value="">-- Semua Kelas --</option>
+              {classes.map((className) => (
+                <option key={className} value={className}>
+                  {className}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <label className="block text-sm font-semibold text-gray-900 mb-2">
               Mata Pelajaran
@@ -308,46 +413,103 @@ export default function PenilaianPage() {
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-6 py-3 text-left font-semibold text-gray-700">No.</th>
-                  <th className="px-6 py-3 text-left font-semibold text-gray-700">Nama Siswa</th>
-                  <th className="px-6 py-3 text-left font-semibold text-gray-700">No. Induk</th>
-                  <th className="px-6 py-3 text-left font-semibold text-gray-700">Mata Pelajaran</th>
-                  <th className="px-6 py-3 text-left font-semibold text-gray-700">Guru Pengajar</th>
-                  <th className="px-6 py-3 text-left font-semibold text-gray-700">Jenis Penilaian</th>
-                  <th className="px-6 py-3 text-left font-semibold text-gray-700">Kompetensi</th>
-                  <th className="px-6 py-3 text-center font-semibold text-gray-700">Nilai</th>
+                  <th className="px-4 py-3 text-center font-semibold text-gray-700 text-sm">NO</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700 text-sm">STAMBUK</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700 text-sm">NAMA</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700 text-sm">KELAS</th>
+                  {/* Dynamic subject + assessment type columns */}
+                  {Array.from(
+                    new Set(
+                      gradesSummary.flatMap((s) =>
+                        Object.keys(s).filter(
+                          (k) => !['studentName', 'studentNo', 'className', 'subject'].includes(k)
+                        )
+                      )
+                    )
+                  )
+                    .sort()
+                    .map((type) => (
+                      <th key={type} className="px-4 py-3 text-center font-semibold text-gray-700 text-sm">
+                        {type}
+                      </th>
+                    ))}
+                  <th className="px-4 py-3 text-center font-semibold text-gray-700 text-sm bg-blue-50">RATA-RATA SISWA</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredGrades.map((grade, idx) => (
+                {gradesSummary.map((row, idx) => (
                   <tr
-                    key={grade.id}
+                    key={row.studentNo}
                     className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
                   >
-                    <td className="px-6 py-4 text-gray-900 font-medium">{idx + 1}</td>
-                    <td className="px-6 py-4 text-gray-900 font-medium">
-                      {grade.studentName}
-                    </td>
-                    <td className="px-6 py-4 text-gray-600">{grade.studentNo}</td>
-                    <td className="px-6 py-4 text-gray-900">
-                      <span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-sm font-medium">
-                        {grade.subjectName}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-gray-600">{grade.teacherName}</td>
-                    <td className="px-6 py-4 text-gray-600">
-                      <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                        {translateAssessmentType(grade.assessmentType)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-gray-600 text-sm">
-                      {grade.competencyName}
-                    </td>
-                    <td className="px-6 py-4 text-center font-bold text-lg text-emerald-600">
-                      {grade.score}
+                    <td className="px-4 py-3 text-center font-medium text-gray-900 text-sm">{idx + 1}</td>
+                    <td className="px-4 py-3 text-gray-900 font-medium text-sm">{row.studentNo}</td>
+                    <td className="px-4 py-3 text-gray-900 text-sm">{row.studentName}</td>
+                    <td className="px-4 py-3 text-gray-600 text-sm">{row.className}</td>
+                    {/* Dynamic score columns */}
+                    {Array.from(
+                      new Set(
+                        gradesSummary.flatMap((s) =>
+                          Object.keys(s).filter(
+                            (k) => !['studentName', 'studentNo', 'className', 'subject'].includes(k)
+                          )
+                        )
+                      )
+                    )
+                      .sort()
+                      .map((type) => (
+                        <td
+                          key={type}
+                          className="px-4 py-3 text-center font-semibold text-emerald-600 text-sm"
+                        >
+                          {row[type] || '—'}
+                        </td>
+                      ))}
+                    <td className="px-4 py-3 text-center font-semibold text-blue-600 text-sm bg-blue-50">
+                      {getStudentAverage(row).toFixed(2)}
                     </td>
                   </tr>
                 ))}
+                {/* Average row for each column */}
+                <tr className="bg-amber-50 border-b border-gray-200 font-semibold">
+                  <td colSpan={4} className="px-4 py-3 text-right text-gray-900 text-sm">
+                    RATA-RATA MATA PELAJARAN:
+                  </td>
+                  {Array.from(
+                    new Set(
+                      gradesSummary.flatMap((s) =>
+                        Object.keys(s).filter(
+                          (k) => !['studentName', 'studentNo', 'className', 'subject'].includes(k)
+                        )
+                      )
+                    )
+                  )
+                    .sort()
+                    .map((type) => (
+                      <td
+                        key={`avg-${type}`}
+                        className="px-4 py-3 text-center font-semibold text-amber-700 text-sm"
+                      >
+                        {getColumnAverage(type).toFixed(2)}
+                      </td>
+                    ))}
+                  <td className="px-4 py-3 text-center font-semibold text-amber-700 text-sm bg-amber-100">
+                    {(() => {
+                      const allColumns = Array.from(
+                        new Set(
+                          gradesSummary.flatMap((s) =>
+                            Object.keys(s).filter(
+                              (k) => !['studentName', 'studentNo', 'className', 'subject'].includes(k)
+                            )
+                          )
+                        )
+                      );
+                      const columnAverages = allColumns.map((col) => getColumnAverage(col));
+                      const overallAverage = columnAverages.reduce((a, b) => a + b, 0) / columnAverages.length;
+                      return overallAverage.toFixed(2);
+                    })()}
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
