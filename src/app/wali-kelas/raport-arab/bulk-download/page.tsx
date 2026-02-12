@@ -107,7 +107,7 @@ export default function BulkDownloadPage() {
         setClasses(classesWithStudents);
 
         const students = classesWithStudents.flatMap((cls) =>
-          cls.students.map((student) => ({
+          cls.students.map((student: any) => ({
             ...student,
             classId: cls.id,
             className: cls.name,

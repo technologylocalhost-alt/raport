@@ -26,6 +26,7 @@ model User {
   refreshTokens RefreshToken[]
   classes       ClassTeacher[]
   grades        Grade[]
+  nilaiApproves NilaiApprove[] @relation("UserNilaiApprove")
   classesAsWaliKelas Class[] @relation("ClassWaliKelas")
 
   @@index([schoolId])
@@ -76,6 +77,7 @@ model Level {
   classes   Class[]
   subjects  Subject[]
   reportConfigs ReportConfig[]
+  nilaiApproves NilaiApprove[] @relation("LevelNilaiApprove")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -174,15 +176,17 @@ model Student {
   name         String
   email        String?
   phone        String?
+  gender       String   @default("MALE")  // MALE or FEMALE
   birthDate    DateTime?
   address      String?
   parentPhoneNo String?
   
-  grades       Grade[]
-  attendances  Attendance[]
-  studentNotes StudentNote[]
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  grades           Grade[]
+  nilaiApproves    NilaiApprove[] @relation("StudentNilaiApprove")
+  attendances      Attendance[]
+  studentNotes     StudentNote[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@unique([classId, studentNo])
   @@index([classId])
@@ -234,9 +238,10 @@ model Competency {
   type        CompetencyType // KNOWLEDGE, SKILL, ATTITUDE
   order       Int      @default(0) // For ordering in reports
 
-  grades      Grade[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  grades           Grade[]
+  nilaiApproves    NilaiApprove[] @relation("CompetencyNilaiApprove")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@unique([subjectId, code])
   @@index([subjectId])
@@ -267,6 +272,38 @@ model Grade {
   assessmentType AssessmentType // Type of assessment (UH, UTS, UAS, etc)
   
   notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([studentId, competencyId, teacherId, assessmentType])
+  @@index([studentId])
+  @@index([competencyId])
+  @@index([levelId])
+  @@index([teacherId])
+}
+
+model NilaiApprove {
+  id            String   @id @default(cuid())
+  studentId     String
+  student       Student  @relation("StudentNilaiApprove", fields: [studentId], references: [id], onDelete: Cascade)
+  competencyId  String
+  competency    Competency @relation("CompetencyNilaiApprove", fields: [competencyId], references: [id], onDelete: Cascade)
+  levelId       String
+  level         Level    @relation("LevelNilaiApprove", fields: [levelId], references: [id], onDelete: Cascade)
+  teacherId     String
+  teacher       User     @relation("UserNilaiApprove", fields: [teacherId], references: [id], onDelete: Cascade)
+
+  score         String
+  scoringType   ScoringType
+  assessmentType AssessmentType
+  notes         String?
+  
+  // Additional approval fields
+  nomorRaport   String?
+  suluk         String?
+  muazobah      String?
+  nazofah       String?
+  
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

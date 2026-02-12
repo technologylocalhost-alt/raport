@@ -101,7 +101,7 @@ export default function BulkReviewPage() {
 
         // Flatten all students with class info
         const students = classesWithStudents.flatMap((cls) =>
-          cls.students.map((student) => ({
+          cls.students.map((student: any) => ({
             ...student,
             classId: cls.id,
             className: cls.name,

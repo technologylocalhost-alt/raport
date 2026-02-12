@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Filter, Download } from 'lucide-react';
+import { ArrowLeft, Filter, Download, CheckCircle2 } from 'lucide-react';
+import ApprovalModal from './ApprovalModal';
 
 interface Grade {
   id: string;
@@ -35,6 +36,7 @@ export default function PenilaianPage() {
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [selectedStudent, setSelectedStudent] = useState<string>('');
   const [selectedAssessmentType, setSelectedAssessmentType] = useState<string>('');
+  const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
 
   const classes = Array.from(new Set(grades.map((g) => g.className))).sort();
   const subjects = Array.from(
@@ -274,13 +276,22 @@ export default function PenilaianPage() {
             Total: {filteredGrades.length} data penilaian
           </p>
         </div>
-        <button
-          onClick={() => router.back()}
-          className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
-        >
-          <ArrowLeft size={20} />
-          Kembali
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsApprovalModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg transition-colors font-medium"
+          >
+            <CheckCircle2 size={20} />
+            Setujui Penilaian
+          </button>
+          <button
+            onClick={() => router.back()}
+            className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+          >
+            <ArrowLeft size={20} />
+            Kembali
+          </button>
+        </div>
       </div>
 
       {/* Filter Section */}
@@ -515,6 +526,13 @@ export default function PenilaianPage() {
           </div>
         )}
       </div>
+
+      {/* Approval Modal */}
+      <ApprovalModal
+        isOpen={isApprovalModalOpen}
+        onClose={() => setIsApprovalModalOpen(false)}
+        onSuccess={() => fetchGrades()}
+      />
     </div>
   );
 }

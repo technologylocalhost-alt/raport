@@ -543,7 +543,7 @@ export default function WaliKelasClassManagementPage() {
                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{cs.subject.code}</td>
                         <td className="px-6 py-4 text-sm text-gray-700">{cs.subject.name}</td>
                         <td className="px-6 py-4 text-center text-sm font-semibold text-emerald-700 bg-emerald-50">
-                          {cs.subject.nameArabic || '-'}
+                          {'-'}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-600 max-w-xs">
                           {cs.subject.description || '-'}

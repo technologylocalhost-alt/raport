@@ -136,6 +136,7 @@ export default function SubjectsPage() {
           levelId: '',
           code: '',
           name: '',
+          nameArabic: '',
           description: '',
           creditHours: '',
         });

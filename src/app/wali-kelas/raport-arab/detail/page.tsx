@@ -304,7 +304,7 @@ function RaportArabDetailContent() {
           setAllStudents(students);
           
           // Find current student index
-          const index = students.findIndex((s) => s.id === studentId);
+          const index = students.findIndex((s: any) => s.id === studentId);
           setCurrentStudentIndex(index >= 0 ? index : 0);
           
           const foundStudent = studentData.data.find((s: any) => s.id === studentId);
