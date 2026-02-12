@@ -31,6 +31,7 @@ const subjectSchema = z.object({
   levelId: z.string().min(1, 'Level ID is required'),
   code: z.string().min(1, 'Subject code is required'),
   name: z.string().min(1, 'Subject name is required'),
+  nameArabic: z.string().optional(),
   description: z.string().optional(),
   creditHours: z.number().optional(),
 });
@@ -107,6 +108,7 @@ export async function POST(request: NextRequest) {
         levelId: validatedData.levelId,
         code: validatedData.code,
         name: validatedData.name,
+        nameArabic: validatedData.nameArabic,
         description: validatedData.description,
         creditHours: validatedData.creditHours,
       },

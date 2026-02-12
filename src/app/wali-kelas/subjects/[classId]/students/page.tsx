@@ -43,7 +43,7 @@ interface CompetenciesResponse {
   message?: string;
 }
 
-export default function TeacherStudentsPage() {
+export default function WaliKelasStudentsPage() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
@@ -291,6 +291,8 @@ export default function TeacherStudentsPage() {
         notes: gradeFormData.notes,
       };
 
+      console.log('Submitting grade payload:', payload);
+
       let response;
       if (editingGradeId) {
         response = await fetch(`/api/teacher/grades/${editingGradeId}`, {
@@ -332,8 +334,18 @@ export default function TeacherStudentsPage() {
           setExpandedStudentId(selectedStudent.id);
         }
       } else {
-        const error = await response.json();
-        setGradeError(error.message || 'Gagal menyimpan nilai');
+        const errorResponse = await response.json();
+        console.error('Grade submission error:', errorResponse);
+        
+        // Handle field errors from validation
+        if (errorResponse.details && Array.isArray(errorResponse.details)) {
+          const fieldErrorMessages = errorResponse.details
+            .map((err: any) => `${err.field}: ${err.message}`)
+            .join(', ');
+          setGradeError(`${errorResponse.error}: ${fieldErrorMessages}`);
+        } else {
+          setGradeError(errorResponse.error || 'Gagal menyimpan nilai');
+        }
       }
     } catch (error) {
       console.error('Error submitting grade:', error);

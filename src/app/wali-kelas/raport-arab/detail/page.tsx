@@ -1,0 +1,994 @@
+'use client';
+
+import { useEffect, useState, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { ArrowLeft, Printer, Download } from 'lucide-react';
+
+interface Student {
+  id: string;
+  name: string;
+  studentNo: string;
+  birthDate?: string;
+  class?: string;
+}
+
+interface School {
+  id: string;
+  name: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  principal?: string;
+}
+
+interface Grade {
+  id: string;
+  competencyName: string;
+  subjectName: string;
+  score: string;
+  assessmentType: string;
+}
+
+interface SubjectScore {
+  subject: string;
+  subjectCode?: string;
+  subjectArabicName?: string;
+  kkm: number;
+  scores?: { type: string; score: number }[];
+  averageScore: number;
+  letterGrade: string;
+  predicate: string;
+}
+
+interface ReportData {
+  student: Student;
+  subjectScores: SubjectScore[];
+  attendance: {
+    HADIR: number;
+    SAKIT: number;
+    IZIN: number;
+    ALFA: number;
+  };
+  semester: string;
+  schoolYear: string;
+  school: School;
+}
+
+function RaportArabDetailContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const classId = searchParams.get('classId');
+  const studentId = searchParams.get('studentId');
+
+  const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [allStudents, setAllStudents] = useState<Student[]>([]);
+  const [currentStudentIndex, setCurrentStudentIndex] = useState(-1);
+
+  // Helper: Convert numeric score to letter grade (1-10 scale)
+  const getLetterGrade = (score: number): string => {
+    if (score >= 8.5) return 'أ';
+    if (score >= 7.0) return 'ب';
+    if (score >= 5.5) return 'ج';
+    return 'د';
+  };
+
+  // Helper: Convert number to Arabic numerals
+  const toArabicNumerals = (num: number | string): string => {
+    const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    return String(num).split('').map(digit => {
+      if (digit >= '0' && digit <= '9') {
+        return arabicDigits[parseInt(digit)];
+      }
+      return digit;
+    }).join('');
+  };
+
+  // Helper: Convert numeric score to Arabic text
+  const scoreToArabicText = (score: number): string => {
+    const onesArabic = ['', 'واحد', 'اثنان', 'ثلاث', 'أربع', 'خمس', 'ست', 'سبع', 'ثمان', 'تسع'];
+    const teensArabic = ['عشرة', 'احدى عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
+    const tensArabic = ['', '', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
+    
+    const int = Math.floor(score);
+    const decimal = Math.round((score - int) * 10);
+    let result = '';
+
+    if (int === 0) result = 'صفر';
+    else if (int < 10) result = onesArabic[int];
+    else if (int < 20) result = teensArabic[int - 10];
+    else if (int < 100) {
+      result = tensArabic[Math.floor(int / 10)];
+      if (int % 10 > 0) result = onesArabic[int % 10] + ' و' + result;
+    } else if (int === 100) result = 'مئة';
+
+    if (decimal > 0) {
+      if (decimal === 5) {
+        result += ' و نصف';
+      } else {
+        result += ' و ' + onesArabic[decimal];
+      }
+    }
+    return result;
+  };
+
+  // Helper: Convert letter grade to predicate
+  const getPredicate = (letterGrade: string): string => {
+    const predicates: { [key: string]: string } = {
+      'A': 'ممتاز',
+      'B': 'جيد جداً',
+      'C': 'جيد',
+      'D': 'مقبول',
+    };
+    return predicates[letterGrade] || '-';
+  };
+
+  // Helper: Convert numeric score to Indonesian text
+  const scoreToIndonesianText = (score: number): string => {
+    const ones = ['', 'Satu', 'Dua', 'Tiga', 'Empat', 'Lima', 'Enam', 'Tujuh', 'Delapan', 'Sembilan'];
+    const teens = ['Sepuluh', 'Sebelas', 'Dua Belas', 'Tiga Belas', 'Empat Belas', 'Lima Belas', 'Enam Belas', 'Tujuh Belas', 'Delapan Belas', 'Sembilan Belas'];
+    const tens = ['', '', 'Dua Puluh', 'Tiga Puluh', 'Empat Puluh', 'Lima Puluh', 'Enam Puluh', 'Tujuh Puluh', 'Delapan Puluh', 'Sembilan Puluh'];
+    
+    const int = Math.floor(score);
+    const decimal = Math.round((score - int) * 10);
+    let result = '';
+
+    if (int === 0) result = 'Nol';
+    else if (int < 10) result = ones[int];
+    else if (int < 20) result = teens[int - 10];
+    else if (int < 100) {
+      result = tens[Math.floor(int / 10)];
+      if (int % 10 > 0) result += ' ' + ones[int % 10];
+    } else if (int === 100) result = 'Seratus';
+
+    if (decimal > 0) result += ' Koma ' + ones[decimal];
+    return result;
+  };
+
+  // Helper: Process subject scores with all class subjects
+  const processSubjectScores = (grades: Grade[], classSubjects: string[] = [], subjectCodeMap: { [key: string]: string } = {}, subjectArabicMap: { [key: string]: string } = {}): SubjectScore[] => {
+    const subjectMap: { 
+      [key: string]: { 
+        scores: number[]; 
+        assessmentScores: { type: string; score: number }[] 
+      } 
+    } = {};
+
+    // Initialize all class subjects
+    classSubjects.forEach(subject => {
+      if (!subjectMap[subject]) {
+        subjectMap[subject] = { 
+          scores: [], 
+          assessmentScores: [] 
+        };
+      }
+    });
+
+    grades.forEach((grade) => {
+      if (!subjectMap[grade.subjectName]) {
+        subjectMap[grade.subjectName] = { 
+          scores: [], 
+          assessmentScores: [] 
+        };
+      }
+      const scoreNum = parseFloat(grade.score);
+      if (!isNaN(scoreNum) && scoreNum > 0) {
+        subjectMap[grade.subjectName].scores.push(scoreNum);
+        subjectMap[grade.subjectName].assessmentScores.push({
+          type: grade.assessmentType || 'DAILY',
+          score: scoreNum,
+        });
+      }
+    });
+
+    return Object.entries(subjectMap)
+      .map(([subject, data]) => {
+        const averageScore = data.scores.length > 0 
+          ? Math.round((data.scores.reduce((a, b) => a + b) / data.scores.length) * 100) / 100
+          : 0;
+        const letterGrade = getLetterGrade(averageScore);
+
+        // Create scores array with daily, mid, final
+        const scoresArray = [
+          { type: 'DAILY', score: data.assessmentScores.find(s => s.type === 'DAILY')?.score || 0 },
+          { type: 'MID', score: data.assessmentScores.find(s => s.type === 'MID')?.score || 0 },
+          { type: 'FINAL', score: data.assessmentScores.find(s => s.type === 'FINAL')?.score || averageScore },
+        ].filter(s => s.score > 0);
+
+        // If not enough types, fill with average
+        if (scoresArray.length < 3) {
+          while (scoresArray.length < 3) {
+            scoresArray.push({ type: ['DAILY', 'MID', 'FINAL'][scoresArray.length], score: averageScore });
+          }
+        }
+
+        return {
+          subject,
+          subjectCode: subjectCodeMap[subject] || '',
+          subjectArabicName: subjectArabicMap[subject] || '',
+          kkm: 6,
+          scores: scoresArray,
+          averageScore,
+          letterGrade,
+          predicate: getPredicate(letterGrade),
+        };
+      })
+      .sort((a, b) => {
+        // Sort by subject code alphanumeric (A1, A2, B1, B2, etc)
+        const codeA = a.subjectCode || '';
+        const codeB = b.subjectCode || '';
+        
+        // Alphanumeric sort
+        return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+      });
+  };
+
+  // Validation: Check required parameters on mount
+  useEffect(() => {
+    if (!classId || classId.trim() === '') {
+      setError('ID Kelas tidak valid');
+      setIsLoading(false);
+      return;
+    }
+    
+    if (!studentId || studentId.trim() === '') {
+      setError('ID Siswa tidak valid');
+      setIsLoading(false);
+      return;
+    }
+
+    if (classId && studentId) {
+      fetchReportData();
+    }
+  }, [classId, studentId]);
+
+  async function fetchReportData() {
+    try {
+      setError('');
+      setIsLoading(true);
+      const token = localStorage.getItem('accessToken');
+
+      if (!token || token.trim() === '') {
+        setError('Sesi Anda telah berakhir. Silakan login kembali');
+        setTimeout(() => router.push('/login'), 1500);
+        setIsLoading(false);
+        return;
+      }
+
+      // Fetch class data
+      const classResponse = await fetch(`/api/admin/classes/${classId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (classResponse.status === 401) {
+        setError('Sesi Anda telah berakhir. Silakan login kembali');
+        setTimeout(() => router.push('/login'), 1500);
+        setIsLoading(false);
+        return;
+      }
+
+      if (!classResponse.ok) {
+        setError('Data kelas tidak ditemukan');
+        setIsLoading(false);
+        return;
+      }
+
+      const classData = await classResponse.json();
+      const school = classData.data || {};
+
+      // Fetch student data
+      const studentResponse = await fetch(`/api/admin/classes/${classId}/students`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      let student: Student = { 
+        id: studentId || '', 
+        name: 'N/A', 
+        studentNo: 'N/A', 
+        birthDate: '', 
+        class: classData.data?.name || '-'
+      };
+
+      if (studentResponse.ok) {
+        const studentData = await studentResponse.json();
+        if (studentData.success && Array.isArray(studentData.data)) {
+          // Store all students for navigation
+          const students = studentData.data.map((s: any) => ({
+            id: s.id,
+            name: s.name || 'N/A',
+            studentNo: s.studentNo || 'N/A',
+            birthDate: s.birthDate || '',
+            class: classData.data?.name || '-',
+          }));
+          setAllStudents(students);
+          
+          // Find current student index
+          const index = students.findIndex((s: any) => s.id === studentId);
+          setCurrentStudentIndex(index >= 0 ? index : 0);
+          
+          const foundStudent = studentData.data.find((s: any) => s.id === studentId);
+          if (foundStudent) {
+            student = {
+              id: foundStudent.id,
+              name: foundStudent.name || 'N/A',
+              studentNo: foundStudent.studentNo || 'N/A',
+              birthDate: foundStudent.birthDate || '',
+              class: classData.data?.name || '-',
+            };
+          }
+        }
+      }
+
+      // Fetch grades
+      const gradesResponse = await fetch(
+        `/api/teacher/grades?studentId=${studentId}&classId=${classId}&limit=100`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      let grades: Grade[] = [];
+      if (gradesResponse.ok) {
+        const gradesData = await gradesResponse.json();
+        if (gradesData.success && Array.isArray(gradesData.data)) {
+          grades = gradesData.data.map((grade: any) => ({
+            id: grade.id,
+            competencyName: grade.competencyName || 'N/A',
+            subjectName: grade.subjectName || 'N/A',
+            score: String(grade.score || 0),
+            assessmentType: grade.assessmentType || 'DAILY',
+          }));
+        }
+      }
+
+      // Fetch class subjects (all subjects registered in this class)
+      const classSubjectsResponse = await fetch(
+        `/api/admin/classes/${classId}/subjects`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      let classSubjects: string[] = [];
+      let subjectCodeMap: { [key: string]: string } = {};
+      let subjectArabicMap: { [key: string]: string } = {};
+      if (classSubjectsResponse.ok) {
+        const classSubjectsData = await classSubjectsResponse.json();
+        if (classSubjectsData.success && Array.isArray(classSubjectsData.data)) {
+          classSubjects = classSubjectsData.data
+            .map((cs: any) => cs.subject?.name || cs.subjectName || '')
+            .filter((s: string) => s);
+          
+          // Create mapping of subject name to code and arabic name for sorting and display
+          classSubjectsData.data.forEach((cs: any) => {
+            const subjectName = cs.subject?.name || cs.subjectName || '';
+            const subjectCode = cs.subject?.code || '';
+            const subjectArabic = cs.subject?.nameArabic || '';
+            if (subjectName && subjectCode) {
+              subjectCodeMap[subjectName] = subjectCode;
+            }
+            if (subjectName && subjectArabic) {
+              subjectArabicMap[subjectName] = subjectArabic;
+            }
+          });
+        }
+      }
+
+      // Fetch attendance
+      const attendanceResponse = await fetch(
+        `/api/teacher/students/${studentId}/attendance?classId=${classId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      let attendance = { HADIR: 0, SAKIT: 0, IZIN: 0, ALFA: 0 };
+      if (attendanceResponse.ok) {
+        const attendanceData = await attendanceResponse.json();
+        if (attendanceData.success && attendanceData.data?.summary) {
+          attendance = attendanceData.data.summary;
+        }
+      }
+
+      const subjectScores = processSubjectScores(grades, classSubjects, subjectCodeMap, subjectArabicMap);
+
+      setReportData({
+        student,
+        subjectScores,
+        attendance,
+        semester: 'Semester 2',
+        schoolYear: '2024/2025',
+        school: {
+          id: school.id || '',
+          name: 'Kementerian Agama Republik Indonesia',
+          address: school.address || '',
+          phone: school.phone || '',
+          email: school.email || '',
+          principal: school.principal || '',
+        },
+      });
+      setIsLoading(false);
+    } catch (err) {
+      console.error('Error fetching report:', err);
+      setError('Terjadi kesalahan saat memuat laporan');
+      setIsLoading(false);
+    }
+  }
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleDownloadPDF = async () => {
+    try {
+      if (!reportData) {
+        alert('Data raport tidak tersedia');
+        return;
+      }
+
+      const response = await fetch('/api/wali-kelas/generate-pdf-puppeteer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(reportData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('API Error:', errorData);
+        throw new Error(errorData.error || 'Gagal membuat PDF');
+      }
+
+      const { pdf, fileName } = await response.json();
+
+      // Download PDF
+      const link = document.createElement('a');
+      link.href = pdf;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      alert(`Gagal membuat PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handlePreviousStudent = () => {
+    if (currentStudentIndex > 0) {
+      const previousStudent = allStudents[currentStudentIndex - 1];
+      router.push(
+        `/wali-kelas/raport-arab/detail?classId=${classId}&studentId=${previousStudent.id}`
+      );
+    }
+  };
+
+  const handleNextStudent = () => {
+    if (currentStudentIndex < allStudents.length - 1) {
+      const nextStudent = allStudents[currentStudentIndex + 1];
+      router.push(
+        `/wali-kelas/raport-arab/detail?classId=${classId}&studentId=${nextStudent.id}`
+      );
+    }
+  };
+
+  const handleSeeAllStudents = () => {
+    router.push(`/wali-kelas/raport-arab/bulk-review`);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-gray-600">Memuat raport...</p>
+      </div>
+    );
+  }
+
+  if (error || !reportData) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <p className="text-red-600">{error}</p>
+          <button
+            onClick={() => router.back()}
+            className="mt-4 text-emerald-600 hover:text-emerald-700"
+          >
+            ← Kembali
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap');
+        
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+
+        html, body {
+          width: 100%;
+          height: 100%;
+          margin: 0;
+          padding: 0;
+          font-family: 'Amiri', 'Traditional Arabic', 'Arial Unicode MS', serif;
+          color: black;
+          background: white;
+          overflow-x: hidden;
+        }
+
+        .a4-wrapper {
+          background: #f5f5f5;
+          padding: 40px 20px 20px 20px;
+          min-height: 100vh;
+          display: flex;
+          justify-content: center;
+          align-items: flex-start;
+          width: 100%;
+          margin: 0;
+        }
+
+        .a4-page {
+          width: 215mm;
+          background: white;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+          padding: 6px 6px;
+          font-size: 12px;
+          line-height: 1.2;
+          font-family: 'Amiri', 'Traditional Arabic', serif;
+          direction: rtl;
+          position: relative;
+          overflow: visible;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .watermark-bg {
+          position: absolute;
+          top: 40%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          opacity: 1;
+          z-index: 1;
+          pointer-events: none;
+        }
+
+        .watermark-bg img {
+          width: 1000px;
+          height: auto;
+        }
+        
+        .page-content {
+          overflow: visible;
+          position: relative;
+          z-index: 10;
+        }
+        
+        .footer-section {
+          margin-top: auto;
+        }
+
+        .toolbar {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          background: #f5f5f5;
+          padding: 12px 20px;
+          border-bottom: 1px solid #ddd;
+          display: flex;
+          gap: 12px;
+          align-items: center;
+          z-index: 200;
+          width: 100%;
+        }
+
+        /* Hide sidebar on raport detail page */
+        aside,
+        nav:not(.a4-wrapper nav),
+        .sidebar {
+          display: none !important;
+        }
+
+        @media print {
+          * {
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          html, body {
+            width: 215mm !important;
+            height: 330mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+          }
+
+          body > * {
+            display: none !important;
+          }
+
+          body > div:nth-child(n) {
+            display: block !important;
+          }
+
+          body > div > .a4-wrapper {
+            display: flex !important;
+          }
+
+          aside, nav, .sidebar, .navbar, .toolbar, footer {
+            display: none !important;
+          }
+
+          .toolbar {
+            display: none !important;
+          }
+
+          .a4-wrapper {
+            background: white !important;
+            padding: 0 !important;
+            min-height: auto !important;
+            margin: 0 !important;
+            width: 100% !important;
+            display: flex !important;
+            justify-content: center !important;
+          }
+
+          .a4-page {
+            width: 215mm !important;
+            height: 330mm !important;
+            padding: 8px 8px !important;
+            box-shadow: none !important;
+            margin: 0 !important;
+            background: white !important;
+            page-break-after: always !important;
+            display: block !important;
+            font-size: 12px !important;
+            line-height: 1.2 !important;
+          }
+
+          @page {
+            size: 215mm 330mm;
+            margin: 0;
+            padding: 0;
+          }
+        }
+
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          font-family: 'Amiri', 'Traditional Arabic', serif;
+          font-size: 13px;
+          margin-top: 3px;
+        }
+        
+        th, td {
+          border: 1px solid #000;
+          padding: 5px;
+          text-align: center;
+          vertical-align: middle;
+        }
+        
+        thead th {
+          background: #e9e9e9;
+          font-weight: bold;
+          padding: 8px;
+        }
+        
+        tbody td {
+          padding: 4px 5px;
+        }
+        
+        h1 {
+          font-size: 16px;
+          margin-top: 18px;
+          margin-bottom: 1px;
+          text-align: center;
+          font-weight: bold;
+        }
+        
+        .ar {
+          direction: rtl;
+          font-family: 'Amiri', 'Traditional Arabic', serif;
+        }
+        
+        table.no-border td {
+          border: none;
+          padding: 2px 6px;
+        }
+
+        .center { text-align: center; }
+        .right { text-align: right; }
+
+        .arabic-text {
+          font-family: 'Amiri', 'Traditional Arabic', serif;
+        }
+
+        .info-table {
+          margin-bottom: 1px;
+        }
+        
+        .info-table td {
+          font-size: 12px;
+          padding: 2px 0;
+          border: none;
+        }
+        
+        .info-table td.label {
+          font-weight: bold;
+        }
+
+        .section-title {
+          font-weight: bold;
+          margin-top: 3px;
+          margin-bottom: 1px;
+          font-size: 13px;
+        }
+
+        .footer-section table td {
+          border: none !important;
+        }
+
+        @media print {
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          
+          h1 {
+            font-size: 19px !important;
+            margin-bottom: 8px !important;
+          }
+          
+          table {
+            margin-top: 8px !important;
+          }
+        }
+      `}</style>
+
+      <div className="toolbar">
+        <button
+          onClick={() => router.back()}
+          className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-300 rounded"
+        >
+          <ArrowLeft size={20} />
+          Kembali
+        </button>
+        <div className="h-6 w-px bg-gray-300"></div>
+        <span className="text-gray-600 text-sm">Raport Peserta Didik Bahasa Arab - F4 (215 × 330 mm)</span>
+        
+        {/* Navigation Buttons */}
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={handlePreviousStudent}
+            disabled={currentStudentIndex <= 0}
+            className={`flex items-center gap-2 px-4 py-2 rounded ${
+              currentStudentIndex <= 0
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-gray-400 text-white hover:bg-gray-500'
+            }`}
+          >
+            ← Siswa Sebelumnya
+          </button>
+          
+          <button
+            onClick={handleSeeAllStudents}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+          >
+            Lihat Semua Siswa
+          </button>
+          
+          <button
+            onClick={handleNextStudent}
+            disabled={currentStudentIndex >= allStudents.length - 1}
+            className={`flex items-center gap-2 px-4 py-2 rounded ${
+              currentStudentIndex >= allStudents.length - 1
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-gray-400 text-white hover:bg-gray-500'
+            }`}
+          >
+            Siswa Berikutnya →
+          </button>
+        </div>
+
+        <div className="h-6 w-px bg-gray-300 ml-4"></div>
+        
+        <button
+          onClick={handleDownloadPDF}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ml-4"
+        >
+          <Download size={20} />
+          Download PDF
+        </button>
+        <button
+          onClick={handlePrint}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ml-2"
+        >
+          <Printer size={20} />
+          Cetak
+        </button>
+      </div>
+
+      <div className="a4-wrapper">
+        <div className="a4-page">
+          <div className="watermark-bg">
+            <img src="/namapondok.png" alt="Trademark" />
+          </div>
+          <div className="page-content">
+          {/* Header */}
+          <h1 className="arabic-text center" style={{ fontFamily: "'Amiri', 'Traditional Arabic', serif", fontSize: '19px', marginBottom: '8px', textAlign: 'center', fontWeight: 'bold' }}>بسم الله الرحمن الرحيم</h1>
+          {/* Header Info */}
+          <table className="no-border ar info-table" style={{ marginBottom: '1px' }}>
+            <tbody>
+              <tr>
+                <td className="label">الاسم</td>
+                <td>: {reportData.student.name || '-'}</td>
+                <td className="right label">رقم دفتر القيد</td>
+                <td>: {reportData.student.studentNo}</td>
+                <td className="right label">الفصل</td>
+                <td>: {reportData.student.class || '-'}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Tabel Nilai Format Arabic RTL */}
+          <table className="ar" style={{ marginTop: '2px' }}>
+            <thead>
+              <tr>
+                {/* BLOK KANAN (Column 1-4) */}
+                <th rowSpan={2} style={{ width: '14%' }} className="arabic-text">المواد</th>
+                <th colSpan={3} style={{ width: '36%' }} className="arabic-text">الدرجة</th>
+
+                {/* BLOK KIRI (Column 5-8) */}
+                <th rowSpan={2} style={{ width: '14%' }} className="arabic-text">المواد</th>
+                <th colSpan={3} style={{ width: '36%' }} className="arabic-text">الدرجة</th>
+              </tr>
+              <tr>
+                {/* Sub kolom kanan */}
+                <th className="arabic-text" style={{ width: '12%' }}>المعدلة للفصل</th>
+                <th className="arabic-text" style={{ width: '12%' }}>الأرقام</th>
+                <th className="arabic-text" style={{ width: '12%' }}>الحروف</th>
+
+                {/* Sub kolom kiri */}
+                <th className="arabic-text" style={{ width: '12%' }}>المعدلة للفصل</th>
+                <th className="arabic-text" style={{ width: '12%' }}>الأرقام</th>
+                <th className="arabic-text" style={{ width: '12%' }}>الحروف</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(() => {
+                const subjects = reportData.subjectScores;
+                const rightColumn = subjects.slice(0, Math.ceil(subjects.length / 2));
+                const leftColumn = subjects.slice(Math.ceil(subjects.length / 2));
+                
+                const maxRows = Math.max(leftColumn.length, rightColumn.length);
+                const rows = [];
+
+                for (let i = 0; i < maxRows; i++) {
+                  const rightSubject = rightColumn[i];
+                  const leftSubject = leftColumn[i];
+
+                  rows.push(
+                    <tr key={i}>
+                      {/* BLOK KANAN (Right side) */}
+                      <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>{rightSubject ? (rightSubject.subjectArabicName || rightSubject.subject) : '—'}</td>
+                      <td>{rightSubject ? toArabicNumerals(rightSubject.kkm) : '—'}</td>
+                      <td><strong>{rightSubject ? toArabicNumerals(rightSubject.averageScore.toFixed(1)) : '—'}</strong></td>
+                      <td><strong>{rightSubject ? scoreToArabicText(rightSubject.averageScore) : '—'}</strong></td>
+
+                      {/* BLOK KIRI (Left side) */}
+                      <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>{leftSubject ? (leftSubject.subjectArabicName || leftSubject.subject) : '—'}</td>
+                      <td>{leftSubject ? toArabicNumerals(leftSubject.kkm) : '—'}</td>
+                      <td><strong>{leftSubject ? toArabicNumerals(leftSubject.averageScore.toFixed(1)) : '—'}</strong></td>
+                      <td><strong>{leftSubject ? scoreToArabicText(leftSubject.averageScore) : '—'}</strong></td>
+                    </tr>
+                  );
+                }
+
+                return rows;
+              })()}
+            </tbody>
+          </table>
+
+            {/* Rekap */}
+            <table style={{ marginTop: '8px' }} className="ar">
+            <tbody>
+              <tr>
+              <th>الرتبة</th>
+              <td className="center">---</td>
+              <th>المعدل العام</th>
+              <td className="center">
+                <strong>
+                {toArabicNumerals((reportData.subjectScores.reduce((sum, s) => sum + s.averageScore, 0) / reportData.subjectScores.length).toFixed(1))}
+                </strong>
+              </td>
+              </tr>
+            </tbody>
+            </table>
+
+          {/* Rekap */}
+            <table style={{ marginTop: '8px' }} className="ar">
+            <tbody>
+              <tr>
+              <th>السلوك</th>
+              <td className="center">٨</td>
+              <td className="center">ثمان</td>
+              </tr>
+              <tr>
+              <th>المواظبة</th>
+              <td className="center">٨</td>
+              <td className="center">ثمان</td>
+              </tr>
+              <tr>
+              <th>النظافة</th>
+              <td className="center">٨</td>
+              <td className="center">ثمان</td>
+              </tr>
+            </tbody>
+            </table>
+
+          {/* Catatan */}
+          <table style={{ marginTop: '2px', fontSize: '12px' }} className="ar">
+            <tbody>
+              <tr>
+                <th>تقدير الدرجات: ١–٣ : ضعيف جداً،   ٤–٥ : ضعيف، ٦ : مقبول، ٧ : جيد، ٨ : جيد جداً، ٩–١٠ : ممتاز </th>
+              </tr>
+            </tbody>
+          </table>
+          </div> {/* end page-content */}
+          
+          <div className="footer-section">
+            {/* TTD dan Info Footer */}
+            <table className="ar" style={{ marginTop: '2px', width: '100%', border: 'none' }}>
+            <tbody>
+              <tr style={{ height: 'auto' }}>
+              {/* Kolom kanan (tanggal laporan) */}
+              <td style={{ width: '33%', textAlign: 'right', padding: '8px', fontSize: '12px', fontFamily: "'Amiri', 'Traditional Arabic', serif", verticalAlign: 'top', border: 'none' }}>
+              <div style={{ marginBottom: '50px', paddingTop: '8px' }}>
+                تقرير بدار السلام لاهات، في 21 يونيو 2026
+              </div>
+              </td>
+
+              {/* Kolom tengah (pimpinan + nama) */}
+              <td style={{ width: '34%', textAlign: 'center', padding: '8px', fontSize: '12px', fontFamily: "'Amiri', 'Traditional Arabic', serif", verticalAlign: 'top', border: 'none' }}>
+              <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>
+              مدير المعهد دار السلام لاهات
+              </div>
+              
+              <div style={{ borderTop: '1px solid #000', marginTop: '45px', paddingTop: '8px' }}></div>
+              <div style={{ marginTop: '2px', fontSize: '12px' }}>
+              الأستاذ محمد رومي أوكتاريوس،
+              </div>
+              </td>
+
+              {/* Kolom kiri (catatan + nilai) */}
+              <td style={{ width: '33%', textAlign: 'center', padding: '8px', fontSize: '12px', fontFamily: "'Amiri', 'Traditional Arabic', serif", verticalAlign: 'top', border: 'none' }}>
+              
+              <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>
+              الملاحظة
+              </div>
+              <div style={{ fontSize: '14px', marginBottom: '12px', fontWeight: 'bold' }}>
+              ضعيف جدًا
+              </div>
+              <div style={{ fontSize: '10px', marginTop: '40px', paddingTop: '8px', borderTop: '1px solid #ccc' }}>
+              SERIAL: UAS-SMT-2-24/25-PA-31
+              </div>
+              </td>
+              </tr>
+            </tbody>
+            </table>
+          </div> {/* end footer-section */}
+        </div> {/* end a4-page */}
+      </div> {/* end a4-wrapper */}
+    </>
+  );
+}
+
+export default function RaportArabDetailPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
+      <RaportArabDetailContent />
+    </Suspense>
+  );
+}

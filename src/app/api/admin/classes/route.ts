@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
   try {
     const admin = await verifyAdmin(request);
     if (!admin) {
-      return errorResponse('Unauthorized', 401);
+      return errorResponse('Token tidak valid atau expired', 401);
     }
 
     const searchParams = request.nextUrl.searchParams;
@@ -60,15 +60,40 @@ export async function GET(request: NextRequest) {
     const waliKelasId = searchParams.get('waliKelasId');
     const search = searchParams.get('search') || '';
 
+    // Validation: Check pagination parameters
+    if (page < 1) {
+      return errorResponse('Nomor halaman tidak valid', 400);
+    }
+    if (limit < 1 || limit > 100) {
+      return errorResponse('Limit harus antara 1-100', 400);
+    }
+
     const skip = (page - 1) * limit;
 
-    const where = {
-      ...(levelId && { levelId }),
-      ...(schoolYearId && { schoolYearId }),
-      ...(semesterId && { semesterId }),
-      ...(waliKelasId && { waliKelasId }),
-      ...(search && { name: { contains: search, mode: 'insensitive' as const } }),
-    };
+    // Build where clause with validation
+    const where: any = {};
+    
+    if (levelId && levelId.trim() !== '') {
+      where.levelId = levelId;
+    }
+    if (schoolYearId && schoolYearId.trim() !== '') {
+      where.schoolYearId = schoolYearId;
+    }
+    if (semesterId && semesterId.trim() !== '') {
+      where.semesterId = semesterId;
+    }
+    
+    // For WALI_KELAS, only show their own class
+    if (admin.role === 'WALI_KELAS') {
+      where.waliKelasId = admin.id;
+    } else if (waliKelasId && waliKelasId.trim() !== '') {
+      // For ADMIN/PRINCIPAL, can filter by waliKelasId
+      where.waliKelasId = waliKelasId;
+    }
+    
+    if (search && search.trim() !== '') {
+      where.name = { contains: search, mode: 'insensitive' as const };
+    }
 
     const [classes, total] = await Promise.all([
       prisma.class.findMany({
@@ -97,7 +122,7 @@ export async function GET(request: NextRequest) {
     return paginatedResponse(classes, total, page, limit);
   } catch (error) {
     console.error('Get classes error:', error);
-    return errorResponse('Failed to fetch classes', 500);
+    return errorResponse('Gagal memuat daftar kelas', 500);
   }
 }
 

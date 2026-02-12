@@ -27,9 +27,33 @@ async function verifyAdmin(req: NextRequest) {
   return null;
 }
 
+async function verifyUser(req: NextRequest) {
+  const authHeader = req.headers.get('authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.slice(7);
+  const payload = verifyAccessToken(token);
+  
+  if (!payload) {
+    return null;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: payload.userId },
+  });
+  
+  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL' || user.role === 'TEACHER' || user.role === 'WALI_KELAS')) {
+    return user;
+  }
+  return null;
+}
+
 const subjectSchema = z.object({
   code: z.string().min(1, 'Subject code is required').optional(),
   name: z.string().min(1, 'Subject name is required').optional(),
+  nameArabic: z.string().optional(),
   description: z.string().optional(),
   creditHours: z.number().optional(),
 });
@@ -44,8 +68,8 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const admin = await verifyAdmin(request);
-    if (!admin) {
+    const user = await verifyUser(request);
+    if (!user) {
       return errorResponse('Unauthorized', 401);
     }
 

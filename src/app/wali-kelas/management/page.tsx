@@ -46,6 +46,7 @@ interface Subject {
   id: string;
   code: string;
   name: string;
+  nameArabic?: string;
   description?: string;
   creditHours?: number;
 }
@@ -77,6 +78,12 @@ export default function WaliKelasClassManagementPage() {
   const [showTeacherForm, setShowTeacherForm] = useState(false);
   const [subjectFormData, setSubjectFormData] = useState<SubjectFormData>({ subjectId: '' });
   const [teacherFormData, setTeacherFormData] = useState<TeacherFormData>({ teacherId: '', subjectId: '' });
+  const [subjectCurrentPage, setSubjectCurrentPage] = useState(1);
+  const [teacherCurrentPage, setTeacherCurrentPage] = useState(1);
+  const [subjectSearchText, setSubjectSearchText] = useState('');
+  const [teacherSearchText, setTeacherSearchText] = useState('');
+  const [subjectSearchTeacherText, setSubjectSearchTeacherText] = useState('');
+  const itemsPerPage = 10;
 
   useEffect(() => {
     const user = localStorage.getItem('user');
@@ -168,7 +175,7 @@ export default function WaliKelasClassManagementPage() {
     try {
       const token = localStorage.getItem('accessToken');
       const headers = { Authorization: `Bearer ${token}` };
-      const response = await fetch(`/api/admin/users?limit=100&role=TEACHER`, { headers });
+      const response = await fetch(`/api/admin/users?limit=100`, { headers });
       const data = await response.json();
       if (response.ok) {
         setTeachers(data.data || []);
@@ -443,32 +450,65 @@ export default function WaliKelasClassManagementPage() {
                 <form onSubmit={handleAddSubject} className="space-y-4">
                   <div>
                     <label className="block text-sm font-bold text-gray-900 mb-2">
-                      Pilih Mata Pelajaran <span className="text-red-500">*</span>
+                      Cari Mata Pelajaran <span className="text-red-500">*</span>
                     </label>
-                    <select
-                      value={subjectFormData.subjectId}
-                      onChange={(e) => setSubjectFormData({ subjectId: e.target.value })}
-                      className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:border-emerald-500"
-                      required
-                    >
-                      <option value="">-- Pilih Mata Pelajaran --</option>
-                      {allSubjects.map((subject) => (
-                        <option key={subject.id} value={subject.id}>
-                          {subject.code} - {subject.name}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Cari kode atau nama mata pelajaran..."
+                        value={subjectSearchText}
+                        onChange={(e) => setSubjectSearchText(e.target.value)}
+                        className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:border-emerald-500"
+                      />
+                      {subjectSearchText && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border-2 border-emerald-500 rounded-lg shadow-lg max-h-96 overflow-y-auto z-10">
+                          {allSubjects
+                            .filter((subject) =>
+                              subject.code.toLowerCase().includes(subjectSearchText.toLowerCase()) ||
+                              subject.name.toLowerCase().includes(subjectSearchText.toLowerCase())
+                            )
+                            .length === 0 ? (
+                            <div className="px-4 py-3 text-gray-500">Tidak ada mata pelajaran ditemukan</div>
+                          ) : (
+                            allSubjects
+                              .filter((subject) =>
+                                subject.code.toLowerCase().includes(subjectSearchText.toLowerCase()) ||
+                                subject.name.toLowerCase().includes(subjectSearchText.toLowerCase())
+                              )
+                              .map((subject) => (
+                                <button
+                                  key={subject.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSubjectFormData({ subjectId: subject.id });
+                                    setSubjectSearchText(`${subject.code} - ${subject.name}`);
+                                  }}
+                                  className="w-full text-left px-4 py-3 hover:bg-emerald-50 transition-colors border-b last:border-b-0"
+                                >
+                                  <div className="font-semibold text-gray-900">{subject.code} - {subject.name}</div>
+                                  {subject.nameArabic && <div className="text-sm text-gray-600">{subject.nameArabic}</div>}
+                                </button>
+                              ))
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex gap-3">
                     <button
                       type="submit"
-                      className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
+                      disabled={!subjectFormData.subjectId}
+                      className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Tambahkan
                     </button>
                     <button
                       type="button"
-                      onClick={() => setShowSubjectForm(false)}
+                      onClick={() => {
+                        setShowSubjectForm(false);
+                        setSubjectSearchText('');
+                        setSubjectFormData({ subjectId: '' });
+                      }}
                       className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
                     >
                       Batal
@@ -485,8 +525,8 @@ export default function WaliKelasClassManagementPage() {
                   <tr>
                     <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Kode</th>
                     <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Nama</th>
+                    <th className="px-6 py-3 text-center text-sm font-semibold text-emerald-700 bg-emerald-50">Mata Pelajaran Arab</th>
                     <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Deskripsi</th>
-                    <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700">SKS</th>
                     <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700">Aksi</th>
                   </tr>
                 </thead>
@@ -498,18 +538,20 @@ export default function WaliKelasClassManagementPage() {
                       </td>
                     </tr>
                   ) : (
-                    classSubjects.map((cs) => (
+                    classSubjects.slice((subjectCurrentPage - 1) * itemsPerPage, subjectCurrentPage * itemsPerPage).map((cs) => (
                       <tr key={cs.id} className="border-b hover:bg-gray-50">
                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{cs.subject.code}</td>
                         <td className="px-6 py-4 text-sm text-gray-700">{cs.subject.name}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">
+                        <td className="px-6 py-4 text-center text-sm font-semibold text-emerald-700 bg-emerald-50">
+                          {'-'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600 max-w-xs">
                           {cs.subject.description || '-'}
                         </td>
-                        <td className="px-6 py-4 text-center text-sm">{cs.subject.creditHours || '-'}</td>
                         <td className="px-6 py-4 text-center">
                           <button
                             onClick={() => handleDeleteSubject(cs.subject.id)}
-                            className="text-red-600 hover:text-red-900"
+                            className="text-red-600 hover:text-red-900 transition-colors"
                           >
                             <Trash2 size={18} />
                           </button>
@@ -520,6 +562,46 @@ export default function WaliKelasClassManagementPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Subjects Pagination */}
+            {classSubjects.length > itemsPerPage && (
+              <div className="flex items-center justify-between mt-6 px-2 bg-gray-50 py-4 rounded-lg">
+                <div className="text-sm font-medium text-gray-700">
+                  Menampilkan {(subjectCurrentPage - 1) * itemsPerPage + 1} - {Math.min(subjectCurrentPage * itemsPerPage, classSubjects.length)} dari {classSubjects.length} mata pelajaran
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSubjectCurrentPage(Math.max(1, subjectCurrentPage - 1))}
+                    disabled={subjectCurrentPage === 1}
+                    className="px-4 py-3 bg-white border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-emerald-50 hover:border-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-gray-300"
+                  >
+                    ← Sebelumnya
+                  </button>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.ceil(classSubjects.length / itemsPerPage) }, (_, i) => i + 1).map((page) => (
+                      <button
+                        key={page}
+                        onClick={() => setSubjectCurrentPage(page)}
+                        className={`px-3 py-2 rounded-lg font-semibold transition-colors ${
+                          page === subjectCurrentPage
+                            ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                            : 'border-2 border-gray-300 text-gray-700 hover:border-emerald-600 hover:text-emerald-600'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setSubjectCurrentPage(Math.min(Math.ceil(classSubjects.length / itemsPerPage), subjectCurrentPage + 1))}
+                    disabled={subjectCurrentPage === Math.ceil(classSubjects.length / itemsPerPage)}
+                    className="px-4 py-3 bg-white border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-emerald-50 hover:border-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-gray-300"
+                  >
+                    Selanjutnya →
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -531,6 +613,8 @@ export default function WaliKelasClassManagementPage() {
                 onClick={() => {
                   setShowTeacherForm(true);
                   setTeacherFormData({ teacherId: '', subjectId: '' });
+                  setTeacherSearchText('');
+                  setSubjectSearchTeacherText('');
                   if (!allTeachers.length) fetchAllTeachers();
                 }}
                 className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 flex items-center gap-2 transition-colors"
@@ -546,51 +630,118 @@ export default function WaliKelasClassManagementPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-bold text-gray-900 mb-2">
-                        Guru <span className="text-red-500">*</span>
+                        Cari Guru <span className="text-red-500">*</span>
                       </label>
-                      <select
-                        value={teacherFormData.teacherId}
-                        onChange={(e) => setTeacherFormData({ ...teacherFormData, teacherId: e.target.value })}
-                        className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:border-emerald-500"
-                        required
-                      >
-                        <option value="">-- Pilih Guru --</option>
-                        {allTeachers.map((teacher) => (
-                          <option key={teacher.id} value={teacher.id}>
-                            {teacher.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="Cari nama guru..."
+                          value={teacherSearchText}
+                          onChange={(e) => setTeacherSearchText(e.target.value)}
+                          className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:border-emerald-500"
+                        />
+                        {teacherSearchText && !teacherFormData.teacherId && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border-2 border-emerald-500 rounded-lg shadow-lg max-h-64 overflow-y-auto z-10">
+                            {allTeachers
+                              .filter((teacher) =>
+                                teacher.name.toLowerCase().includes(teacherSearchText.toLowerCase()) ||
+                                teacher.email.toLowerCase().includes(teacherSearchText.toLowerCase())
+                              )
+                              .filter((teacher, index, self) =>
+                                index === self.findIndex((t) => t.id === teacher.id)
+                              )
+                              .length === 0 ? (
+                              <div className="px-4 py-3 text-gray-500">Tidak ada guru ditemukan</div>
+                            ) : (
+                              allTeachers
+                                .filter((teacher) =>
+                                  teacher.name.toLowerCase().includes(teacherSearchText.toLowerCase()) ||
+                                  teacher.email.toLowerCase().includes(teacherSearchText.toLowerCase())
+                                )
+                                .filter((teacher, index, self) =>
+                                  index === self.findIndex((t) => t.id === teacher.id)
+                                )
+                                .map((teacher) => (
+                                  <button
+                                    key={teacher.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setTeacherFormData({ ...teacherFormData, teacherId: teacher.id });
+                                      setTeacherSearchText(teacher.name);
+                                    }}
+                                    className="w-full text-left px-4 py-3 hover:bg-emerald-50 transition-colors border-b last:border-b-0"
+                                  >
+                                    <div className="font-semibold text-gray-900">{teacher.name}</div>
+                                    <div className="text-sm text-gray-600">{teacher.email}</div>
+                                  </button>
+                                ))
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-bold text-gray-900 mb-2">
-                        Mata Pelajaran <span className="text-red-500">*</span>
+                        Cari Mata Pelajaran <span className="text-red-500">*</span>
                       </label>
-                      <select
-                        value={teacherFormData.subjectId}
-                        onChange={(e) => setTeacherFormData({ ...teacherFormData, subjectId: e.target.value })}
-                        className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:border-emerald-500"
-                        required
-                      >
-                        <option value="">-- Pilih Mata Pelajaran --</option>
-                        {classSubjects.map((cs) => (
-                          <option key={cs.subject.id} value={cs.subject.id}>
-                            {cs.subject.code} - {cs.subject.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="Cari kode atau nama mata pelajaran..."
+                          value={subjectSearchTeacherText}
+                          onChange={(e) => setSubjectSearchTeacherText(e.target.value)}
+                          className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:border-emerald-500"
+                        />
+                        {subjectSearchTeacherText && !teacherFormData.subjectId && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border-2 border-emerald-500 rounded-lg shadow-lg max-h-64 overflow-y-auto z-10">
+                            {classSubjects
+                              .filter((cs) =>
+                                cs.subject.code.toLowerCase().includes(subjectSearchTeacherText.toLowerCase()) ||
+                                cs.subject.name.toLowerCase().includes(subjectSearchTeacherText.toLowerCase())
+                              )
+                              .length === 0 ? (
+                              <div className="px-4 py-3 text-gray-500">Tidak ada mata pelajaran ditemukan</div>
+                            ) : (
+                              classSubjects
+                                .filter((cs) =>
+                                  cs.subject.code.toLowerCase().includes(subjectSearchTeacherText.toLowerCase()) ||
+                                  cs.subject.name.toLowerCase().includes(subjectSearchTeacherText.toLowerCase())
+                                )
+                                .map((cs) => (
+                                  <button
+                                    key={cs.subject.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setTeacherFormData({ ...teacherFormData, subjectId: cs.subject.id });
+                                      setSubjectSearchTeacherText(`${cs.subject.code} - ${cs.subject.name}`);
+                                    }}
+                                    className="w-full text-left px-4 py-3 hover:bg-emerald-50 transition-colors border-b last:border-b-0"
+                                  >
+                                    <div className="font-semibold text-gray-900">{cs.subject.code} - {cs.subject.name}</div>
+                                  </button>
+                                ))
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="flex gap-3">
                     <button
                       type="submit"
-                      className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
+                      disabled={!teacherFormData.teacherId || !teacherFormData.subjectId}
+                      className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Tambahkan
                     </button>
                     <button
                       type="button"
-                      onClick={() => setShowTeacherForm(false)}
+                      onClick={() => {
+                        setShowTeacherForm(false);
+                        setTeacherSearchText('');
+                        setSubjectSearchTeacherText('');
+                        setTeacherFormData({ teacherId: '', subjectId: '' });
+                      }}
                       className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
                     >
                       Batal
@@ -619,7 +770,7 @@ export default function WaliKelasClassManagementPage() {
                       </td>
                     </tr>
                   ) : (
-                    classTeachers.map((ct) => (
+                    classTeachers.slice((teacherCurrentPage - 1) * itemsPerPage, teacherCurrentPage * itemsPerPage).map((ct) => (
                       <tr key={ct.id} className="border-b hover:bg-gray-50">
                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{ct.teacher.name}</td>
                         <td className="px-6 py-4 text-sm text-gray-700">{ct.teacher.email}</td>
@@ -640,6 +791,46 @@ export default function WaliKelasClassManagementPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Teachers Pagination */}
+            {classTeachers.length > itemsPerPage && (
+              <div className="flex items-center justify-between mt-6 px-2 bg-gray-50 py-4 rounded-lg">
+                <div className="text-sm font-medium text-gray-700">
+                  Menampilkan {(teacherCurrentPage - 1) * itemsPerPage + 1} - {Math.min(teacherCurrentPage * itemsPerPage, classTeachers.length)} dari {classTeachers.length} guru
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setTeacherCurrentPage(Math.max(1, teacherCurrentPage - 1))}
+                    disabled={teacherCurrentPage === 1}
+                    className="px-4 py-3 bg-white border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-emerald-50 hover:border-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-gray-300"
+                  >
+                    ← Sebelumnya
+                  </button>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.ceil(classTeachers.length / itemsPerPage) }, (_, i) => i + 1).map((page) => (
+                      <button
+                        key={page}
+                        onClick={() => setTeacherCurrentPage(page)}
+                        className={`px-3 py-2 rounded-lg font-semibold transition-colors ${
+                          page === teacherCurrentPage
+                            ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                            : 'border-2 border-gray-300 text-gray-700 hover:border-emerald-600 hover:text-emerald-600'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setTeacherCurrentPage(Math.min(Math.ceil(classTeachers.length / itemsPerPage), teacherCurrentPage + 1))}
+                    disabled={teacherCurrentPage === Math.ceil(classTeachers.length / itemsPerPage)}
+                    className="px-4 py-3 bg-white border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-emerald-50 hover:border-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-gray-300"
+                  >
+                    Selanjutnya →
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

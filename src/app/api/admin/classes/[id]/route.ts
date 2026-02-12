@@ -21,7 +21,7 @@ async function verifyAdmin(req: NextRequest) {
     where: { id: payload.userId },
   });
   
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL' || user.role === 'WALI_KELAS')) {
+  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL' || user.role === 'WALI_KELAS' || user.role === 'TEACHER')) {
     return user;
   }
   return null;
@@ -47,11 +47,18 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const admin = await verifyAdmin(request);
-    if (!admin) {
-      return errorResponse('Unauthorized', 401);
+    
+    // Validation: Check id format
+    if (!id || id.trim() === '') {
+      return errorResponse('ID Kelas tidak valid', 400);
     }
 
+    const admin = await verifyAdmin(request);
+    if (!admin) {
+      return errorResponse('Token tidak valid atau expired', 401);
+    }
+
+    // Verify class exists
     const classData = await prisma.class.findUnique({
       where: { id },
       include: {
@@ -82,10 +89,42 @@ export async function GET(
       return errorResponse('Kelas tidak ditemukan', 404);
     }
 
+    // Authorization check
+    if (admin.role === 'WALI_KELAS') {
+      // WALI_KELAS can access: their own class OR classes where they teach subjects
+      const isWaliKelas = classData.waliKelasId === admin.id;
+      
+      if (!isWaliKelas) {
+        // Check if WALI_KELAS also teaches in this class
+        const teacherSubjects = await prisma.classTeacher.count({
+          where: {
+            classId: id,
+            teacherId: admin.id,
+          },
+        });
+        
+        if (teacherSubjects === 0) {
+          return errorResponse('Anda tidak memiliki akses ke kelas ini', 403);
+        }
+      }
+    } else if (admin.role === 'TEACHER') {
+      // TEACHER can access classes where they teach subjects
+      const teacherSubjects = await prisma.classTeacher.count({
+        where: {
+          classId: id,
+          teacherId: admin.id,
+        },
+      });
+      if (teacherSubjects === 0) {
+        return errorResponse('Anda tidak memiliki akses ke kelas ini', 403);
+      }
+    }
+    // ADMIN and PRINCIPAL have access to all classes (no additional check needed)
+
     return successResponse(classData);
   } catch (error) {
     console.error('Get class error:', error);
-    return errorResponse('Failed to fetch class', 500);
+    return errorResponse('Gagal memuat data kelas', 500);
   }
 }
 
