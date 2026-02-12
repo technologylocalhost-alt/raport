@@ -9,13 +9,10 @@ interface Subject {
   name: string;
   code: string;
   description?: string;
-  class?: {
+  classes: {
     id: string;
     name: string;
-    level?: {
-      name: string;
-    };
-  };
+  }[];
 }
 
 interface ApiResponse {
@@ -137,32 +134,43 @@ export default function TeacherSubjectsPage() {
               </thead>
               {/* Table Body */}
               <tbody className="divide-y divide-gray-200">
-                {subjects.map((subject, index) => (
-                  <tr key={subject.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 text-sm text-gray-900 font-medium">{index + 1}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900 font-medium">{subject.name}</td>
-                    <td className="px-6 py-4 text-sm">
-                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        {subject.code}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{subject.class?.name || '-'}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{subject.class?.level?.name || '-'}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      <div className="line-clamp-2 max-w-xs">{subject.description || '-'}</div>
-                    </td>
-                    <td className="px-6 py-4 text-sm space-y-2">
-                      <div className="flex gap-2 justify-center flex-wrap">
-                        <button
-                          onClick={() => router.push(`/teacher/subjects/${subject.class?.id}/students?subjectId=${subject.id}`)}
-                          className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors whitespace-nowrap"
-                        >
-                          Lihat Siswa
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {subjects.map((subject) =>
+                  subject.classes.map((classItem, classIndex) => (
+                    <tr
+                      key={`${subject.id}-${classItem.id}`}
+                      className="hover:bg-gray-50 transition-colors"
+                    >
+                      <td className="px-6 py-4 text-sm text-gray-900 font-medium">
+                        {subjects.findIndex((s) => s.id === subject.id) * 10 + classIndex + 1}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900 font-medium">{subject.name}</td>
+                      <td className="px-6 py-4 text-sm">
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                          {subject.code}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{classItem.name}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">-</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        <div className="line-clamp-2 max-w-xs">{subject.description || '-'}</div>
+                      </td>
+                      <td className="px-6 py-4 text-sm space-y-2">
+                        <div className="flex gap-2 justify-center flex-wrap">
+                          <button
+                            onClick={() =>
+                              router.push(
+                                `/teacher/subjects/${classItem.id}/students?subjectId=${subject.id}`
+                              )
+                            }
+                            className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors whitespace-nowrap"
+                          >
+                            Lihat Siswa
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -172,8 +180,8 @@ export default function TeacherSubjectsPage() {
       {/* Summary */}
       {subjects.length > 0 && (
         <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg flex items-center justify-between">
-          <span className="font-medium">Total Mata Pelajaran: <strong>{subjects.length}</strong></span>
-          <span className="text-sm">Anda mengajar {subjects.length} mata pelajaran</span>
+          <span className="font-medium">Total Mengajar: <strong>{subjects.reduce((acc, s) => acc + s.classes.length, 0)}</strong> kelas</span>
+          <span className="text-sm">Dalam {subjects.length} mata pelajaran</span>
         </div>
       )}
     </div>

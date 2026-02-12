@@ -33,7 +33,7 @@ async function getTeacher(req: NextRequest) {
     where: { id: payload.userId },
   });
 
-  if (teacher && teacher.role === 'TEACHER') {
+  if (teacher && (teacher.role === 'TEACHER' || teacher.role === 'WALI_KELAS')) {
     return teacher;
   }
   return null;
@@ -71,7 +71,21 @@ export async function GET(
       return errorResponse('Grade not found', 404);
     }
 
-    if (grade.teacherId !== teacher.id) {
+    // Check authorization - teacher owns the grade or wali-kelas is assigned to the student's class
+    let authorized = false;
+    if (grade.teacherId === teacher.id) {
+      authorized = true;
+    } else if (teacher.role === 'WALI_KELAS') {
+      const student = await prisma.student.findUnique({
+        where: { id: grade.studentId },
+        include: { class: true },
+      });
+      if (student?.class?.waliKelasId === teacher.id) {
+        authorized = true;
+      }
+    }
+
+    if (!authorized) {
       return errorResponse('Unauthorized to view this grade', 403);
     }
 
@@ -121,7 +135,21 @@ export async function PUT(
       return errorResponse('Grade not found', 404);
     }
 
-    if (grade.teacherId !== teacher.id) {
+    // Check authorization - teacher owns the grade or wali-kelas is assigned to the student's class
+    let authorized = false;
+    if (grade.teacherId === teacher.id) {
+      authorized = true;
+    } else if (teacher.role === 'WALI_KELAS') {
+      const student = await prisma.student.findUnique({
+        where: { id: grade.studentId },
+        include: { class: true },
+      });
+      if (student?.class?.waliKelasId === teacher.id) {
+        authorized = true;
+      }
+    }
+
+    if (!authorized) {
       return errorResponse('Unauthorized to update this grade', 403);
     }
 
@@ -200,7 +228,21 @@ export async function DELETE(
       return errorResponse('Grade not found', 404);
     }
 
-    if (grade.teacherId !== teacher.id) {
+    // Check authorization - teacher owns the grade or wali-kelas is assigned to the student's class
+    let authorized = false;
+    if (grade.teacherId === teacher.id) {
+      authorized = true;
+    } else if (teacher.role === 'WALI_KELAS') {
+      const student = await prisma.student.findUnique({
+        where: { id: grade.studentId },
+        include: { class: true },
+      });
+      if (student?.class?.waliKelasId === teacher.id) {
+        authorized = true;
+      }
+    }
+
+    if (!authorized) {
       return errorResponse('Unauthorized to delete this grade', 403);
     }
 

@@ -21,7 +21,7 @@ async function verifyAdmin(req: NextRequest) {
     where: { id: payload.userId },
   });
   
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL' || user.role === 'WALI_KELAS')) {
+  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL' || user.role === 'WALI_KELAS' || user.role === 'TEACHER')) {
     return user;
   }
   return null;
@@ -83,10 +83,37 @@ export async function GET(
       return errorResponse('Kelas tidak ditemukan', 404);
     }
 
-    // If user is WALI_KELAS, verify they own this class
-    if (user.role === 'WALI_KELAS' && classData.waliKelasId !== user.id) {
-      return errorResponse('Anda tidak memiliki akses ke kelas ini', 403);
+    // Authorization check
+    if (user.role === 'WALI_KELAS') {
+      // WALI_KELAS can access: their own class OR classes where they teach subjects
+      const isWaliKelas = classData.waliKelasId === user.id;
+      
+      if (!isWaliKelas) {
+        // Check if WALI_KELAS also teaches in this class
+        const teacherSubjects = await prisma.classTeacher.count({
+          where: {
+            classId: id,
+            teacherId: user.id,
+          },
+        });
+        
+        if (teacherSubjects === 0) {
+          return errorResponse('Anda tidak memiliki akses ke kelas ini', 403);
+        }
+      }
+    } else if (user.role === 'TEACHER') {
+      // TEACHER can access classes where they teach subjects
+      const teacherSubjects = await prisma.classTeacher.count({
+        where: {
+          classId: id,
+          teacherId: user.id,
+        },
+      });
+      if (teacherSubjects === 0) {
+        return errorResponse('Anda tidak memiliki akses ke kelas ini', 403);
+      }
     }
+    // ADMIN and PRINCIPAL have access to all classes (no additional check needed)
 
     const where: any = {
       classId: id,
@@ -142,6 +169,11 @@ export async function POST(
     const user = await verifyAdmin(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
+    }
+
+    // Only ADMIN, PRINCIPAL, and WALI_KELAS can add students
+    if (user.role === 'TEACHER') {
+      return errorResponse('Unauthorized', 403);
     }
 
     const { id } = await params;

@@ -12,6 +12,8 @@ import {
   BookOpen,
   CheckCircle,
   FileText,
+  Library,
+  Target,
 } from 'lucide-react';
 
 interface WaliKelasLayoutProps {
@@ -34,6 +36,8 @@ export default function WaliKelasLayout({ children }: WaliKelasLayoutProps) {
       items: [
         { title: 'Daftar Kelas', icon: Users, href: '/wali-kelas/classes' },
         { title: 'Manajemen Kelas', icon: BookOpen, href: '/wali-kelas/management' },
+        { title: 'Mata Pelajaran', icon: Library, href: '/wali-kelas/subjects' },
+        { title: 'Kompetensi', icon: Target, href: '/wali-kelas/competencies' },
         { title: 'Absensi', icon: CheckCircle, href: '/wali-kelas/attendance' },
       ],
     },

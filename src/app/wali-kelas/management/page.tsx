@@ -80,6 +80,9 @@ export default function WaliKelasClassManagementPage() {
   const [teacherFormData, setTeacherFormData] = useState<TeacherFormData>({ teacherId: '', subjectId: '' });
   const [subjectCurrentPage, setSubjectCurrentPage] = useState(1);
   const [teacherCurrentPage, setTeacherCurrentPage] = useState(1);
+  const [subjectSearchText, setSubjectSearchText] = useState('');
+  const [teacherSearchText, setTeacherSearchText] = useState('');
+  const [subjectSearchTeacherText, setSubjectSearchTeacherText] = useState('');
   const itemsPerPage = 10;
 
   useEffect(() => {
@@ -172,7 +175,7 @@ export default function WaliKelasClassManagementPage() {
     try {
       const token = localStorage.getItem('accessToken');
       const headers = { Authorization: `Bearer ${token}` };
-      const response = await fetch(`/api/admin/users?limit=100&role=TEACHER`, { headers });
+      const response = await fetch(`/api/admin/users?limit=100`, { headers });
       const data = await response.json();
       if (response.ok) {
         setTeachers(data.data || []);
@@ -447,32 +450,65 @@ export default function WaliKelasClassManagementPage() {
                 <form onSubmit={handleAddSubject} className="space-y-4">
                   <div>
                     <label className="block text-sm font-bold text-gray-900 mb-2">
-                      Pilih Mata Pelajaran <span className="text-red-500">*</span>
+                      Cari Mata Pelajaran <span className="text-red-500">*</span>
                     </label>
-                    <select
-                      value={subjectFormData.subjectId}
-                      onChange={(e) => setSubjectFormData({ subjectId: e.target.value })}
-                      className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:border-emerald-500"
-                      required
-                    >
-                      <option value="">-- Pilih Mata Pelajaran --</option>
-                      {allSubjects.map((subject) => (
-                        <option key={subject.id} value={subject.id}>
-                          {subject.code} - {subject.name}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Cari kode atau nama mata pelajaran..."
+                        value={subjectSearchText}
+                        onChange={(e) => setSubjectSearchText(e.target.value)}
+                        className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:border-emerald-500"
+                      />
+                      {subjectSearchText && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border-2 border-emerald-500 rounded-lg shadow-lg max-h-96 overflow-y-auto z-10">
+                          {allSubjects
+                            .filter((subject) =>
+                              subject.code.toLowerCase().includes(subjectSearchText.toLowerCase()) ||
+                              subject.name.toLowerCase().includes(subjectSearchText.toLowerCase())
+                            )
+                            .length === 0 ? (
+                            <div className="px-4 py-3 text-gray-500">Tidak ada mata pelajaran ditemukan</div>
+                          ) : (
+                            allSubjects
+                              .filter((subject) =>
+                                subject.code.toLowerCase().includes(subjectSearchText.toLowerCase()) ||
+                                subject.name.toLowerCase().includes(subjectSearchText.toLowerCase())
+                              )
+                              .map((subject) => (
+                                <button
+                                  key={subject.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSubjectFormData({ subjectId: subject.id });
+                                    setSubjectSearchText(`${subject.code} - ${subject.name}`);
+                                  }}
+                                  className="w-full text-left px-4 py-3 hover:bg-emerald-50 transition-colors border-b last:border-b-0"
+                                >
+                                  <div className="font-semibold text-gray-900">{subject.code} - {subject.name}</div>
+                                  {subject.nameArabic && <div className="text-sm text-gray-600">{subject.nameArabic}</div>}
+                                </button>
+                              ))
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex gap-3">
                     <button
                       type="submit"
-                      className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
+                      disabled={!subjectFormData.subjectId}
+                      className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Tambahkan
                     </button>
                     <button
                       type="button"
-                      onClick={() => setShowSubjectForm(false)}
+                      onClick={() => {
+                        setShowSubjectForm(false);
+                        setSubjectSearchText('');
+                        setSubjectFormData({ subjectId: '' });
+                      }}
                       className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
                     >
                       Batal
@@ -577,6 +613,8 @@ export default function WaliKelasClassManagementPage() {
                 onClick={() => {
                   setShowTeacherForm(true);
                   setTeacherFormData({ teacherId: '', subjectId: '' });
+                  setTeacherSearchText('');
+                  setSubjectSearchTeacherText('');
                   if (!allTeachers.length) fetchAllTeachers();
                 }}
                 className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 flex items-center gap-2 transition-colors"
@@ -592,51 +630,118 @@ export default function WaliKelasClassManagementPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-bold text-gray-900 mb-2">
-                        Guru <span className="text-red-500">*</span>
+                        Cari Guru <span className="text-red-500">*</span>
                       </label>
-                      <select
-                        value={teacherFormData.teacherId}
-                        onChange={(e) => setTeacherFormData({ ...teacherFormData, teacherId: e.target.value })}
-                        className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:border-emerald-500"
-                        required
-                      >
-                        <option value="">-- Pilih Guru --</option>
-                        {allTeachers.map((teacher) => (
-                          <option key={teacher.id} value={teacher.id}>
-                            {teacher.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="Cari nama guru..."
+                          value={teacherSearchText}
+                          onChange={(e) => setTeacherSearchText(e.target.value)}
+                          className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:border-emerald-500"
+                        />
+                        {teacherSearchText && !teacherFormData.teacherId && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border-2 border-emerald-500 rounded-lg shadow-lg max-h-64 overflow-y-auto z-10">
+                            {allTeachers
+                              .filter((teacher) =>
+                                teacher.name.toLowerCase().includes(teacherSearchText.toLowerCase()) ||
+                                teacher.email.toLowerCase().includes(teacherSearchText.toLowerCase())
+                              )
+                              .filter((teacher, index, self) =>
+                                index === self.findIndex((t) => t.id === teacher.id)
+                              )
+                              .length === 0 ? (
+                              <div className="px-4 py-3 text-gray-500">Tidak ada guru ditemukan</div>
+                            ) : (
+                              allTeachers
+                                .filter((teacher) =>
+                                  teacher.name.toLowerCase().includes(teacherSearchText.toLowerCase()) ||
+                                  teacher.email.toLowerCase().includes(teacherSearchText.toLowerCase())
+                                )
+                                .filter((teacher, index, self) =>
+                                  index === self.findIndex((t) => t.id === teacher.id)
+                                )
+                                .map((teacher) => (
+                                  <button
+                                    key={teacher.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setTeacherFormData({ ...teacherFormData, teacherId: teacher.id });
+                                      setTeacherSearchText(teacher.name);
+                                    }}
+                                    className="w-full text-left px-4 py-3 hover:bg-emerald-50 transition-colors border-b last:border-b-0"
+                                  >
+                                    <div className="font-semibold text-gray-900">{teacher.name}</div>
+                                    <div className="text-sm text-gray-600">{teacher.email}</div>
+                                  </button>
+                                ))
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-bold text-gray-900 mb-2">
-                        Mata Pelajaran <span className="text-red-500">*</span>
+                        Cari Mata Pelajaran <span className="text-red-500">*</span>
                       </label>
-                      <select
-                        value={teacherFormData.subjectId}
-                        onChange={(e) => setTeacherFormData({ ...teacherFormData, subjectId: e.target.value })}
-                        className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:border-emerald-500"
-                        required
-                      >
-                        <option value="">-- Pilih Mata Pelajaran --</option>
-                        {classSubjects.map((cs) => (
-                          <option key={cs.subject.id} value={cs.subject.id}>
-                            {cs.subject.code} - {cs.subject.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="Cari kode atau nama mata pelajaran..."
+                          value={subjectSearchTeacherText}
+                          onChange={(e) => setSubjectSearchTeacherText(e.target.value)}
+                          className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:border-emerald-500"
+                        />
+                        {subjectSearchTeacherText && !teacherFormData.subjectId && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border-2 border-emerald-500 rounded-lg shadow-lg max-h-64 overflow-y-auto z-10">
+                            {classSubjects
+                              .filter((cs) =>
+                                cs.subject.code.toLowerCase().includes(subjectSearchTeacherText.toLowerCase()) ||
+                                cs.subject.name.toLowerCase().includes(subjectSearchTeacherText.toLowerCase())
+                              )
+                              .length === 0 ? (
+                              <div className="px-4 py-3 text-gray-500">Tidak ada mata pelajaran ditemukan</div>
+                            ) : (
+                              classSubjects
+                                .filter((cs) =>
+                                  cs.subject.code.toLowerCase().includes(subjectSearchTeacherText.toLowerCase()) ||
+                                  cs.subject.name.toLowerCase().includes(subjectSearchTeacherText.toLowerCase())
+                                )
+                                .map((cs) => (
+                                  <button
+                                    key={cs.subject.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setTeacherFormData({ ...teacherFormData, subjectId: cs.subject.id });
+                                      setSubjectSearchTeacherText(`${cs.subject.code} - ${cs.subject.name}`);
+                                    }}
+                                    className="w-full text-left px-4 py-3 hover:bg-emerald-50 transition-colors border-b last:border-b-0"
+                                  >
+                                    <div className="font-semibold text-gray-900">{cs.subject.code} - {cs.subject.name}</div>
+                                  </button>
+                                ))
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="flex gap-3">
                     <button
                       type="submit"
-                      className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
+                      disabled={!teacherFormData.teacherId || !teacherFormData.subjectId}
+                      className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Tambahkan
                     </button>
                     <button
                       type="button"
-                      onClick={() => setShowTeacherForm(false)}
+                      onClick={() => {
+                        setShowTeacherForm(false);
+                        setTeacherSearchText('');
+                        setSubjectSearchTeacherText('');
+                        setTeacherFormData({ teacherId: '', subjectId: '' });
+                      }}
                       className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
                     >
                       Batal
