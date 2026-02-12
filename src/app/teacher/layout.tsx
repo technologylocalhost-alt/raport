@@ -75,10 +75,10 @@ export default function TeacherLayout({ children }: TeacherLayoutProps) {
         } bg-gradient-to-b from-slate-900 to-slate-800 text-white transition-all duration-300 flex flex-col shadow-lg`}
       >
         {/* Logo */}
-        <div className="p-6 border-b border-slate-700 flex items-center justify-between">
+        <div className="p-4 border-b border-slate-700 flex items-center justify-between">
           {sidebarOpen && (
             <div>
-              <h1 className="text-xl font-bold">Raport</h1>
+              <h1 className="text-lg font-bold">Raport</h1>
               <p className="text-xs text-slate-400">Guru</p>
             </div>
           )}
@@ -86,19 +86,19 @@ export default function TeacherLayout({ children }: TeacherLayoutProps) {
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="p-1 hover:bg-slate-700 rounded-lg transition-colors"
           >
-            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+            {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
         </div>
 
         {/* Menu Items */}
-        <nav className="flex-1 overflow-y-auto py-6 px-3 space-y-4">
+        <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-2">
           {menuItems.map((section, idx) => (
             <div key={idx}>
               {/* Main Item atau Section Title */}
               {section.items ? (
                 <>
                   {sidebarOpen && (
-                    <h3 className="px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                    <h3 className="px-3 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">
                       {section.title}
                     </h3>
                   )}
@@ -110,15 +110,15 @@ export default function TeacherLayout({ children }: TeacherLayoutProps) {
                         <Link
                           key={itemIdx}
                           href={item.href}
-                          className={`flex items-center gap-3 p-3 rounded-lg transition-all ${
+                          className={`flex items-center gap-2 p-2.5 rounded-lg transition-all ${
                             isActive
                               ? 'bg-indigo-600 text-white shadow-lg'
                               : 'text-slate-300 hover:bg-slate-700'
                           }`}
                           title={item.title}
                         >
-                          <Icon size={20} className="flex-shrink-0" />
-                          {sidebarOpen && <span>{item.title}</span>}
+                          <Icon size={18} className="flex-shrink-0" />
+                          {sidebarOpen && <span className="text-sm">{item.title}</span>}
                         </Link>
                       );
                     })}
@@ -127,15 +127,15 @@ export default function TeacherLayout({ children }: TeacherLayoutProps) {
               ) : (
                 <Link
                   href={section.href!}
-                  className={`flex items-center gap-3 p-3 rounded-lg transition-all ${
+                  className={`flex items-center gap-2 p-2.5 rounded-lg transition-all ${
                     pathname === section.href
                       ? 'bg-indigo-600 text-white shadow-lg'
                       : 'text-slate-300 hover:bg-slate-700'
                   }`}
                   title={section.title}
                 >
-                  {section.icon && <section.icon size={20} className="flex-shrink-0" />}
-                  {sidebarOpen && <span>{section.title}</span>}
+                  {section.icon && <section.icon size={18} className="flex-shrink-0" />}
+                  {sidebarOpen && <span className="text-sm">{section.title}</span>}
                 </Link>
               )}
             </div>
@@ -143,14 +143,14 @@ export default function TeacherLayout({ children }: TeacherLayoutProps) {
         </nav>
 
         {/* Logout Button */}
-        <div className="p-4 border-t border-slate-700">
+        <div className="p-3 border-t border-slate-700">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 p-3 rounded-lg text-slate-300 hover:bg-red-600 hover:text-white transition-all"
+            className="w-full flex items-center gap-2 p-2.5 rounded-lg text-slate-300 hover:bg-red-600 hover:text-white transition-all"
             title="Logout"
           >
-            <LogOut size={20} className="flex-shrink-0" />
-            {sidebarOpen && <span>Logout</span>}
+            <LogOut size={18} className="flex-shrink-0" />
+            {sidebarOpen && <span className="text-sm">Logout</span>}
           </button>
         </div>
       </aside>
