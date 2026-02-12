@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import puppeteer from 'puppeteer';
+import chromium from '@sparticuz/chromium';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -328,9 +329,12 @@ export async function POST(request: NextRequest) {
     `;
 
     // Launch Puppeteer
+    const executablePath = await chromium.executablePath() || puppeteer.executablePath();
     browser = await puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath,
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
 
     const page = await browser.newPage();
