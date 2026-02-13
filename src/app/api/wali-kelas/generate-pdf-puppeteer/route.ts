@@ -329,10 +329,18 @@ export async function POST(request: NextRequest) {
     `;
 
     // Launch Puppeteer
-    const executablePath = await chromium.executablePath() || puppeteer.executablePath();
+    let executablePath: string;
+    try {
+      executablePath = await chromium.executablePath();
+      console.log('Using Chromium from @sparticuz/chromium:', executablePath);
+    } catch (err) {
+      console.log('Chromium path from @sparticuz failed, falling back to puppeteer');
+      executablePath = puppeteer.executablePath();
+    }
     
     const launchArgs = [
-      ...chromium.args,
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
       '--disable-gpu',
       '--disable-dev-shm-usage',
       '--disable-software-rasterizer',
@@ -342,13 +350,24 @@ export async function POST(request: NextRequest) {
       '--disable-translate',
       '--disable-sync',
       '--disable-plugins',
+      '--disable-web-resources',
+      '--disable-default-apps',
     ];
 
+    console.log('Launching browser with executable:', executablePath);
     browser = await puppeteer.launch({
       args: launchArgs,
       defaultViewport: chromium.defaultViewport,
       executablePath,
       headless: 'new',
+    }).catch((launchErr) => {
+      console.error('Launch error details:', {
+        message: launchErr.message,
+        code: launchErr.code,
+        executablePath,
+        args: launchArgs,
+      });
+      throw launchErr;
     });
 
     const page = await browser.newPage();
@@ -388,12 +407,30 @@ export async function POST(request: NextRequest) {
       fileName: `Raport_${student.name?.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`,
     });
   } catch (error) {
-    console.error('Error generating PDF with Puppeteer:', error);
+    console.error('Error generating PDF with Puppeteer:', {
+      error: String(error),
+      errorMsg: error instanceof Error ? error.message : 'Unknown error',
+      errorCode: error instanceof Error && 'code' in error ? (error as any).code : 'N/A',
+      environment: process.env.VERCEL ? 'Vercel' : 'Local',
+      nodeVersion: process.version,
+    });
     if (browser) {
-      await browser.close();
+      try {
+        await browser.close();
+      } catch (closeErr) {
+        console.error('Error closing browser:', closeErr);
+      }
     }
     return NextResponse.json(
-      { success: false, error: String(error) },
+      { 
+        success: false, 
+        error: String(error),
+        environment: process.env.VERCEL ? 'Vercel' : 'Local',
+        debug: process.env.NODE_ENV === 'development' ? {
+          errorMsg: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        } : undefined,
+      },
       { status: 500 }
     );
   }
