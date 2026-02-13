@@ -330,11 +330,25 @@ export async function POST(request: NextRequest) {
 
     // Launch Puppeteer
     const executablePath = await chromium.executablePath() || puppeteer.executablePath();
+    
+    const launchArgs = [
+      ...chromium.args,
+      '--disable-gpu',
+      '--disable-dev-shm-usage',
+      '--disable-software-rasterizer',
+      '--disable-extensions',
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--disable-translate',
+      '--disable-sync',
+      '--disable-plugins',
+    ];
+
     browser = await puppeteer.launch({
-      args: chromium.args,
+      args: launchArgs,
       defaultViewport: chromium.defaultViewport,
       executablePath,
-      headless: true,
+      headless: 'new',
     });
 
     const page = await browser.newPage();
