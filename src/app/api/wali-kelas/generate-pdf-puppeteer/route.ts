@@ -359,7 +359,7 @@ export async function POST(request: NextRequest) {
       args: launchArgs,
       defaultViewport: chromium.defaultViewport,
       executablePath,
-      headless: 'new',
+      headless: true,
     }).catch((launchErr) => {
       console.error('Launch error details:', {
         message: launchErr.message,
