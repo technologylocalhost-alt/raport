@@ -180,6 +180,7 @@ export async function POST(request: NextRequest) {
             data: {
               studentId: grade.studentId,
               competencyId: grade.competencyId,
+              subjectId: validatedData.subjectId,
               levelId: levelId,
               teacherId: grade.teacherId,
               score: grade.score,

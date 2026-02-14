@@ -144,9 +144,12 @@ export default function AcademicStructurePage() {
       const startDateTime = `${yearFormData.startDate}T00:00:00Z`;
       const endDateTime = `${yearFormData.endDate}T00:00:00Z`;
 
+      // Normalize year format: convert "2024-2025" to "2024/2025"
+      const normalizedYear = yearFormData.year.trim().replace(/-/g, '/');
+      
       const payload = {
         schoolId: yearFormData.schoolId.trim(),
-        year: yearFormData.year.trim(),
+        year: normalizedYear,
         startDate: startDateTime,
         endDate: endDateTime,
         isActive: yearFormData.isActive,

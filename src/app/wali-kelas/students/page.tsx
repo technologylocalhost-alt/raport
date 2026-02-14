@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, FormEvent, Suspense } from 'react';
+import { useEffect, useState, FormEvent, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, X, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, X, AlertCircle, CheckCircle, ArrowLeft, Upload, Download } from 'lucide-react';
 
 interface Class {
   id: string;
@@ -50,6 +50,7 @@ export default function WaliKelasStudentsPage() {
 function StudentsPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -64,6 +65,9 @@ function StudentsPageContent() {
   const [userId, setUserId] = useState<string>('');
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedClassName, setSelectedClassName] = useState<string>('');
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
 
   const [formData, setFormData] = useState<FormData>({
     studentNo: '',
@@ -165,7 +169,7 @@ function StudentsPageContent() {
 
       if (response.ok) {
         setStudents(data.data || []);
-        const total = data.meta?.total || 0;
+        const total = data.pagination?.total || 0;
         setTotalPages(Math.ceil(total / itemsPerPage));
       }
     } catch (error) {
@@ -269,6 +273,134 @@ function StudentsPageContent() {
     } catch (error) {
       console.error('Error deleting:', error);
       setErrorMessage('Terjadi kesalahan');
+    }
+  }
+
+  async function handleExport() {
+    try {
+      if (!selectedClassId) return;
+
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(
+        `/api/wali-kelas/students/export?classId=${selectedClassId}`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (response.status === 401) {
+        alert('Session expired. Silakan login kembali.');
+        window.location.href = '/login';
+        return;
+      }
+
+      if (!response.ok) {
+        alert('❌ Gagal mengekspor file');
+        return;
+      }
+
+      const contentDisposition = response.headers.get('content-disposition');
+      let filename = 'siswa-export.xlsx';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      alert('✅ File berhasil diunduh!');
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('❌ Gagal mengekspor file');
+    }
+  }
+
+  async function handleImport(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+
+    const file = fileInputRef.current?.files?.[0];
+    if (!file) {
+      alert('Silakan pilih file Excel');
+      return;
+    }
+
+    if (!selectedClassId) {
+      alert('Class ID tidak ditemukan');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        alert('Token tidak ditemukan. Silakan login kembali.');
+        return;
+      }
+
+      setIsImporting(true);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('classId', selectedClassId);
+
+      const response = await fetch('/api/wali-kelas/students/import', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      if (response.status === 401) {
+        setImportResult({
+          success: false,
+          error: 'Session expired. Silakan login kembali.',
+        });
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 2000);
+        return;
+      }
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setImportResult({
+          success: false,
+          error: result.error || 'Gagal mengimpor file',
+          details: result.details,
+        });
+        return;
+      }
+
+      setImportResult({
+        success: true,
+        message: result.message,
+        data: result.data,
+      });
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+
+      setTimeout(() => {
+        fetchStudents();
+      }, 2000);
+    } catch (error) {
+      console.error('Import error:', error);
+      setImportResult({
+        success: false,
+        error: 'Terjadi kesalahan saat mengimpor',
+      });
+    } finally {
+      setIsImporting(false);
     }
   }
 
@@ -384,24 +516,38 @@ function StudentsPageContent() {
             <p className="text-gray-600 mt-1">Kelola data siswa di kelas ini</p>
           </div>
         </div>
-        <button
-          onClick={() => {
-            setShowForm(true);
-            setEditingId(null);
-            setFormData({
-              studentNo: '',
-              name: '',
-              email: '',
-              phone: '',
-              address: '',
-              birthDate: '',
-              parentPhoneNo: '',
-            });
-          }}
-          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2 transition-colors"
-        >
-          <Plus size={20} /> Tambah Siswa
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={handleExport}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors"
+          >
+            <Download size={20} /> Export
+          </button>
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors"
+          >
+            <Upload size={20} /> Import
+          </button>
+          <button
+            onClick={() => {
+              setShowForm(true);
+              setEditingId(null);
+              setFormData({
+                studentNo: '',
+                name: '',
+                email: '',
+                phone: '',
+                address: '',
+                birthDate: '',
+                parentPhoneNo: '',
+              });
+            }}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2 transition-colors"
+          >
+            <Plus size={20} /> Tambah Siswa
+          </button>
+        </div>
       </div>
 
       {/* Success Message */}
@@ -625,26 +771,250 @@ function StudentsPageContent() {
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex justify-between items-center mt-6">
-          <div className="text-sm text-gray-600">
-            Halaman {currentPage} dari {totalPages}
-          </div>
-          <div className="flex gap-2">
+      <div className="flex justify-between items-center mt-6 bg-white p-4 rounded-lg shadow">
+        <div className="text-sm font-medium text-gray-600">
+          Halaman <span className="font-bold text-gray-900">{currentPage}</span> dari <span className="font-bold text-gray-900">{totalPages}</span> • 
+          <span className="ml-2 text-gray-700 font-semibold">{students.length} siswa ditampilkan</span>
+        </div>
+        {totalPages > 1 && (
+          <div className="flex gap-2 items-center">
+            {/* Previous Button */}
             <button
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title="Halaman Sebelumnya"
             >
-              <ChevronLeft size={20} />
+              <ChevronLeft size={20} className="text-gray-600" />
             </button>
+
+            {/* Page Numbers */}
+            <div className="flex gap-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                // Show first page, last page, current page and adjacent pages
+                const isVisible = 
+                  page === 1 || 
+                  page === totalPages || 
+                  Math.abs(page - currentPage) <= 1;
+                
+                if (!isVisible && page !== 2 && page !== totalPages - 1) {
+                  return null;
+                }
+
+                if (!isVisible) {
+                  return (
+                    <span key={`dots-${page}`} className="px-2 text-gray-400">...</span>
+                  );
+                }
+
+                return (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`px-3 py-1 rounded-lg transition-colors ${
+                      currentPage === page
+                        ? 'bg-green-600 text-white font-semibold'
+                        : 'border border-gray-300 hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Next Button */}
             <button
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title="Halaman Berikutnya"
             >
-              <ChevronRight size={20} />
+              <ChevronRight size={20} className="text-gray-600" />
             </button>
+          </div>
+        )}
+      </div>
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <Upload size={24} className="text-blue-600" />
+                <h2 className="text-xl font-bold text-gray-900">Import Siswa</h2>
+              </div>
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportResult(null);
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }}
+                className="text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6">
+              {!importResult ? (
+                <form onSubmit={handleImport} className="space-y-4">
+                  {/* File Input */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      File Excel (.xlsx)
+                    </label>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".xlsx"
+                      required
+                      className="w-full px-4 py-3 border-2 border-dashed border-blue-300 rounded-lg text-gray-900 file:px-4 file:py-2 file:border-0 file:rounded file:bg-blue-600 file:text-white file:font-medium cursor-pointer hover:border-blue-400 transition-colors"
+                    />
+                    <p className="text-xs text-gray-500 mt-2">
+                      📋 Format Excel: Nomor Induk | Nama | Email | Telepon | Alamat | Tanggal Lahir | Telp Wali Murid
+                    </p>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const token = localStorage.getItem('accessToken');
+                          const response = await fetch('/api/wali-kelas/students/template', {
+                            method: 'GET',
+                            headers: {
+                              Authorization: `Bearer ${token}`,
+                            },
+                          });
+
+                          if (!response.ok) {
+                            alert('❌ Gagal mengunduh template');
+                            return;
+                          }
+
+                          const contentDisposition = response.headers.get('content-disposition');
+                          let filename = 'template-siswa.xlsx';
+                          if (contentDisposition) {
+                            const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
+                            if (filenameMatch) {
+                              filename = filenameMatch[1];
+                            }
+                          }
+
+                          const blob = await response.blob();
+                          const url = window.URL.createObjectURL(blob);
+                          const link = document.createElement('a');
+                          link.href = url;
+                          link.download = filename;
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                          window.URL.revokeObjectURL(url);
+                        } catch (error) {
+                          console.error('Template download error:', error);
+                          alert('❌ Gagal mengunduh template');
+                        }
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-700 font-semibold mt-1 inline-flex items-center gap-1"
+                    >
+                      <Download size={14} />
+                      📥 Download Template
+                    </button>
+                  </div>
+
+                  {/* Buttons */}
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="submit"
+                      disabled={isImporting}
+                      className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                    >
+                      {isImporting ? '⏳ Impor...' : '✅ Impor'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowImportModal(false);
+                        setImportResult(null);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      }}
+                      className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors font-medium"
+                    >
+                      Batal
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-4">
+                  {/* Result Message */}
+                  <div
+                    className={`p-4 rounded-lg ${
+                      importResult.success
+                        ? 'bg-green-50 border-l-4 border-green-500'
+                        : 'bg-red-50 border-l-4 border-red-500'
+                    }`}
+                  >
+                    <p
+                      className={`font-semibold ${
+                        importResult.success ? 'text-green-700' : 'text-red-700'
+                      }`}
+                    >
+                      {importResult.success ? '✅ Berhasil!' : '❌ Gagal'}
+                    </p>
+                    <p className="text-sm text-gray-700 mt-2">
+                      {importResult.message || importResult.error}
+                    </p>
+                  </div>
+
+                  {/* Details */}
+                  {importResult.data && (
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <p className="font-semibold text-gray-900 mb-2">📊 Detail Import:</p>
+                      <ul className="space-y-1 text-sm">
+                        <li className="text-green-700">
+                          ✓ Berhasil: <strong>{importResult.data.success}</strong>
+                        </li>
+                        <li className="text-red-700">
+                          ✗ Gagal: <strong>{importResult.data.failed}</strong>
+                        </li>
+                        <li className="text-yellow-700">
+                          ⚠ Duplikat: <strong>{importResult.data.duplicates}</strong>
+                        </li>
+                      </ul>
+                      {importResult.data.errors && importResult.data.errors.length > 0 && (
+                        <div className="mt-3 max-h-48 overflow-y-auto">
+                          <p className="text-xs font-semibold text-gray-700 mb-1">Error Details:</p>
+                          <ul className="space-y-1 text-xs text-red-600">
+                            {importResult.data.errors.slice(0, 10).map((err: any, idx: number) => (
+                              <li key={idx}>
+                                Row {err.row}: {err.message}
+                              </li>
+                            ))}
+                            {importResult.data.errors.length > 10 && (
+                              <li className="text-gray-600">... dan {importResult.data.errors.length - 10} error lainnya</li>
+                            )}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Close Button */}
+                  <button
+                    onClick={() => {
+                      setShowImportModal(false);
+                      setImportResult(null);
+                      if (fileInputRef.current) fileInputRef.current.value = '';
+                    }}
+                    className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                  >
+                    Tutup
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

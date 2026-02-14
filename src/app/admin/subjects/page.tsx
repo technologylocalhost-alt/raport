@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, BookOpen } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, BookOpen, Upload, X, Download } from 'lucide-react';
 
 interface Subject {
   id: string;
@@ -35,6 +35,7 @@ interface Level {
 
 export default function SubjectsPage() {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [levels, setLevels] = useState<Level[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -43,6 +44,9 @@ export default function SubjectsPage() {
   const [total, setTotal] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
   const [formData, setFormData] = useState({
     levelId: '',
     code: '',
@@ -62,11 +66,22 @@ export default function SubjectsPage() {
   async function fetchLevels() {
     try {
       const token = localStorage.getItem('accessToken');
+      if (!token) {
+        console.warn('[fetchLevels] No token found');
+        return;
+      }
+
       const response = await fetch('/api/admin/levels?limit=100', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
+
+      if (response.status === 401) {
+        console.warn('[fetchLevels] 401 Unauthorized - redirecting to login');
+        window.location.href = '/login';
+        return;
+      }
 
       const data: PaginatedResponse = await response.json();
       setLevels(data.data || []);
@@ -85,11 +100,22 @@ export default function SubjectsPage() {
       });
 
       const token = localStorage.getItem('accessToken');
+      if (!token) {
+        console.warn('[fetchSubjects] No token found');
+        return;
+      }
+
       const response = await fetch(`/api/admin/subjects?${queryParams}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
+
+      if (response.status === 401) {
+        console.warn('[fetchSubjects] 401 Unauthorized - redirecting to login');
+        window.location.href = '/login';
+        return;
+      }
 
       const data: PaginatedResponse = await response.json();
       setSubjects(data.data || []);
@@ -178,6 +204,150 @@ export default function SubjectsPage() {
     }
   }
 
+  async function handleImport(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    
+    const file = fileInputRef.current?.files?.[0];
+    if (!file) {
+      alert('Silakan pilih file Excel');
+      return;
+    }
+
+    try {
+      let token = localStorage.getItem('accessToken');
+      
+      if (!token) {
+        alert('❌ Token tidak ditemukan. Silakan login kembali.');
+        return;
+      }
+
+      setIsImporting(true);
+      const formData = new FormData();
+      formData.append('file', file);
+
+      console.log('[Import] Token exists, uploading file...');
+
+      const response = await fetch('/api/admin/subjects/import', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      console.log('[Import] Response status:', response.status);
+
+      if (response.status === 401) {
+        setImportResult({
+          success: false,
+          error: 'Session expired. Silakan login kembali.',
+        });
+        // Redirect to login after 2 seconds
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 2000);
+        return;
+      }
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setImportResult({
+          success: false,
+          error: result.error || 'Gagal mengimpor file',
+          details: result.details,
+        });
+        return;
+      }
+
+      setImportResult({
+        success: true,
+        message: result.message,
+        data: result.data,
+      });
+
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+
+      // Refresh data after 2 seconds
+      setTimeout(() => {
+        fetchSubjects();
+      }, 2000);
+    } catch (error) {
+      console.error('Import error:', error);
+      setImportResult({
+        success: false,
+        error: 'Terjadi kesalahan saat mengimpor',
+      });
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
+  async function handleExport() {
+    try {
+      let token = localStorage.getItem('accessToken');
+      
+      if (!token) {
+        alert('❌ Token tidak ditemukan. Silakan login kembali.');
+        return;
+      }
+
+      console.log('[Export] Token exists:', token.substring(0, 20) + '...');
+
+      const response = await fetch('/api/admin/subjects/export', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      console.log('[Export] Response status:', response.status);
+
+      if (response.status === 401) {
+        alert('❌ Session expired. Silakan login kembali.');
+        // Redirect to login
+        window.location.href = '/login';
+        return;
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        alert(`❌ ${errorData.error || 'Gagal mengekspor file'}`);
+        return;
+      }
+
+      // Get filename from header
+      const contentDisposition = response.headers.get('content-disposition');
+      let filename = 'mata-pelajaran-export.xlsx';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      // Create blob and download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      alert('✅ File berhasil diunduh!');
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('❌ Gagal mengekspor file');
+    }
+  }
+
   function handleEdit(subject: Subject) {
     setFormData({
       levelId: subject.level.id,
@@ -201,24 +371,40 @@ export default function SubjectsPage() {
           <h1 className="text-3xl font-bold text-gray-900">Manajemen Mata Pelajaran</h1>
           <p className="text-gray-600 text-sm mt-1">Kelola kurikulum dan kompetensi</p>
         </div>
-        <button
-          onClick={() => {
-            setEditingId(null);
-            setFormData({
-              levelId: '',
-              code: '',
-              name: '',
-              nameArabic: '',
-              description: '',
-              creditHours: '',
-            });
-            setShowForm(true);
-          }}
-          className="flex items-center gap-2 bg-orange-600 text-white px-6 py-3 rounded-lg hover:bg-orange-700 transition-colors shadow-lg hover:shadow-xl font-medium"
-        >
-          <Plus size={20} />
-          Tambah Mata Pelajaran
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors shadow-lg hover:shadow-xl font-medium"
+          >
+            <Download size={20} />
+            Export Excel
+          </button>
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="flex items-center gap-2 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors shadow-lg hover:shadow-xl font-medium"
+          >
+            <Upload size={20} />
+            Import Excel
+          </button>
+          <button
+            onClick={() => {
+              setEditingId(null);
+              setFormData({
+                levelId: '',
+                code: '',
+                name: '',
+                nameArabic: '',
+                description: '',
+                creditHours: '',
+              });
+              setShowForm(true);
+            }}
+            className="flex items-center gap-2 bg-orange-600 text-white px-6 py-3 rounded-lg hover:bg-orange-700 transition-colors shadow-lg hover:shadow-xl font-medium"
+          >
+            <Plus size={20} />
+            Tambah Mata Pelajaran
+          </button>
+        </div>
       </div>
 
       {/* Search Section */}
@@ -461,6 +647,192 @@ export default function SubjectsPage() {
           </>
         )}
       </div>
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <Upload size={24} className="text-green-600" />
+                <h2 className="text-xl font-bold text-gray-900">Import Mata Pelajaran</h2>
+              </div>
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportResult(null);
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }}
+                className="text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6">
+              {!importResult ? (
+                <form onSubmit={handleImport} className="space-y-4">
+                  {/* File Input */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      File Excel (.xlsx)
+                    </label>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".xlsx"
+                      required
+                      className="w-full px-4 py-3 border-2 border-dashed border-green-300 rounded-lg text-gray-900 file:px-4 file:py-2 file:border-0 file:rounded file:bg-green-600 file:text-white file:font-medium cursor-pointer hover:border-green-400 transition-colors"
+                    />
+                    <p className="text-xs text-gray-500 mt-2">
+                      📋 Format Excel: Jenjang | Kode | Nama | Nama Arab | Deskripsi | Jam Kredit
+                    </p>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const token = localStorage.getItem('accessToken');
+                          const response = await fetch('/api/admin/subjects/template', {
+                            method: 'GET',
+                            headers: {
+                              Authorization: `Bearer ${token}`,
+                            },
+                          });
+
+                          if (!response.ok) {
+                            alert('❌ Gagal mengunduh template');
+                            return;
+                          }
+
+                          const contentDisposition = response.headers.get('content-disposition');
+                          let filename = 'mata-pelajaran-template.xlsx';
+                          if (contentDisposition) {
+                            const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
+                            if (filenameMatch) {
+                              filename = filenameMatch[1];
+                            }
+                          }
+
+                          const blob = await response.blob();
+                          const url = window.URL.createObjectURL(blob);
+                          const link = document.createElement('a');
+                          link.href = url;
+                          link.download = filename;
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                          window.URL.revokeObjectURL(url);
+                        } catch (error) {
+                          console.error('Template download error:', error);
+                          alert('❌ Gagal mengunduh template');
+                        }
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-700 font-semibold mt-1 inline-flex items-center gap-1"
+                    >
+                      <Download size={14} />
+                      📥 Download Template
+                    </button>
+                  </div>
+
+                  {/* Buttons */}
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="submit"
+                      disabled={isImporting}
+                      className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                    >
+                      {isImporting ? '⏳ Impor...' : '✅ Impor'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowImportModal(false);
+                        setImportResult(null);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      }}
+                      className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors font-medium"
+                    >
+                      Batal
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-4">
+                  {/* Result Message */}
+                  <div
+                    className={`p-4 rounded-lg ${
+                      importResult.success
+                        ? 'bg-green-50 border-l-4 border-green-500'
+                        : 'bg-red-50 border-l-4 border-red-500'
+                    }`}
+                  >
+                    <p
+                      className={`font-semibold ${
+                        importResult.success ? 'text-green-700' : 'text-red-700'
+                      }`}
+                    >
+                      {importResult.success ? '✅ Berhasil!' : '❌ Gagal'}
+                    </p>
+                    <p className="text-sm text-gray-700 mt-2">
+                      {importResult.message || importResult.error}
+                    </p>
+                    {importResult.details && (
+                      <p className="text-xs text-gray-600 mt-1">{importResult.details}</p>
+                    )}
+                  </div>
+
+                  {/* Details */}
+                  {importResult.data && (
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <p className="font-semibold text-gray-900 mb-2">📊 Detail Import:</p>
+                      <ul className="space-y-1 text-sm">
+                        <li className="text-green-700">
+                          ✓ Berhasil: <strong>{importResult.data.success}</strong>
+                        </li>
+                        <li className="text-red-700">
+                          ✗ Gagal: <strong>{importResult.data.failed}</strong>
+                        </li>
+                        <li className="text-yellow-700">
+                          ⚠ Duplikat: <strong>{importResult.data.duplicates}</strong>
+                        </li>
+                      </ul>
+                      {importResult.data.errors && importResult.data.errors.length > 0 && (
+                        <div className="mt-3 max-h-48 overflow-y-auto">
+                          <p className="text-xs font-semibold text-gray-700 mb-1">Error Details:</p>
+                          <ul className="space-y-1 text-xs text-red-600">
+                            {importResult.data.errors.slice(0, 10).map((err: any, idx: number) => (
+                              <li key={idx}>
+                                Row {err.row}: {err.message}
+                              </li>
+                            ))}
+                            {importResult.data.errors.length > 10 && (
+                              <li className="text-gray-600">... dan {importResult.data.errors.length - 10} error lainnya</li>
+                            )}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Close Button */}
+                  <button
+                    onClick={() => {
+                      setShowImportModal(false);
+                      setImportResult(null);
+                      if (fileInputRef.current) fileInputRef.current.value = '';
+                    }}
+                    className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                  >
+                    Tutup
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

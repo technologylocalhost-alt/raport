@@ -17,6 +17,7 @@ interface ClassSubject {
     id: string;
     code: string;
     name: string;
+    nameArabic?: string;
     description?: string;
     creditHours?: number;
   };
@@ -321,27 +322,39 @@ export default function WaliKelasClassManagementPage() {
             <p className="text-yellow-800">Anda belum ditugaskan sebagai Wali Kelas.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {classes.map((classItem) => (
-              <div
-                key={classItem.id}
-                onClick={() => {
-                  setSelectedClassId(classItem.id);
-                  setSelectedClassName(classItem.name);
-                  setActiveTab('subjects');
-                  fetchAllSubjects();
-                }}
-                className="bg-white rounded-lg shadow-lg hover:shadow-xl transition-all cursor-pointer border-l-4 border-emerald-500 p-6 group"
-              >
-                <h3 className="text-xl font-semibold text-gray-900 group-hover:text-emerald-600 transition-colors">
-                  {classItem.name}
-                </h3>
-                <p className="text-sm text-gray-500 mt-1">{classItem.levelName}</p>
-                <div className="mt-4 text-emerald-600 group-hover:translate-x-1 transition-transform">
-                  Klik untuk manage →
-                </div>
-              </div>
-            ))}
+          <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Nama Kelas</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Tingkat</th>
+                  <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700">Kapasitas</th>
+                  <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700">Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {classes.map((classItem) => (
+                  <tr key={classItem.id} className="border-b hover:bg-gray-50 transition-colors cursor-pointer">
+                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">{classItem.name}</td>
+                    <td className="px-6 py-4 text-sm text-gray-700">{classItem.levelName}</td>
+                    <td className="px-6 py-4 text-center text-sm text-gray-700">{classItem.capacity} siswa</td>
+                    <td className="px-6 py-4 text-center">
+                      <button
+                        onClick={() => {
+                          setSelectedClassId(classItem.id);
+                          setSelectedClassName(classItem.name);
+                          setActiveTab('subjects');
+                          fetchAllSubjects();
+                        }}
+                        className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 font-medium transition-colors"
+                      >
+                        Kelola
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -543,7 +556,7 @@ export default function WaliKelasClassManagementPage() {
                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{cs.subject.code}</td>
                         <td className="px-6 py-4 text-sm text-gray-700">{cs.subject.name}</td>
                         <td className="px-6 py-4 text-center text-sm font-semibold text-emerald-700 bg-emerald-50">
-                          {'-'}
+                          {cs.subject.nameArabic || '-'}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-600 max-w-xs">
                           {cs.subject.description || '-'}

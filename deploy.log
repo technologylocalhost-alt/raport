@@ -1,0 +1,168 @@
+[0;34m╔════════════════════════════════════════╗[0m
+[0;34m║  Raport Docker Setup Script            ║[0m
+[0;34m╚════════════════════════════════════════╝[0m
+
+[1;33mChecking Docker installation...[0m
+[0;32m✓ Docker is installed[0m
+[0;32m✓ Docker Compose is installed[0m
+
+[1;33mChecking environment configuration...[0m
+[0;32m✓ .env.local exists[0m
+
+[1;33mBuilding Docker images...[0m
+time="2026-02-14T01:00:16+08:00" level=warning msg="/home/aran/raport/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+#1 [internal] load local bake definitions
+#1 reading from stdin 327B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 1.52kB done
+#2 DONE 0.0s
+
+#3 [auth] library/node:pull token for registry-1.docker.io
+#3 DONE 0.0s
+
+#4 [internal] load metadata for docker.io/library/node:22-alpine
+#4 DONE 1.9s
+
+#5 [internal] load .dockerignore
+#5 transferring context: 332B done
+#5 DONE 0.0s
+
+#6 [builder 1/8] FROM docker.io/library/node:22-alpine@sha256:e4bf2a82ad0a4037d28035ae71529873c069b13eb0455466ae0bc13363826e34
+#6 resolve docker.io/library/node:22-alpine@sha256:e4bf2a82ad0a4037d28035ae71529873c069b13eb0455466ae0bc13363826e34 0.0s done
+#6 DONE 0.0s
+
+#7 [internal] load build context
+#7 transferring context: 12.63kB 0.0s done
+#7 DONE 0.0s
+
+#8 [builder 4/8] RUN npm install -g bun && bun install --frozen-lockfile
+#8 CACHED
+
+#9 [builder 2/8] WORKDIR /app
+#9 CACHED
+
+#10 [builder 3/8] COPY package.json bun.lockb* ./
+#10 CACHED
+
+#11 [stage-1  3/10] RUN apk add --no-cache dumb-init
+#11 CACHED
+
+#12 [builder 5/8] COPY prisma ./prisma
+#12 CACHED
+
+#13 [stage-1  4/10] COPY package.json bun.lockb* ./
+#13 CACHED
+
+#14 [stage-1  5/10] RUN npm install -g bun && bun install --frozen-lockfile --production
+#14 ...
+
+#15 [builder 6/8] RUN bun run prisma:generate
+#15 0.258 $ prisma generate
+#15 4.951 Prisma schema loaded from prisma/schema.prisma.
+#15 5.424 
+#15 5.424 ✔ Generated Prisma Client (v7.4.0) to ./node_modules/@prisma/client in 337ms
+#15 5.424 
+#15 5.424 Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+#15 5.424 
+#15 5.424 
+#15 DONE 5.5s
+
+#16 [builder 7/8] COPY . .
+#16 DONE 0.1s
+
+#17 [builder 8/8] RUN bun run build
+#17 0.231 $ bun run prisma:generate && PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true next build
+#17 0.235 $ prisma generate
+#17 1.448 Loaded Prisma config from prisma.config.ts.
+#17 1.448 
+#17 1.618 Prisma schema loaded from prisma/schema.prisma.
+#17 2.121 
+#17 2.121 ✔ Generated Prisma Client (v7.4.0) to ./node_modules/@prisma/client in 360ms
+#17 2.121 
+#17 2.121 Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+#17 2.121 
+#17 2.121 
+#17 3.125 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+#17 3.125 This information is used to shape Next.js' roadmap and prioritize features.
+#17 3.125 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+#17 3.125 https://nextjs.org/telemetry
+#17 3.125 
+#17 3.143 ▲ Next.js 16.1.6 (Turbopack)
+#17 3.143 - Experiments (use with caution):
+#17 3.143   · optimizePackageImports
+#17 3.143 
+#17 3.262   Creating an optimized production build ...
+#17 ...
+
+#14 [stage-1  5/10] RUN npm install -g bun && bun install --frozen-lockfile --production
+#14 27.89 npm notice
+#14 27.89 npm notice New major version of npm available! 10.9.4 -> 11.10.0
+#14 27.89 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.10.0
+#14 27.89 npm notice To update run: npm install -g npm@11.10.0
+#14 27.89 npm notice
+#14 27.89 
+#14 27.89 added 5 packages in 28s
+#14 28.17 bun install v1.3.9 (cf6cdbbb)
+#14 28.19 Resolving dependencies
+#14 ...
+
+#17 [builder 8/8] RUN bun run build
+#17 26.17 ✓ Compiled successfully in 22.3s
+#17 26.19   Running TypeScript ...
+#17 41.56   Collecting page data using 7 workers ...
+#17 42.68 Error: JWT_ACCESS_SECRET environment variable is not set
+#17 42.68     at module evaluation (.next/server/chunks/[root-of-the-server]__ecff79c8._.js:1:53801)
+#17 42.68     at instantiateModule (.next/server/chunks/[turbopack]_runtime.js:740:9)
+#17 42.68     at getOrInstantiateModuleFromParent (.next/server/chunks/[turbopack]_runtime.js:763:12)
+#17 42.68     at Context.esmImport [as i] (.next/server/chunks/[turbopack]_runtime.js:228:20)
+#17 42.68     at <unknown> (.next/server/chunks/[root-of-the-server]__2db96d95._.js:1:1637)
+#17 42.68     at Context.asyncModule [as a] (.next/server/chunks/[turbopack]_runtime.js:455:5)
+#17 42.68     at module evaluation (.next/server/chunks/[root-of-the-server]__2db96d95._.js:1:1584)
+#17 42.68     at instantiateModule (.next/server/chunks/[turbopack]_runtime.js:740:9)
+#17 42.68     at getOrInstantiateModuleFromParent (.next/server/chunks/[turbopack]_runtime.js:763:12)
+#17 42.68     at Context.esmImport [as i] (.next/server/chunks/[turbopack]_runtime.js:228:20)
+#17 44.19 
+#17 44.19 > Build error occurred
+#17 44.20 Error: Failed to collect page data for /api/admin/classes/[id]/teachers/[teacherId]
+#17 44.20     at ignore-listed frames {
+#17 44.20   type: 'Error'
+#17 44.20 }
+#17 44.26 error: script "build" exited with code 1
+#17 ERROR: process "/bin/sh -c bun run build" did not complete successfully: exit code: 1
+
+#14 [stage-1  5/10] RUN npm install -g bun && bun install --frozen-lockfile --production
+#14 CANCELED
+------
+ > [builder 8/8] RUN bun run build:
+42.68     at instantiateModule (.next/server/chunks/[turbopack]_runtime.js:740:9)
+42.68     at getOrInstantiateModuleFromParent (.next/server/chunks/[turbopack]_runtime.js:763:12)
+42.68     at Context.esmImport [as i] (.next/server/chunks/[turbopack]_runtime.js:228:20)
+44.19 
+44.19 > Build error occurred
+44.20 Error: Failed to collect page data for /api/admin/classes/[id]/teachers/[teacherId]
+44.20     at ignore-listed frames {
+44.20   type: 'Error'
+44.20 }
+44.26 error: script "build" exited with code 1
+------
+Dockerfile:26
+
+--------------------
+
+  24 |     # Build Next.js application
+
+  25 |     ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
+  26 | >>> RUN bun run build
+
+  27 |     
+
+  28 |     # Production stage
+
+--------------------
+
+failed to solve: process "/bin/sh -c bun run build" did not complete successfully: exit code: 1
+
+[0;31m✗ Failed to build Docker images[0m

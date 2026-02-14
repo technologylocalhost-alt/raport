@@ -204,11 +204,12 @@ model Subject {
   description String?  // Subject description
   creditHours Int?     // Credit hours
   
-  classSubjects ClassSubject[]
-  teachers      ClassTeacher[]
-  competencies  Competency[]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  classSubjects  ClassSubject[]
+  teachers       ClassTeacher[]
+  competencies   Competency[]
+  nilaiApproves  NilaiApprove[] @relation("SubjectNilaiApprove")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@index([levelId])
 }
@@ -288,6 +289,8 @@ model NilaiApprove {
   student       Student  @relation("StudentNilaiApprove", fields: [studentId], references: [id], onDelete: Cascade)
   competencyId  String
   competency    Competency @relation("CompetencyNilaiApprove", fields: [competencyId], references: [id], onDelete: Cascade)
+  subjectId     String
+  subject       Subject  @relation("SubjectNilaiApprove", fields: [subjectId], references: [id], onDelete: Cascade)
   levelId       String
   level         Level    @relation("LevelNilaiApprove", fields: [levelId], references: [id], onDelete: Cascade)
   teacherId     String
@@ -310,6 +313,7 @@ model NilaiApprove {
   @@unique([studentId, competencyId, teacherId, assessmentType])
   @@index([studentId])
   @@index([competencyId])
+  @@index([subjectId])
   @@index([levelId])
   @@index([teacherId])
 }

@@ -1,0 +1,62 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: raport-db
+    environment:
+      POSTGRES_USER: ${DB_USER:-raport}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-raport_password_123}
+      POSTGRES_DB: ${DB_NAME:-raport_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-raport}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - raport-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: raport-app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://${DB_USER:-raport}:${DB_PASSWORD:-raport_password_123}@db:5432/${DB_NAME:-raport_db}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_ACCESS_EXPIRY: ${JWT_ACCESS_EXPIRY:-15m}
+      JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY:-7d}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-your-secret-key-change-this}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      JWT_SECRET: ${JWT_SECRET:-your-jwt-secret-change-this}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    volumes:
+      - app_node_modules:/app/node_modules
+    networks:
+      - raport-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
+    driver: local
+  app_node_modules:
+    driver: local
+
+networks:
+  raport-network:
+    driver: bridge

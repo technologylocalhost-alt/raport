@@ -2,7 +2,7 @@
 
 import { Fragment, useState, useEffect } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Users, PenTool, X, AlertCircle, CheckCircle, ChevronDown, Edit2, Trash2 } from 'lucide-react';
+import { ArrowLeft, Users, PenTool, X, AlertCircle, CheckCircle, ChevronDown, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface Student {
   id: string;
@@ -101,11 +101,16 @@ export default function WaliKelasStudentsPage() {
   const [grades, setGrades] = useState<{ [key: string]: Grade[] }>({});
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
   const [loadingGrades, setLoadingGrades] = useState<{ [key: string]: boolean }>({});
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     fetchClassStudents();
     fetchClassInfo();
-  }, [classId]);
+  }, [classId, currentPage]);
 
   async function fetchClassInfo() {
     try {
@@ -154,13 +159,14 @@ export default function WaliKelasStudentsPage() {
         return;
       }
       
-      const response = await fetch(`/api/admin/classes/${classId}/students`, {
+      const skip = (currentPage - 1) * itemsPerPage;
+      const response = await fetch(`/api/admin/classes/${classId}/students?limit=${itemsPerPage}&skip=${skip}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
 
-      const data: ApiResponse = await response.json();
+      const data: any = await response.json();
 
       console.log('Students fetched:', data);
 
@@ -181,6 +187,9 @@ export default function WaliKelasStudentsPage() {
       
       if (data.success && data.data) {
         setStudents(data.data);
+        // Get total pages from pagination info
+        const total = data.pagination?.total || 0;
+        setTotalPages(Math.ceil(total / itemsPerPage));
       } else {
         setStudents([]);
       }
@@ -268,8 +277,8 @@ export default function WaliKelasStudentsPage() {
     }
 
     const score = parseFloat(gradeFormData.score);
-    if (isNaN(score) || score < 0 || score > 100) {
-      setGradeError('Nilai harus antara 0-100');
+    if (isNaN(score) || score < 1 || score > 10) {
+      setGradeError('Nilai harus antara 1-10 (boleh desimal, contoh: 5.5)');
       return;
     }
 
@@ -538,6 +547,71 @@ export default function WaliKelasStudentsPage() {
               ))}
             </div>
           )}
+
+          {/* Pagination */}
+          <div className="flex justify-between items-center mt-6 bg-white p-4 rounded-lg shadow">
+            <div className="text-sm font-medium text-gray-600">
+              Halaman <span className="font-bold text-gray-900">{currentPage}</span> dari <span className="font-bold text-gray-900">{totalPages}</span> • 
+              <span className="ml-2 text-gray-700 font-semibold">{students.length} siswa ditampilkan</span>
+            </div>
+            {totalPages > 1 && (
+              <div className="flex gap-2 items-center">
+                {/* Previous Button */}
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  title="Halaman Sebelumnya"
+                >
+                  <ChevronLeft size={20} className="text-gray-600" />
+                </button>
+
+                {/* Page Numbers */}
+                <div className="flex gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                    const isVisible = 
+                      page === 1 || 
+                      page === totalPages || 
+                      Math.abs(page - currentPage) <= 1;
+                    
+                    if (!isVisible && page !== 2 && page !== totalPages - 1) {
+                      return null;
+                    }
+
+                    if (!isVisible) {
+                      return (
+                        <span key={`dots-${page}`} className="px-2 text-gray-400">...</span>
+                      );
+                    }
+
+                    return (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={`px-3 py-1 rounded-lg transition-colors ${
+                          currentPage === page
+                            ? 'bg-emerald-600 text-white font-semibold'
+                            : 'border border-gray-300 hover:bg-gray-50 text-gray-700'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Next Button */}
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  title="Halaman Berikutnya"
+                >
+                  <ChevronRight size={20} className="text-gray-600" />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right: Grade Form */}
@@ -607,10 +681,11 @@ export default function WaliKelasStudentsPage() {
                       type="number"
                       min="1"
                       max="10"
+                      step="0.1"
                       value={gradeFormData.score}
                       onChange={(e) => setGradeFormData({ ...gradeFormData, score: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 placeholder-gray-500"
-                      placeholder="Masukkan nilai 1-10"
+                      placeholder="Contoh: 5.5 atau 7"
                       required
                     />
                   </div>
