@@ -146,69 +146,45 @@ function RaportArabDetailContent() {
     return result;
   };
 
-  // Helper: Process subject scores with all class subjects
-  const processSubjectScores = (grades: Grade[], classSubjects: string[] = [], subjectCodeMap: { [key: string]: string } = {}, subjectArabicMap: { [key: string]: string } = {}): SubjectScore[] => {
-    const subjectMap: { 
-      [key: string]: { 
-        scores: number[]; 
-        assessmentScores: { type: string; score: number }[] 
-      } 
-    } = {};
-
-    // Initialize all class subjects
-    classSubjects.forEach(subject => {
-      if (!subjectMap[subject]) {
-        subjectMap[subject] = { 
-          scores: [], 
-          assessmentScores: [] 
-        };
-      }
+  // Helper: Process subject scores with approved grades
+  const processSubjectScores = (approvedGrades: any[], subjects: any[]): SubjectScore[] => {
+    console.log('[processSubjectScores] Input:', { gradesCount: approvedGrades.length, subjectsCount: subjects.length });
+    
+    // Create a map of approved grades by subject ID
+    const gradesMap: { [key: string]: any } = {};
+    approvedGrades.forEach((grade) => {
+      gradesMap[grade.subjectId] = grade;
+      console.log('[gradesMap] Added grade:', grade.subjectId, '→', grade.subject?.name);
     });
 
-    grades.forEach((grade) => {
-      if (!subjectMap[grade.subjectName]) {
-        subjectMap[grade.subjectName] = { 
-          scores: [], 
-          assessmentScores: [] 
-        };
-      }
-      const scoreNum = parseFloat(grade.score);
-      if (!isNaN(scoreNum) && scoreNum > 0) {
-        subjectMap[grade.subjectName].scores.push(scoreNum);
-        subjectMap[grade.subjectName].assessmentScores.push({
-          type: grade.assessmentType || 'DAILY',
-          score: scoreNum,
-        });
-      }
-    });
-
-    return Object.entries(subjectMap)
-      .map(([subject, data]) => {
-        const averageScore = data.scores.length > 0 
-          ? Math.round((data.scores.reduce((a, b) => a + b) / data.scores.length) * 100) / 100
-          : 0;
+    // Process all subjects (master or class subjects)
+    const result = subjects
+      .map((subject: any) => {
+        const subjectId = subject.subjectId || subject.id;
+        const approved = gradesMap[subjectId];
+        
+        // Handle both master subjects (flat) and nested subjects
+        const subjectName = subject.subject?.name || subject.name || '';
+        const subjectCode = subject.subject?.code || subject.code || '';
+        const subjectArabicName = subject.subject?.nameArabic || subject.nameArabic || '';
+        
+        const averageScore = approved ? parseFloat(approved.finalScore || approved.midScore || 0) : 0;
         const letterGrade = getLetterGrade(averageScore);
 
-        // Create scores array with daily, mid, final
-        const scoresArray = [
-          { type: 'DAILY', score: data.assessmentScores.find(s => s.type === 'DAILY')?.score || 0 },
-          { type: 'MID', score: data.assessmentScores.find(s => s.type === 'MID')?.score || 0 },
-          { type: 'FINAL', score: data.assessmentScores.find(s => s.type === 'FINAL')?.score || averageScore },
-        ].filter(s => s.score > 0);
-
-        // If not enough types, fill with average
-        if (scoresArray.length < 3) {
-          while (scoresArray.length < 3) {
-            scoresArray.push({ type: ['DAILY', 'MID', 'FINAL'][scoresArray.length], score: averageScore });
-          }
-        }
+        console.log('[processSubjectScores] Subject:', { id: subjectId, name: subjectName, hasGrade: !!approved, score: averageScore });
 
         return {
-          subject,
-          subjectCode: subjectCodeMap[subject] || '',
-          subjectArabicName: subjectArabicMap[subject] || '',
-          kkm: 6,
-          scores: scoresArray,
+          subject: subjectName,
+          subjectCode: subjectCode,
+          subjectArabicName: subjectArabicName,
+          kkm: subject.subject?.kkm || subject.kkm || 6,
+          scores: approved 
+            ? [
+                { type: 'DAILY', score: parseFloat(approved.dailyScore || 0) },
+                { type: 'MID', score: parseFloat(approved.midScore || 0) },
+                { type: 'FINAL', score: parseFloat(approved.finalScore || 0) },
+              ].filter(s => s.score > 0)
+            : [],
           averageScore,
           letterGrade,
           predicate: getPredicate(letterGrade),
@@ -222,6 +198,9 @@ function RaportArabDetailContent() {
         // Alphanumeric sort
         return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
       });
+    
+    console.log('[processSubjectScores] Result count:', result.length, 'with grades:', result.filter(r => r.averageScore > 0).length);
+    return result;
   };
 
   // Validation: Check required parameters on mount
@@ -275,7 +254,15 @@ function RaportArabDetailContent() {
       }
 
       const classData = await classResponse.json();
-      const school = classData.data || {};
+      const classObj = classData.data || {};
+      const school = classObj;
+      
+      console.log('[Raport] Class data loaded:', {
+        classId: classObj.id,
+        className: classObj.name,
+        levelId: classObj.levelId,
+        allProps: Object.keys(classObj),
+      });
 
       // Fetch student data
       const studentResponse = await fetch(`/api/admin/classes/${classId}/students`, {
@@ -287,7 +274,7 @@ function RaportArabDetailContent() {
         name: 'N/A', 
         studentNo: 'N/A', 
         birthDate: '', 
-        class: classData.data?.name || '-'
+        class: classObj.name || '-'
       };
 
       if (studentResponse.ok) {
@@ -299,7 +286,7 @@ function RaportArabDetailContent() {
             name: s.name || 'N/A',
             studentNo: s.studentNo || 'N/A',
             birthDate: s.birthDate || '',
-            class: classData.data?.name || '-',
+            class: classObj.name || '-',
           }));
           setAllStudents(students);
           
@@ -314,62 +301,146 @@ function RaportArabDetailContent() {
               name: foundStudent.name || 'N/A',
               studentNo: foundStudent.studentNo || 'N/A',
               birthDate: foundStudent.birthDate || '',
-              class: classData.data?.name || '-',
+              class: classObj.name || '-',
             };
           }
         }
       }
 
-      // Fetch grades
-      const gradesResponse = await fetch(
-        `/api/teacher/grades?studentId=${studentId}&classId=${classId}&limit=100`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      let grades: Grade[] = [];
-      if (gradesResponse.ok) {
-        const gradesData = await gradesResponse.json();
-        if (gradesData.success && Array.isArray(gradesData.data)) {
-          grades = gradesData.data.map((grade: any) => ({
-            id: grade.id,
-            competencyName: grade.competencyName || 'N/A',
-            subjectName: grade.subjectName || 'N/A',
-            score: String(grade.score || 0),
-            assessmentType: grade.assessmentType || 'DAILY',
-          }));
-        }
-      }
-
       // Fetch class subjects (all subjects registered in this class)
+      let classSubjects: any[] = [];
       const classSubjectsResponse = await fetch(
         `/api/admin/classes/${classId}/subjects`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      let classSubjects: string[] = [];
-      let subjectCodeMap: { [key: string]: string } = {};
-      let subjectArabicMap: { [key: string]: string } = {};
       if (classSubjectsResponse.ok) {
         const classSubjectsData = await classSubjectsResponse.json();
         if (classSubjectsData.success && Array.isArray(classSubjectsData.data)) {
-          classSubjects = classSubjectsData.data
-            .map((cs: any) => cs.subject?.name || cs.subjectName || '')
-            .filter((s: string) => s);
-          
-          // Create mapping of subject name to code and arabic name for sorting and display
-          classSubjectsData.data.forEach((cs: any) => {
-            const subjectName = cs.subject?.name || cs.subjectName || '';
-            const subjectCode = cs.subject?.code || '';
-            const subjectArabic = cs.subject?.nameArabic || '';
-            if (subjectName && subjectCode) {
-              subjectCodeMap[subjectName] = subjectCode;
-            }
-            if (subjectName && subjectArabic) {
-              subjectArabicMap[subjectName] = subjectArabic;
-            }
-          });
+          classSubjects = classSubjectsData.data;
+          console.log('[Raport] Class subjects loaded:', classSubjects.length);
         }
       }
+
+      // Fetch all master subjects for this level
+      let masterSubjects: any[] = [];
+      try {
+        const subjectsResponse = await fetch(
+          `/api/admin/subjects?levelId=${classObj.levelId}&limit=100`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (subjectsResponse.ok) {
+          const subjectsData = await subjectsResponse.json();
+          console.log('[Raport] Master subjects response:', subjectsData);
+          if (subjectsData.success && Array.isArray(subjectsData.data)) {
+            masterSubjects = subjectsData.data;
+            console.log('[Raport] Loaded master subjects:', masterSubjects.length);
+          }
+        } else {
+          console.log('[Raport] Master subjects fetch failed:', subjectsResponse.status);
+        }
+      } catch (err) {
+        console.warn('Could not fetch master subjects by level:', err);
+      }
+
+      // Fetch approved grades first, BEFORE we decide what subjects to display
+      let approvedGrades: any[] = [];
+      try {
+        let approvedData: any = null;
+        
+        try {
+          const approvedResponse = await fetch(
+            `/api/wali-kelas/nilai-approve?studentId=${studentId}&classId=${classId}&limit=100`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+
+          if (approvedResponse.ok) {
+            approvedData = await approvedResponse.json();
+            console.log('[Raport] NilaiApprove endpoint success:', approvedData);
+          } else {
+            console.log('[Raport] NilaiApprove endpoint error:', approvedResponse.status);
+          }
+        } catch (err) {
+          console.warn('[Raport] NilaiApprove fetch error:', err);
+        }
+
+        // If primary endpoint failed, try fallback endpoint
+        if (!approvedData?.success) {
+          console.log('[Raport] Trying fallback: grades-for-approval');
+          const fallbackResponse = await fetch(
+            `/api/wali-kelas/grades-for-approval?classId=${classId}&studentId=${studentId}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+
+          if (fallbackResponse.ok) {
+            approvedData = await fallbackResponse.json();
+            console.log('[Raport] Fallback endpoint success:', approvedData);
+          } else {
+            console.log('[Raport] Fallback endpoint error:', fallbackResponse.status);
+          }
+        }
+
+        // Extract grades from response
+        if (approvedData?.success && approvedData.data) {
+          console.log('[Raport] Response structure:', Object.keys(approvedData.data));
+          
+          if (Array.isArray(approvedData.data)) {
+            // Direct array
+            approvedGrades = approvedData.data;
+            console.log('[Raport] Direct array:', approvedGrades.length);
+          } else if (approvedData.data.data && Array.isArray(approvedData.data.data)) {
+            // Nested structure: { data: [...], total: N }
+            approvedGrades = approvedData.data.data;
+            console.log('[Raport] Extracted nested data.data array:', approvedGrades.length);
+          } else if (approvedData.data.grades && Array.isArray(approvedData.data.grades)) {
+            approvedGrades = approvedData.data.grades;
+            console.log('[Raport] Extracted data.grades array:', approvedGrades.length);
+          } else if (approvedData.data.subjectsByClass && Array.isArray(approvedData.data.subjectsByClass)) {
+            // Handle grades-for-approval format
+            approvedGrades = approvedData.data.subjectsByClass;
+            console.log('[Raport] Extracted data.subjectsByClass array:', approvedGrades.length);
+          } else {
+            console.log('[Raport] Could not extract grades - unexpected response structure');
+            console.log('[Raport] Response was:', JSON.stringify(approvedData.data).slice(0, 200));
+          }
+        } else {
+          console.log('[Raport] No success or data in approvedData');
+        }
+      } catch (err) {
+        console.warn('Could not fetch approved grades:', err);
+      }
+
+      // If we have approved grades but no master subjects, extract subjects from grades
+      let subjectsToDisplay: any[] = [];
+      if (masterSubjects.length > 0) {
+        subjectsToDisplay = masterSubjects;
+        console.log('[Raport] Using master subjects:', masterSubjects.length);
+      } else if (classSubjects.length > 0) {
+        subjectsToDisplay = classSubjects;
+        console.log('[Raport] Using class subjects:', classSubjects.length);
+      } else if (approvedGrades.length > 0) {
+        // Extract unique subjects from approved grades
+        const subjectMap = new Map();
+        approvedGrades.forEach((grade) => {
+          if (grade.subject && !subjectMap.has(grade.subjectId)) {
+            subjectMap.set(grade.subjectId, {
+              id: grade.subjectId,
+              subject: grade.subject,
+              subjectId: grade.subjectId,
+            });
+          }
+        });
+        subjectsToDisplay = Array.from(subjectMap.values());
+        console.log('[Raport] Extracted subjects from approved grades:', subjectsToDisplay.length);
+      }
+      
+      console.log('[Raport] Final state before processing:', {
+        masterSubjects: masterSubjects.length,
+        classSubjects: classSubjects.length,
+        approvedGrades: approvedGrades.length,
+        subjectsToDisplay: subjectsToDisplay.length,
+      });
 
       // Fetch attendance
       const attendanceResponse = await fetch(
@@ -385,7 +456,14 @@ function RaportArabDetailContent() {
         }
       }
 
-      const subjectScores = processSubjectScores(grades, classSubjects, subjectCodeMap, subjectArabicMap);
+      const subjectScores = processSubjectScores(approvedGrades, subjectsToDisplay);
+      
+      console.log('[Raport] Final processing:', {
+        approvedGradesCount: approvedGrades.length,
+        subjectsToDisplayCount: subjectsToDisplay.length,
+        subjectScoresCount: subjectScores.length,
+        subjectScores: subjectScores.slice(0, 3), // First 3 for inspection
+      });
 
       setReportData({
         student,
