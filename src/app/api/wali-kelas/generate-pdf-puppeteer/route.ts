@@ -71,8 +71,14 @@ export async function POST(request: NextRequest) {
         const subjectName = rightSubject.subjectArabicName || rightSubject.subject;
         subjectsHTML += `<td style="text-align: right; white-space: nowrap; padding: 8px;">${subjectName}</td>`;
         subjectsHTML += `<td style="text-align: center; padding: 8px;">${toArabicNumerals(rightSubject.kkm.toString())}</td>`;
-        subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>${toArabicNumerals(rightSubject.averageScore.toFixed(1))}</strong></td>`;
-        subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>${scoreToArabicText(rightSubject.averageScore)}</strong></td>`;
+        
+        if (rightSubject.hasApproval) {
+          subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>${toArabicNumerals(rightSubject.averageScore.toFixed(1))}</strong></td>`;
+          subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>${scoreToArabicText(rightSubject.averageScore)}</strong></td>`;
+        } else {
+          subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>—</strong></td>`;
+          subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>—</strong></td>`;
+        }
       } else {
         subjectsHTML += '<td></td><td></td><td></td><td></td>';
       }
@@ -82,15 +88,21 @@ export async function POST(request: NextRequest) {
         const subjectName = leftSubject.subjectArabicName || leftSubject.subject;
         subjectsHTML += `<td style="text-align: right; white-space: nowrap; padding: 8px;">${subjectName}</td>`;
         subjectsHTML += `<td style="text-align: center; padding: 8px;">${toArabicNumerals(leftSubject.kkm.toString())}</td>`;
-        subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>${toArabicNumerals(leftSubject.averageScore.toFixed(1))}</strong></td>`;
-        subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>${scoreToArabicText(leftSubject.averageScore)}</strong></td>`;
+        
+        if (leftSubject.hasApproval) {
+          subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>${toArabicNumerals(leftSubject.averageScore.toFixed(1))}</strong></td>`;
+          subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>${scoreToArabicText(leftSubject.averageScore)}</strong></td>`;
+        } else {
+          subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>—</strong></td>`;
+          subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>—</strong></td>`;
+        }
       } else {
         subjectsHTML += '<td></td><td></td><td></td><td></td>';
       }
       subjectsHTML += '</tr>';
     }
 
-    const avgScore = (subjectScores.reduce((sum: number, s: any) => sum + s.averageScore, 0) / subjectScores.length).toFixed(1);
+    const avgScore = (subjectScores.reduce((sum: number, s: any) => sum + (s.hasApproval ? s.averageScore : 0), 0) / subjectScores.filter((s: any) => s.hasApproval).length).toFixed(1);
 
     // Convert image to base64
     let logoBase64 = '';

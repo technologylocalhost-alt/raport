@@ -38,6 +38,7 @@ interface SubjectScore {
   averageScore: number;
   letterGrade: string;
   predicate: string;
+  hasApproval?: boolean;
 }
 
 interface ReportData {
@@ -157,11 +158,11 @@ function RaportArabDetailContent() {
       console.log('[gradesMap] Added grade:', grade.subjectId, '→', grade.subject?.name);
     });
 
-    // Process all subjects (master or class subjects)
+    // Process all subjects (with or without approved grades)
     const result = subjects
       .map((subject: any) => {
         const subjectId = subject.subjectId || subject.id;
-        const approved = gradesMap[subjectId];
+        const approved = gradesMap[subjectId]; // Can be undefined if no approval
         
         // Handle both master subjects (flat) and nested subjects
         const subjectName = subject.subject?.name || subject.name || '';
@@ -188,6 +189,7 @@ function RaportArabDetailContent() {
           averageScore,
           letterGrade,
           predicate: getPredicate(letterGrade),
+          hasApproval: !!approved, // Track whether this subject has approval data
         };
       })
       .sort((a, b) => {
@@ -952,14 +954,14 @@ function RaportArabDetailContent() {
                       {/* BLOK KANAN (Right side) */}
                       <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>{rightSubject ? (rightSubject.subjectArabicName || rightSubject.subject) : '—'}</td>
                       <td>{rightSubject ? toArabicNumerals(rightSubject.kkm) : '—'}</td>
-                      <td><strong>{rightSubject ? toArabicNumerals(rightSubject.averageScore.toFixed(1)) : '—'}</strong></td>
-                      <td><strong>{rightSubject ? scoreToArabicText(rightSubject.averageScore) : '—'}</strong></td>
+                      <td><strong>{rightSubject ? (rightSubject.hasApproval ? toArabicNumerals(rightSubject.averageScore.toFixed(1)) : '—') : '—'}</strong></td>
+                      <td><strong>{rightSubject ? (rightSubject.hasApproval ? scoreToArabicText(rightSubject.averageScore) : '—') : '—'}</strong></td>
 
                       {/* BLOK KIRI (Left side) */}
                       <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>{leftSubject ? (leftSubject.subjectArabicName || leftSubject.subject) : '—'}</td>
                       <td>{leftSubject ? toArabicNumerals(leftSubject.kkm) : '—'}</td>
-                      <td><strong>{leftSubject ? toArabicNumerals(leftSubject.averageScore.toFixed(1)) : '—'}</strong></td>
-                      <td><strong>{leftSubject ? scoreToArabicText(leftSubject.averageScore) : '—'}</strong></td>
+                      <td><strong>{leftSubject ? (leftSubject.hasApproval ? toArabicNumerals(leftSubject.averageScore.toFixed(1)) : '—') : '—'}</strong></td>
+                      <td><strong>{leftSubject ? (leftSubject.hasApproval ? scoreToArabicText(leftSubject.averageScore) : '—') : '—'}</strong></td>
                     </tr>
                   );
                 }
@@ -973,7 +975,7 @@ function RaportArabDetailContent() {
             <table style={{ marginTop: '8px' }} className="ar">
             <tbody>
               <tr>
-              <th>الرتبة</th>
+              <th>المجموع الكليّ</th>
               <td className="center">---</td>
               <th>المعدل العام</th>
               <td className="center">
