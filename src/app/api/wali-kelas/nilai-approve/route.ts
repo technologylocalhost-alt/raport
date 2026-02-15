@@ -56,10 +56,10 @@ export async function GET(request: NextRequest) {
 
     console.log('[NilaiApprove] Request params:', { studentId, classId, limit });
 
-    // Validate required parameters
-    if (!studentId || !classId) {
-      console.log('[NilaiApprove] Missing required parameters');
-      return errorResponse('studentId and classId are required', 400);
+    // Validate at least classId is provided
+    if (!classId) {
+      console.log('[NilaiApprove] Missing required classId parameter');
+      return errorResponse('classId is required', 400);
     }
 
     // Verify the class exists
@@ -74,23 +74,26 @@ export async function GET(request: NextRequest) {
 
     console.log('[NilaiApprove] Class found:', classData.id);
 
-    // Verify the student belongs to this class
-    const student = await prisma.student.findFirst({
-      where: {
-        id: studentId,
-        classId: classId,
-      },
-    });
+    // If studentId is provided, verify the student belongs to this class
+    if (studentId) {
+      const student = await prisma.student.findFirst({
+        where: {
+          id: studentId,
+          classId: classId,
+        },
+      });
 
-    if (!student) {
-      console.log('[NilaiApprove] Student not found in class');
-      return errorResponse('Student not found in this class', 404);
+      if (!student) {
+        console.log('[NilaiApprove] Student not found in class');
+        return errorResponse('Student not found in this class', 404);
+      }
     }
 
-    // Fetch approved grades for this student
+    // Fetch approved grades for this class (or specific student if provided)
     const approvedGrades = await prisma.nilaiApprove.findMany({
       where: {
-        studentId: studentId,
+        ...(studentId ? { studentId: studentId } : {}),
+        // Optional: can filter by classId through subject's levelId if needed
       },
       include: {
         subject: {
@@ -106,6 +109,20 @@ export async function GET(request: NextRequest) {
             id: true,
             name: true,
             subjectId: true,
+          },
+        },
+        student: {
+          select: {
+            id: true,
+            name: true,
+            studentNo: true,
+          },
+        },
+        teacher: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
           },
         },
       },
@@ -134,6 +151,8 @@ export async function GET(request: NextRequest) {
           suluk: grade.suluk,
           muazobah: grade.muazobah,
           nazofah: grade.nazofah,
+          averageStudent: grade.averageStudent,
+          averageSubject: grade.averageSubject,
           subject: grade.subject,
           dailyScore: 0,
           midScore: 0,

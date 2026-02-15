@@ -68,8 +68,8 @@ export default function WaliKelasStudentsPage() {
     QUIZ: 'Kuis',
     TASK: 'Tugas',
     PROJECT: 'Proyek',
-    MIDTERM: 'Tengah Semester',
-    FINAL: 'Akhir Semester',
+    MIDTERM: 'UTS',
+    FINAL: 'UAS',
   };
 
   const getAssessmentTypeLabel = (type: string): string => {
@@ -111,6 +111,17 @@ export default function WaliKelasStudentsPage() {
     fetchClassStudents();
     fetchClassInfo();
   }, [classId, currentPage]);
+
+  // Auto-load grades for all students
+  useEffect(() => {
+    if (students.length > 0) {
+      students.forEach((student) => {
+        if (!grades[student.id]) {
+          fetchStudentGrades(student.id);
+        }
+      });
+    }
+  }, [students]);
 
   async function fetchClassInfo() {
     try {
@@ -160,7 +171,7 @@ export default function WaliKelasStudentsPage() {
       }
       
       const skip = (currentPage - 1) * itemsPerPage;
-      const response = await fetch(`/api/admin/classes/${classId}/students?limit=${itemsPerPage}&skip=${skip}`, {
+      const response = await fetch(`/api/admin/classes/${classId}/students?page=${currentPage}&limit=${itemsPerPage}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -207,7 +218,7 @@ export default function WaliKelasStudentsPage() {
       const token = localStorage.getItem('accessToken');
       if (!token) return;
 
-      const response = await fetch(`/api/teacher/competencies?subjectId=${subjectId}`, {
+      const response = await fetch(`/api/wali-kelas/competencies?subjectId=${subjectId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -470,8 +481,8 @@ export default function WaliKelasStudentsPage() {
           ) : (
             <div className="space-y-3">
               {students.map((student) => (
-                <div key={student.id} className="bg-white rounded-lg shadow border">
-                  {/* Student Row */}
+                <div key={student.id} className="bg-white rounded-lg shadow border overflow-hidden">
+                  {/* Student Header */}
                   <div
                     onClick={() => handleOpenGradeModal(student)}
                     className={`p-4 flex items-center justify-between cursor-pointer transition-all ${
@@ -481,12 +492,45 @@ export default function WaliKelasStudentsPage() {
                     }`}
                   >
                     <div className="flex items-center gap-4 flex-1">
-                      <div className="bg-emerald-100 p-3 rounded-full">
+                      <div className="bg-emerald-100 p-3 rounded-full flex-shrink-0">
                         <Users size={20} className="text-emerald-600" />
                       </div>
-                      <div>
-                        <p className="font-semibold text-gray-900">{student.name}</p>
-                        <p className="text-sm text-gray-600">{student.studentNo}</p>
+                      <div className="flex-1">
+                        {/* Column Layout: Name & NIM on left, Assessment Type & Score on right */}
+                        <div className="flex gap-8">
+                          <div className="flex-1">
+                            {/* Student Info Column */}
+                            <p className="font-semibold text-gray-900">{student.name}</p>
+                            <p className="text-sm text-gray-600 mt-1">{student.studentNo}</p>
+                          </div>
+                          <div className="flex-1">
+                            {/* Grades Column - Grid layout */}
+                            {grades[student.id] && grades[student.id].length > 0 ? (
+                              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                                {grades[student.id].slice(0, 8).map((grade) => (
+                                  <div key={grade.id} className="flex flex-col items-center text-center">
+                                    <span className="inline-block bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-1 rounded whitespace-nowrap">
+                                      {getAssessmentTypeLabel(grade.assessmentType)}
+                                    </span>
+                                    <span className="inline-block bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-1 rounded mt-1">
+                                      {grade.score}
+                                    </span>
+                                  </div>
+                                ))}
+                                {grades[student.id].length > 8 && (
+                                  <div className="flex items-center justify-center text-xs text-gray-600">
+                                    +{grades[student.id].length - 8}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <>
+                                <p className="text-xs text-gray-400">-</p>
+                                <p className="text-xs text-gray-400 mt-1">-</p>
+                              </>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
                     <button
@@ -505,38 +549,58 @@ export default function WaliKelasStudentsPage() {
                     </button>
                   </div>
 
-                  {/* Grades List */}
+                  {/* Grades List Detail */}
                   {expandedStudentId === student.id && (
                     <div className="border-t bg-gray-50 p-4">
                       {loadingGrades[student.id] ? (
                         <p className="text-center text-gray-500">Memuat nilai...</p>
                       ) : grades[student.id] && grades[student.id].length > 0 ? (
-                        <div className="space-y-3">
-                          {grades[student.id].map((grade) => (
-                            <div key={grade.id} className="bg-white p-3 rounded-lg border flex justify-between items-start">
-                              <div>
-                                <p className="font-semibold text-gray-900">{grade.competencyName}</p>
-                                <p className="text-sm text-gray-600">
-                                  {getAssessmentTypeLabel(grade.assessmentType)} - {grade.score}
-                                </p>
-                                {grade.notes && <p className="text-sm text-gray-600 mt-1">{grade.notes}</p>}
-                              </div>
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={() => handleEditGrade(grade, student)}
-                                  className="text-blue-600 hover:text-blue-900 p-2"
-                                >
-                                  <Edit2 size={18} />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteGrade(grade.id, student.id)}
-                                  className="text-red-600 hover:text-red-900 p-2"
-                                >
-                                  <Trash2 size={18} />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-gray-200 bg-gray-100">
+                                <th className="px-4 py-2 text-left font-semibold text-gray-700">Kompetensi</th>
+                                <th className="px-4 py-2 text-center font-semibold text-gray-700">Jenis Penilaian</th>
+                                <th className="px-4 py-2 text-center font-semibold text-gray-700">Nilai</th>
+                                <th className="px-4 py-2 text-left font-semibold text-gray-700">Catatan</th>
+                                <th className="px-4 py-2 text-center font-semibold text-gray-700">Aksi</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {grades[student.id].map((grade) => (
+                                <tr key={grade.id} className="border-b border-gray-200 hover:bg-white transition-colors">
+                                  <td className="px-4 py-3 font-medium text-gray-900">{grade.competencyName}</td>
+                                  <td className="px-4 py-3 text-center">
+                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                                      {getAssessmentTypeLabel(grade.assessmentType)}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-emerald-100 text-emerald-800">
+                                      {grade.score}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-gray-600 text-xs max-w-xs truncate" title={grade.notes}>
+                                    {grade.notes || '-'}
+                                  </td>
+                                  <td className="px-4 py-3 text-center space-x-1">
+                                    <button
+                                      onClick={() => handleEditGrade(grade, student)}
+                                      className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                                    >
+                                      <Edit2 size={16} />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteGrade(grade.id, student.id)}
+                                      className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
                       ) : (
                         <p className="text-center text-gray-500">Belum ada nilai</p>

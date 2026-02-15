@@ -174,7 +174,7 @@ export default function WaliKelasSubjectsPage() {
                 <button
                   onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                   disabled={currentPage === 1}
-                  className="px-4 py-3 bg-white border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-emerald-50 hover:border-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-4 py-3 bg-emerald-600 text-white border-2 border-emerald-600 font-semibold rounded-lg hover:bg-emerald-700 transition-colors disabled:bg-gray-300 disabled:border-gray-300 disabled:cursor-not-allowed"
                 >
                   ← Sebelumnya
                 </button>
@@ -196,7 +196,7 @@ export default function WaliKelasSubjectsPage() {
                 <button
                   onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                   disabled={currentPage === totalPages}
-                  className="px-4 py-3 bg-white border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-emerald-50 hover:border-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-4 py-3 bg-emerald-600 text-white border-2 border-emerald-600 font-semibold rounded-lg hover:bg-emerald-700 transition-colors disabled:bg-gray-300 disabled:border-gray-300 disabled:cursor-not-allowed"
                 >
                   Selanjutnya →
                 </button>

@@ -62,6 +62,12 @@ export async function GET(request: NextRequest) {
           select: {
             id: true,
             name: true,
+            level: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
       },
@@ -76,7 +82,11 @@ export async function GET(request: NextRequest) {
         const existing = subjectsMap.get(key);
         // Add class if not already present
         if (!existing.classes.find((c: any) => c.id === ct.class.id)) {
-          existing.classes.push({ id: ct.class.id, name: ct.class.name });
+          existing.classes.push({
+            id: ct.class.id,
+            name: ct.class.name,
+            level: ct.class.level,
+          });
         }
       } else {
         subjectsMap.set(key, {
@@ -86,7 +96,11 @@ export async function GET(request: NextRequest) {
           nameArabic: ct.subject.nameArabic,
           description: ct.subject.description,
           creditHours: ct.subject.creditHours,
-          classes: [{ id: ct.class.id, name: ct.class.name }],
+          classes: [{
+            id: ct.class.id,
+            name: ct.class.name,
+            level: ct.class.level,
+          }],
         });
       }
     });

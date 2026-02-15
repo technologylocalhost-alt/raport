@@ -12,6 +12,10 @@ interface Subject {
   classes: {
     id: string;
     name: string;
+    level?: {
+      id: string;
+      name: string;
+    };
   }[];
 }
 
@@ -150,7 +154,11 @@ export default function TeacherSubjectsPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">{classItem.name}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">-</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                          {classItem.level?.name || '-'}
+                        </span>
+                      </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
                         <div className="line-clamp-2 max-w-xs">{subject.description || '-'}</div>
                       </td>

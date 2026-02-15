@@ -21,6 +21,51 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Get subjectId from query parameters (optional)
+    const subjectId = request.nextUrl.searchParams.get('subjectId');
+
+    // If subjectId is provided, filter by that specific subject
+    if (subjectId) {
+      const competencies = await prisma.competency.findMany({
+        where: {
+          subjectId: subjectId,
+        },
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          subjectId: true,
+          type: true,
+          subject: {
+            select: {
+              name: true,
+              code: true,
+            },
+          },
+        },
+        orderBy: {
+          name: 'asc',
+        },
+      });
+
+      // Transform the data
+      const transformedCompetencies = competencies.map((comp) => ({
+        id: comp.id,
+        name: comp.name,
+        code: comp.code,
+        subjectId: comp.subjectId,
+        type: comp.type,
+        subjectName: comp.subject?.name || '',
+        subjectCode: comp.subject?.code || '',
+      }));
+
+      return NextResponse.json({
+        success: true,
+        competencies: transformedCompetencies,
+        total: transformedCompetencies.length,
+      });
+    }
+
     // Get all subjects taught by the teacher
     const teacherSubjects = await prisma.classTeacher.findMany({
       where: {

@@ -97,7 +97,7 @@ export default function GradesPage() {
       const data = await response.json();
       if (data.success) {
         setGrades(data.data);
-        setTotal(data.total);
+        setTotal(data.pagination?.total || 0);
       } else {
         setErrorMessage(data.message || 'Gagal memuat data nilai');
       }
@@ -554,7 +554,7 @@ export default function GradesPage() {
               <table className="w-full">
                 <thead className="bg-gradient-to-r from-slate-50 to-slate-100 border-b">
                   <tr>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">NIM</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">No Stambuk</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Nama Siswa</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Kelas</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Mata Pelajaran</th>
@@ -606,7 +606,7 @@ export default function GradesPage() {
                   <button
                     onClick={() => setPage(Math.max(1, page - 1))}
                     disabled={page === 1}
-                    className="flex items-center gap-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
+                    className="flex items-center gap-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all font-medium text-sm"
                   >
                     <ChevronLeft size={16} />
                     Sebelumnya
@@ -614,7 +614,7 @@ export default function GradesPage() {
                   <button
                     onClick={() => setPage(Math.min(totalPages, page + 1))}
                     disabled={page === totalPages || totalPages === 0}
-                    className="flex items-center gap-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
+                    className="flex items-center gap-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all font-medium text-sm"
                   >
                     Selanjutnya
                     <ChevronRight size={16} />

@@ -84,6 +84,7 @@ export default function WaliKelasClassManagementPage() {
   const [subjectSearchText, setSubjectSearchText] = useState('');
   const [teacherSearchText, setTeacherSearchText] = useState('');
   const [subjectSearchTeacherText, setSubjectSearchTeacherText] = useState('');
+  const [showSubjectDropdown, setShowSubjectDropdown] = useState(false);
   const itemsPerPage = 10;
 
   useEffect(() => {
@@ -210,6 +211,8 @@ export default function WaliKelasClassManagementPage() {
         setSuccessMessage('Mata pelajaran berhasil ditambahkan');
         setShowSubjectForm(false);
         setSubjectFormData({ subjectId: '' });
+        setSubjectSearchText('');
+        setShowSubjectDropdown(false);
         fetchClassSubjects();
       } else {
         const error = await response.json();
@@ -470,10 +473,14 @@ export default function WaliKelasClassManagementPage() {
                         type="text"
                         placeholder="Cari kode atau nama mata pelajaran..."
                         value={subjectSearchText}
-                        onChange={(e) => setSubjectSearchText(e.target.value)}
+                        onChange={(e) => {
+                          setSubjectSearchText(e.target.value);
+                          setShowSubjectDropdown(true);
+                        }}
+                        onFocus={() => setShowSubjectDropdown(true)}
                         className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:border-emerald-500"
                       />
-                      {subjectSearchText && (
+                      {showSubjectDropdown && subjectSearchText && (
                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border-2 border-emerald-500 rounded-lg shadow-lg max-h-96 overflow-y-auto z-10">
                           {allSubjects
                             .filter((subject) =>
@@ -495,6 +502,7 @@ export default function WaliKelasClassManagementPage() {
                                   onClick={() => {
                                     setSubjectFormData({ subjectId: subject.id });
                                     setSubjectSearchText(`${subject.code} - ${subject.name}`);
+                                    setShowSubjectDropdown(false);
                                   }}
                                   className="w-full text-left px-4 py-3 hover:bg-emerald-50 transition-colors border-b last:border-b-0"
                                 >
@@ -520,6 +528,7 @@ export default function WaliKelasClassManagementPage() {
                       onClick={() => {
                         setShowSubjectForm(false);
                         setSubjectSearchText('');
+                        setShowSubjectDropdown(false);
                         setSubjectFormData({ subjectId: '' });
                       }}
                       className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
@@ -586,7 +595,7 @@ export default function WaliKelasClassManagementPage() {
                   <button
                     onClick={() => setSubjectCurrentPage(Math.max(1, subjectCurrentPage - 1))}
                     disabled={subjectCurrentPage === 1}
-                    className="px-4 py-3 bg-white border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-emerald-50 hover:border-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-gray-300"
+                    className="px-4 py-3 bg-emerald-600 text-white border-2 border-emerald-600 font-semibold rounded-lg hover:bg-emerald-700 transition-colors disabled:bg-gray-300 disabled:border-gray-300 disabled:cursor-not-allowed"
                   >
                     ← Sebelumnya
                   </button>
@@ -608,7 +617,7 @@ export default function WaliKelasClassManagementPage() {
                   <button
                     onClick={() => setSubjectCurrentPage(Math.min(Math.ceil(classSubjects.length / itemsPerPage), subjectCurrentPage + 1))}
                     disabled={subjectCurrentPage === Math.ceil(classSubjects.length / itemsPerPage)}
-                    className="px-4 py-3 bg-white border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-emerald-50 hover:border-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-gray-300"
+                    className="px-4 py-3 bg-emerald-600 text-white border-2 border-emerald-600 font-semibold rounded-lg hover:bg-emerald-700 transition-colors disabled:bg-gray-300 disabled:border-gray-300 disabled:cursor-not-allowed"
                   >
                     Selanjutnya →
                   </button>
@@ -815,7 +824,7 @@ export default function WaliKelasClassManagementPage() {
                   <button
                     onClick={() => setTeacherCurrentPage(Math.max(1, teacherCurrentPage - 1))}
                     disabled={teacherCurrentPage === 1}
-                    className="px-4 py-3 bg-white border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-emerald-50 hover:border-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-gray-300"
+                    className="px-4 py-3 bg-emerald-600 text-white border-2 border-emerald-600 font-semibold rounded-lg hover:bg-emerald-700 transition-colors disabled:bg-gray-300 disabled:border-gray-300 disabled:cursor-not-allowed"
                   >
                     ← Sebelumnya
                   </button>
@@ -837,7 +846,7 @@ export default function WaliKelasClassManagementPage() {
                   <button
                     onClick={() => setTeacherCurrentPage(Math.min(Math.ceil(classTeachers.length / itemsPerPage), teacherCurrentPage + 1))}
                     disabled={teacherCurrentPage === Math.ceil(classTeachers.length / itemsPerPage)}
-                    className="px-4 py-3 bg-white border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-emerald-50 hover:border-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-gray-300"
+                    className="px-4 py-3 bg-emerald-600 text-white border-2 border-emerald-600 font-semibold rounded-lg hover:bg-emerald-700 transition-colors disabled:bg-gray-300 disabled:border-gray-300 disabled:cursor-not-allowed"
                   >
                     Selanjutnya →
                   </button>

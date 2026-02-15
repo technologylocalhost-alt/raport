@@ -36,6 +36,7 @@ interface SubjectScore {
   kkm: number;
   scores?: { type: string; score: number }[];
   averageScore: number;
+  rawScore: number;  // Score dari NilaiApprove.score untuk kolom الأرقام
   letterGrade: string;
   predicate: string;
   hasApproval?: boolean;
@@ -147,51 +148,101 @@ function RaportArabDetailContent() {
     return result;
   };
 
+  // Helper: Normalize subject name for deduplication (removes special chars, extra spaces)
+  const normalizeSubjectName = (name: string): string => {
+    return name
+      .toLowerCase()
+      .replace(/[`'´ʹ]/g, '')  // Remove backticks and similar marks
+      .replace(/\s+/g, ' ')    // Normalize whitespace
+      .trim();
+  };
+
   // Helper: Process subject scores with approved grades
   const processSubjectScores = (approvedGrades: any[], subjects: any[]): SubjectScore[] => {
-    console.log('[processSubjectScores] Input:', { gradesCount: approvedGrades.length, subjectsCount: subjects.length });
     
     // Create a map of approved grades by subject ID
     const gradesMap: { [key: string]: any } = {};
     approvedGrades.forEach((grade) => {
       gradesMap[grade.subjectId] = grade;
-      console.log('[gradesMap] Added grade:', grade.subjectId, '→', grade.subject?.name);
     });
 
     // Process all subjects (with or without approved grades)
-    const result = subjects
-      .map((subject: any) => {
-        const subjectId = subject.subjectId || subject.id;
-        const approved = gradesMap[subjectId]; // Can be undefined if no approval
-        
-        // Handle both master subjects (flat) and nested subjects
-        const subjectName = subject.subject?.name || subject.name || '';
-        const subjectCode = subject.subject?.code || subject.code || '';
-        const subjectArabicName = subject.subject?.nameArabic || subject.nameArabic || '';
-        
-        const averageScore = approved ? parseFloat(approved.finalScore || approved.midScore || 0) : 0;
-        const letterGrade = getLetterGrade(averageScore);
+    const resultMap: { [key: string]: any } = {};
+    
+    subjects.forEach((subject: any) => {
+      const subjectId = subject.subjectId || subject.id;
+      const subjectCode = subject.subject?.code || subject.code || '';
+      const approved = gradesMap[subjectId];
+      
+      // Handle both master subjects (flat) and nested subjects
+      const subjectName = subject.subject?.name || subject.name || '';
+      const subjectArabicName = subject.subject?.nameArabic || subject.nameArabic || '';
+      
+      // Try to get averageSubject from database, otherwise fallback to finalScore/midScore
+      let averageScore = 0;
+      let rawScore = 0;  // Score dari NilaiApprove.score (atau fallback ke midScore/finalScore)
+      if (approved) {
+        if (approved.averageSubject && approved.averageSubject > 0) {
+          averageScore = parseFloat(approved.averageSubject);
+        } else {
+          averageScore = parseFloat(approved.finalScore || approved.midScore || 0);
+        }
+        // Get raw score - try score field first, then fallback to finalScore or midScore
+        rawScore = parseFloat(approved.score || approved.finalScore || approved.midScore || 0);
+      }
+      
+      const letterGrade = getLetterGrade(averageScore);
+      
+      const newSubject = {
+        subject: subjectName,
+        subjectCode: subjectCode,
+        subjectArabicName: subjectArabicName,
+        kkm: 0,  // KKM tidak ada di database, default 0
+        scores: approved 
+          ? [
+              { type: 'DAILY', score: parseFloat(approved.dailyScore || 0) },
+              { type: 'MID', score: parseFloat(approved.midScore || 0) },
+              { type: 'FINAL', score: parseFloat(approved.finalScore || 0) },
+            ].filter(s => s.score > 0)
+          : [],
+        averageScore,
+        rawScore,  // Score dari NilaiApprove.score untuk kolom الأرقام
+        letterGrade,
+        predicate: getPredicate(letterGrade),
+        hasApproval: !!approved,
+      };
 
-        console.log('[processSubjectScores] Subject:', { id: subjectId, name: subjectName, hasGrade: !!approved, score: averageScore });
-
-        return {
-          subject: subjectName,
-          subjectCode: subjectCode,
-          subjectArabicName: subjectArabicName,
-          kkm: subject.subject?.kkm || subject.kkm || 6,
-          scores: approved 
-            ? [
-                { type: 'DAILY', score: parseFloat(approved.dailyScore || 0) },
-                { type: 'MID', score: parseFloat(approved.midScore || 0) },
-                { type: 'FINAL', score: parseFloat(approved.finalScore || 0) },
-              ].filter(s => s.score > 0)
-            : [],
-          averageScore,
-          letterGrade,
-          predicate: getPredicate(letterGrade),
-          hasApproval: !!approved, // Track whether this subject has approval data
-        };
-      })
+      // Deduplicate using multiple strategies:
+      // 1. Primary key: subject code if present
+      // 2. Fallback: normalized subject name
+      // 3. Also check normalized version to catch variants with special chars
+      let primaryKey = subjectCode || normalizeSubjectName(subjectName);
+      let normalizedNameKey = normalizeSubjectName(subjectName);
+      
+      // Check both keys for duplicates
+      let existingKey = primaryKey;
+      let existing = resultMap[primaryKey];
+      
+      if (!existing && primaryKey !== normalizedNameKey) {
+        // If primary key didn't find it, try the normalized name key
+        existingKey = normalizedNameKey;
+        existing = resultMap[normalizedNameKey];
+      }
+      
+      if (existing) {
+        // Keep the one with approval, or if both have approval/no-approval, keep highest score
+        if (newSubject.hasApproval && !existing.hasApproval) {
+          resultMap[existingKey] = newSubject;
+        } else if (newSubject.hasApproval && existing.hasApproval && newSubject.averageScore > existing.averageScore) {
+          resultMap[existingKey] = newSubject;
+        }
+      } else {
+        // Use primary key as the storage key
+        resultMap[primaryKey] = newSubject;
+      }
+    });
+    
+    const result = Object.values(resultMap)
       .sort((a, b) => {
         // Sort by subject code alphanumeric (A1, A2, B1, B2, etc)
         const codeA = a.subjectCode || '';
@@ -201,7 +252,6 @@ function RaportArabDetailContent() {
         return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
       });
     
-    console.log('[processSubjectScores] Result count:', result.length, 'with grades:', result.filter(r => r.averageScore > 0).length);
     return result;
   };
 
@@ -460,11 +510,33 @@ function RaportArabDetailContent() {
 
       const subjectScores = processSubjectScores(approvedGrades, subjectsToDisplay);
       
+      // Debug: Check for IMLA ARABI entries (more specific filter)
+      const imlaEntries = subjectScores.filter(s => 
+        (s.subjectCode === 'A1') || 
+        (s.subject === 'IMLA` ARABI' || s.subject === 'IMLA ARABI') ||
+        (s.subjectArabicName?.includes('الإمـلاء') && !s.subjectArabicName?.includes('إنجليزي'))
+      );
+      console.log('[Raport] IMLA ARABI entries in subjectScores:', imlaEntries);
+      console.log('[Raport] IMLA ARABI detailed:', imlaEntries.map(e => ({
+        subject: e.subject,
+        code: e.subjectCode,
+        averageScore: e.averageScore,
+        kkm: e.kkm,
+        hasApproval: e.hasApproval,
+        letterGrade: e.letterGrade,
+      })));
+      console.log('[Raport] All subjectScores (first 5):', subjectScores.slice(0, 5).map(s => ({
+        subject: s.subject,
+        code: s.subjectCode,
+        averageScore: s.averageScore,
+        kkm: s.kkm,
+        hasApproval: s.hasApproval,
+      })));
+      
       console.log('[Raport] Final processing:', {
         approvedGradesCount: approvedGrades.length,
         subjectsToDisplayCount: subjectsToDisplay.length,
         subjectScoresCount: subjectScores.length,
-        subjectScores: subjectScores.slice(0, 3), // First 3 for inspection
       });
 
       setReportData({
@@ -953,15 +1025,15 @@ function RaportArabDetailContent() {
                     <tr key={i}>
                       {/* BLOK KANAN (Right side) */}
                       <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>{rightSubject ? (rightSubject.subjectArabicName || rightSubject.subject) : '—'}</td>
-                      <td>{rightSubject ? toArabicNumerals(rightSubject.kkm) : '—'}</td>
                       <td><strong>{rightSubject ? (rightSubject.hasApproval ? toArabicNumerals(rightSubject.averageScore.toFixed(1)) : '—') : '—'}</strong></td>
-                      <td><strong>{rightSubject ? (rightSubject.hasApproval ? scoreToArabicText(rightSubject.averageScore) : '—') : '—'}</strong></td>
+                      <td><strong>{rightSubject ? (rightSubject.hasApproval ? toArabicNumerals(rightSubject.rawScore.toFixed(1)) : '—') : '—'}</strong></td>
+                      <td><strong>{rightSubject ? (rightSubject.hasApproval ? scoreToArabicText(rightSubject.rawScore) : '—') : '—'}</strong></td>
 
                       {/* BLOK KIRI (Left side) */}
                       <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>{leftSubject ? (leftSubject.subjectArabicName || leftSubject.subject) : '—'}</td>
-                      <td>{leftSubject ? toArabicNumerals(leftSubject.kkm) : '—'}</td>
                       <td><strong>{leftSubject ? (leftSubject.hasApproval ? toArabicNumerals(leftSubject.averageScore.toFixed(1)) : '—') : '—'}</strong></td>
-                      <td><strong>{leftSubject ? (leftSubject.hasApproval ? scoreToArabicText(leftSubject.averageScore) : '—') : '—'}</strong></td>
+                      <td><strong>{leftSubject ? (leftSubject.hasApproval ? toArabicNumerals(leftSubject.rawScore.toFixed(1)) : '—') : '—'}</strong></td>
+                      <td><strong>{leftSubject ? (leftSubject.hasApproval ? scoreToArabicText(leftSubject.rawScore) : '—') : '—'}</strong></td>
                     </tr>
                   );
                 }
