@@ -160,7 +160,7 @@ export default function PenilaianPage() {
           no: s.nisn,
         }));
         console.log(`[fetchStudentsForClass] Fetched ${students.length} students`);
-        setClassStudents(students.sort((a, b) => a.name.localeCompare(b.name)));
+        setClassStudents(students.sort((a: any, b: any) => a.name.localeCompare(b.name)));
       } else {
         console.error(`[fetchStudentsForClass] Error: ${response.status}`);
       }
@@ -797,6 +797,7 @@ export default function PenilaianPage() {
         isOpen={isApprovalModalOpen}
         onClose={() => setIsApprovalModalOpen(false)}
         onSuccess={() => fetchGrades()}
+        selectedClass={selectedClass}
       />
     </div>
   );

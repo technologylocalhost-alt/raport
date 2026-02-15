@@ -29,6 +29,7 @@ interface Grade {
   assessmentType: string;
   notes?: string;
   createdAt: string;
+  isApproved?: boolean;
 }
 
 interface ApiResponse {
@@ -99,6 +100,7 @@ export default function TeacherStudentsPage() {
   
   // Grades states
   const [grades, setGrades] = useState<{ [key: string]: Grade[] }>({});
+  const [approvedGrades, setApprovedGrades] = useState<{ [key: string]: Set<string> }>({}); // Map of studentId -> Set of gradeIds
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
   const [loadingGrades, setLoadingGrades] = useState<{ [key: string]: boolean }>({});
 
@@ -255,6 +257,8 @@ export default function TeacherStudentsPage() {
           console.log('Grades state updated, new state:', updated);
           return updated;
         });
+        // Fetch approved grades for this student
+        await fetchApprovedGrades(studentId);
       }
     } catch (error) {
       console.error('Error fetching grades:', error);
@@ -262,6 +266,35 @@ export default function TeacherStudentsPage() {
       setLoadingGrades((prev) => ({ ...prev, [studentId]: false }));
     }
   }
+
+  async function fetchApprovedGrades(studentId: string) {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) return;
+
+      const response = await fetch(
+        `/api/teacher/approved-grades?studentId=${studentId}&subjectId=${subjectId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      const data = await response.json();
+      if (data.success && data.data) {
+        // Create a Set of approved grade IDs for this student
+        const approvedIds = new Set<string>(data.data.map((grade: any) => `${grade.competencyId}-${grade.assessmentType}`));
+        setApprovedGrades((prev) => ({
+          ...prev,
+          [studentId]: approvedIds,
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching approved grades:', error);
+    }
+  }
+
+  const isGradeApproved = (grade: Grade, studentId: string): boolean => {
+    const key = `${grade.competencyId}-${grade.assessmentType}`;
+    return Boolean(approvedGrades[studentId]?.has(key));
+  };
 
   const handleOpenGradeModal = async (student: Student) => {
     setSelectedStudent(student);
@@ -361,6 +394,12 @@ export default function TeacherStudentsPage() {
   };
 
   const handleEditGrade = (grade: Grade, student: Student) => {
+    // Check if grade is approved
+    if (isGradeApproved(grade, student.id)) {
+      setGradeError('Tidak dapat mengedit nilai yang sudah disetujui oleh Wali Kelas');
+      return;
+    }
+
     setSelectedStudent(student);
     setEditingGradeId(grade.id);
     setGradeFormData({
@@ -375,7 +414,13 @@ export default function TeacherStudentsPage() {
     }
   };
 
-  const handleDeleteGrade = async (gradeId: string, studentId: string) => {
+  const handleDeleteGrade = async (gradeId: string, studentId: string, grade: Grade) => {
+    // Check if grade is approved
+    if (isGradeApproved(grade, studentId)) {
+      setGradeError('Tidak dapat menghapus nilai yang sudah disetujui oleh Wali Kelas');
+      return;
+    }
+
     if (!confirm('Hapus nilai ini?')) return;
 
     try {
@@ -553,8 +598,17 @@ export default function TeacherStudentsPage() {
                             </thead>
                             <tbody>
                               {grades[student.id].map((grade) => (
-                                <tr key={grade.id} className="border-b border-gray-200 hover:bg-white transition-colors">
-                                  <td className="px-4 py-3 font-medium text-gray-900">{grade.competencyName}</td>
+                                <tr key={grade.id} className={`border-b border-gray-200 transition-colors ${isGradeApproved(grade, student.id) ? 'bg-yellow-50' : 'hover:bg-white'}`}>
+                                  <td className="px-4 py-3 font-medium text-gray-900">
+                                    <div className="flex items-center gap-2">
+                                      <span>{grade.competencyName}</span>
+                                      {isGradeApproved(grade, student.id) && (
+                                        <span className="inline-block bg-yellow-200 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">
+                                          ✓ Approved
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
                                   <td className="px-4 py-3 text-center">
                                     <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
                                       {getAssessmentTypeLabel(grade.assessmentType)}
@@ -571,13 +625,25 @@ export default function TeacherStudentsPage() {
                                   <td className="px-4 py-3 text-center space-x-1">
                                     <button
                                       onClick={() => handleEditGrade(grade, student)}
-                                      className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                                      disabled={isGradeApproved(grade, student.id)}
+                                      className={`inline-flex items-center gap-1 px-2 py-1 rounded transition-colors ${
+                                        isGradeApproved(grade, student.id)
+                                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'
+                                          : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                      }`}
+                                      title={isGradeApproved(grade, student.id) ? 'Nilai sudah disetujui, tidak dapat diedit' : 'Edit nilai'}
                                     >
                                       <Edit2 size={16} />
                                     </button>
                                     <button
-                                      onClick={() => handleDeleteGrade(grade.id, student.id)}
-                                      className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
+                                      onClick={() => handleDeleteGrade(grade.id, student.id, grade)}
+                                      disabled={isGradeApproved(grade, student.id)}
+                                      className={`inline-flex items-center gap-1 px-2 py-1 rounded transition-colors ${
+                                        isGradeApproved(grade, student.id)
+                                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'
+                                          : 'bg-red-100 text-red-700 hover:bg-red-200'
+                                      }`}
+                                      title={isGradeApproved(grade, student.id) ? 'Nilai sudah disetujui, tidak dapat dihapus' : 'Hapus nilai'}
                                     >
                                       <Trash2 size={16} />
                                     </button>

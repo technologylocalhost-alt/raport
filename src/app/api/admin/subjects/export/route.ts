@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
 
     // Map to export format
     const exportData = subjects.map((subject) => ({
-      Jenjang: subject.level.name,
+      Jenjang: subject.level?.name || 'N/A',
       Kode: subject.code,
       Nama: subject.name,
       'Nama Arab': subject.nameArabic || '',

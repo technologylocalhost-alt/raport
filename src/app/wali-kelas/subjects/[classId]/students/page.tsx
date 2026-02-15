@@ -29,6 +29,7 @@ interface Grade {
   assessmentType: string;
   notes?: string;
   createdAt: string;
+  isApproved?: boolean;
 }
 
 interface ApiResponse {
@@ -99,6 +100,7 @@ export default function WaliKelasStudentsPage() {
   
   // Grades states
   const [grades, setGrades] = useState<{ [key: string]: Grade[] }>({});
+  const [approvedGrades, setApprovedGrades] = useState<{ [key: string]: Set<string> }>({}); // Map of studentId -> Set of gradeIds
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
   const [loadingGrades, setLoadingGrades] = useState<{ [key: string]: boolean }>({});
   
@@ -258,11 +260,37 @@ export default function WaliKelasStudentsPage() {
           console.log('Grades state updated, new state:', updated);
           return updated;
         });
+        // Fetch approved grades for this student
+        await fetchApprovedGrades(studentId);
       }
     } catch (error) {
       console.error('Error fetching grades:', error);
     } finally {
       setLoadingGrades((prev) => ({ ...prev, [studentId]: false }));
+    }
+  }
+
+  async function fetchApprovedGrades(studentId: string) {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) return;
+
+      const response = await fetch(
+        `/api/wali-kelas/approved-grades?studentId=${studentId}&subjectId=${subjectId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      const data = await response.json();
+      if (data.success && data.data) {
+        // Create a Set of approved grade IDs for this student
+        const approvedIds = new Set<string>(data.data.map((grade: any) => `${grade.competencyId}-${grade.assessmentType}`));
+        setApprovedGrades((prev) => ({
+          ...prev,
+          [studentId]: approvedIds,
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching approved grades:', error);
     }
   }
 
@@ -414,6 +442,11 @@ export default function WaliKelasStudentsPage() {
     }
   };
 
+  const isGradeApproved = (grade: Grade, studentId: string): boolean => {
+    const key = `${grade.competencyId}-${grade.assessmentType}`;
+    return Boolean(approvedGrades[studentId]?.has(key));
+  };
+
   const toggleStudentGrades = (studentId: string) => {
     if (expandedStudentId === studentId) {
       setExpandedStudentId(null);
@@ -563,42 +596,69 @@ export default function WaliKelasStudentsPage() {
                                 <th className="px-4 py-2 text-center font-semibold text-gray-700">Jenis Penilaian</th>
                                 <th className="px-4 py-2 text-center font-semibold text-gray-700">Nilai</th>
                                 <th className="px-4 py-2 text-left font-semibold text-gray-700">Catatan</th>
+                                <th className="px-4 py-2 text-center font-semibold text-gray-700">Status</th>
                                 <th className="px-4 py-2 text-center font-semibold text-gray-700">Aksi</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {grades[student.id].map((grade) => (
-                                <tr key={grade.id} className="border-b border-gray-200 hover:bg-white transition-colors">
-                                  <td className="px-4 py-3 font-medium text-gray-900">{grade.competencyName}</td>
-                                  <td className="px-4 py-3 text-center">
-                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
-                                      {getAssessmentTypeLabel(grade.assessmentType)}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-3 text-center">
-                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-emerald-100 text-emerald-800">
-                                      {grade.score}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-3 text-gray-600 text-xs max-w-xs truncate" title={grade.notes}>
-                                    {grade.notes || '-'}
-                                  </td>
-                                  <td className="px-4 py-3 text-center space-x-1">
-                                    <button
-                                      onClick={() => handleEditGrade(grade, student)}
-                                      className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
-                                    >
-                                      <Edit2 size={16} />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteGrade(grade.id, student.id)}
-                                      className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
-                                    >
-                                      <Trash2 size={16} />
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
+                              {grades[student.id].map((grade) => {
+                                const isApproved = isGradeApproved(grade, student.id);
+                                return (
+                                  <tr key={grade.id} className={`border-b border-gray-200 transition-colors ${isApproved ? 'bg-blue-50 hover:bg-blue-50' : 'hover:bg-white'}`}>
+                                    <td className="px-4 py-3 font-medium text-gray-900">{grade.competencyName}</td>
+                                    <td className="px-4 py-3 text-center">
+                                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                                        {getAssessmentTypeLabel(grade.assessmentType)}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-center">
+                                      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-emerald-100 text-emerald-800">
+                                        {grade.score}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-gray-600 text-xs max-w-xs truncate" title={grade.notes}>
+                                      {grade.notes || '-'}
+                                    </td>
+                                    <td className="px-4 py-3 text-center">
+                                      {isApproved ? (
+                                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                                          ✓ Disetujui
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
+                                          Pending
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3 text-center space-x-1">
+                                      <button
+                                        onClick={() => handleEditGrade(grade, student)}
+                                        disabled={isApproved}
+                                        className={`inline-flex items-center gap-1 px-2 py-1 rounded transition-colors ${
+                                          isApproved 
+                                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                                            : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                        }`}
+                                        title={isApproved ? 'Nilai sudah disetujui, tidak bisa diedit' : 'Edit'}
+                                      >
+                                        <Edit2 size={16} />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteGrade(grade.id, student.id)}
+                                        disabled={isApproved}
+                                        className={`inline-flex items-center gap-1 px-2 py-1 rounded transition-colors ${
+                                          isApproved 
+                                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                                            : 'bg-red-100 text-red-700 hover:bg-red-200'
+                                        }`}
+                                        title={isApproved ? 'Nilai sudah disetujui, tidak bisa dihapus' : 'Hapus'}
+                                      >
+                                        <Trash2 size={16} />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>

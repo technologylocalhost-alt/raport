@@ -22,16 +22,17 @@ interface ApprovalModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  selectedClass?: string;
 }
 
-export default function ApprovalModal({ isOpen, onClose, onSuccess }: ApprovalModalProps) {
+export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClass }: ApprovalModalProps) {
   const [subjects, setSubjects] = useState<SubjectApproval[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [approving, setApproving] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [selectedSubject, setSelectedSubject] = useState<SubjectApproval | null>(null);
-  const [classId, setClassId] = useState<string>('');
+  const [selectedClassName, setSelectedClassName] = useState<string>('');
   const [formData, setFormData] = useState({
     suluk: '',
     muazobah: '',
@@ -40,15 +41,27 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess }: ApprovalMo
 
   useEffect(() => {
     if (isOpen) {
+      setSelectedSubject(null);
+      setFormData({ suluk: '', muazobah: '', nazofah: '' });
+      // Jika ada selectedClass dari props, langsung set ke modal
+      if (selectedClass) {
+        setSelectedClassName(selectedClass);
+      } else {
+        setSelectedClassName('');
+      }
       fetchApprovableSubjects();
     }
-  }, [isOpen]);
+  }, [isOpen, selectedClass]);
 
   async function fetchApprovableSubjects() {
     try {
       setIsLoading(true);
       setError('');
       const token = localStorage.getItem('accessToken');
+
+      if (!token) {
+        throw new Error('Token tidak ditemukan. Silakan login kembali.');
+      }
 
       const response = await fetch('/api/wali-kelas/grades-for-approval', {
         headers: {
@@ -57,7 +70,13 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess }: ApprovalMo
       });
 
       if (!response.ok) {
-        throw new Error('Gagal memuat data penilaian');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[fetchApprovableSubjects] API Error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData,
+        });
+        throw new Error(errorData.error || `Gagal memuat data penilaian (${response.status})`);
       }
 
       const data = await response.json();
@@ -90,16 +109,18 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess }: ApprovalMo
 
             if (approvalResponse.ok) {
               const approvalDataResponse = await approvalResponse.json();
-              const approvedGrades = approvalDataResponse.data?.data || [];
+              const allApprovedGrades = approvalDataResponse.data?.data || [];
               
-              // Check if all students have approved grades for this subject
-              approvedData = approvedGrades.filter(
+              // Filter approved data untuk subject ini
+              approvedData = allApprovedGrades.filter(
                 (g: any) => g.subjectId === subject.subjectId
               );
               
-              isFullyApproved = approvedData.length >= subject.totalStudents;
+              // Get unique students yang approved untuk subject ini
+              const approvedStudents = new Set(approvedData.map((g: any) => g.studentId));
+              isFullyApproved = approvedStudents.size >= subject.totalStudents;
               
-              console.log(`[ApprovalModal] Subject ${subject.subjectName}: approvedData=${approvedData.length}, totalStudents=${subject.totalStudents}, isFullyApproved=${isFullyApproved}`);
+              console.log(`[ApprovalModal] Subject ${subject.subjectName}: approvedStudents=${approvedStudents.size}, totalStudents=${subject.totalStudents}, isFullyApproved=${isFullyApproved}`);
             } else {
               const errorData = await approvalResponse.json();
               console.error(`[ApprovalModal] Approval fetch failed: ${approvalResponse.status}`, errorData);
@@ -150,7 +171,14 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess }: ApprovalMo
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || errorData.data?.message || 'Gagal menyetujui penilaian');
+        const errorMessage = errorData.error || errorData.data?.message || 'Gagal menyetujui penilaian';
+        
+        // Handle 409 Conflict specifically
+        if (response.status === 409) {
+          throw new Error(`Data sudah di-approve: ${errorMessage}`);
+        }
+        
+        throw new Error(errorMessage);
       }
 
       const result = await response.json();
@@ -174,6 +202,12 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess }: ApprovalMo
 
   if (!isOpen) return null;
 
+  const handleClose = () => {
+    setSelectedSubject(null);
+    setFormData({ suluk: '', muazobah: '', nazofah: '' });
+    onClose();
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
       <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full my-8">
@@ -181,7 +215,7 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess }: ApprovalMo
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-2xl font-bold text-gray-900">Setujui Penilaian</h2>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="text-gray-500 hover:text-gray-700"
           >
             <X size={24} />
@@ -204,69 +238,79 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess }: ApprovalMo
             </div>
           )}
 
-          {isLoading ? (
+          {!selectedClass ? (
+            <div className="text-center py-8 text-gray-500">
+              Silakan pilih kelas terlebih dahulu di filter data
+            </div>
+          ) : isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader size={24} className="animate-spin text-emerald-600" />
             </div>
-          ) : subjects.length === 0 ? (
+          ) : subjects.filter((s) => s.className === selectedClass).length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              Tidak ada penilaian yang siap disetujui
+              Tidak ada penilaian yang siap disetujui untuk kelas {selectedClass}
             </div>
           ) : (
-            <div className="space-y-3">
-              {subjects.map((subject) => (
-                <div
-                  key={`${subject.subjectId}-${subject.classId}`}
-                  className="border border-gray-200 rounded-lg p-4 hover:border-emerald-500 transition-colors"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="font-semibold text-gray-900">{subject.subjectName}</h3>
-                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                          {subject.className}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-600">
-                        <div>
-                          <p className="text-gray-500">Total Siswa</p>
-                          <p className="font-semibold text-gray-900">{subject.totalStudents}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-500">Penilaian</p>
-                          <p className="font-semibold text-gray-900">{subject.gradesCount}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-500">Guru</p>
-                          <p className="font-semibold text-gray-900">{subject.teachersCount}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-500">Status</p>
-                          <p className={`font-semibold ${subject.isComplete ? 'text-green-600' : 'text-amber-600'}`}>
-                            {subject.isComplete ? 'Lengkap' : 'Belum Lengkap'}
-                          </p>
-                        </div>
-                      </div>
-                      {subject.teachers.length > 0 && (
-                        <p className="text-xs text-gray-500 mt-2">
-                          Guru: {subject.teachers.join(', ')}
-                        </p>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => setSelectedSubject(subject)}
-                      disabled={approving !== null && !subject.isFullyApproved}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-                        subject.isFullyApproved
-                          ? 'bg-green-100 text-green-700 hover:bg-green-200 cursor-pointer'
-                          : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed'
-                      }`}
+            // Subject Selection (direct, no class selection step)
+            <div className="space-y-4">
+              <div className="text-sm font-medium text-gray-700 mb-3">
+                Kelas: <span className="font-semibold text-emerald-600">{selectedClass}</span>
+              </div>
+              <div className="space-y-3">
+                {subjects
+                  .filter((s) => s.className === selectedClass)
+                  .map((subject) => (
+                    <div
+                      key={`${subject.subjectId}-${subject.classId}`}
+                      className="border border-gray-200 rounded-lg p-4 hover:border-emerald-500 transition-colors"
                     >
-                      {subject.isFullyApproved ? '✓ Sudah Disetujui' : 'Setujui'}
-                    </button>
-                  </div>
-                </div>
-              ))}
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h3 className="font-semibold text-gray-900">{subject.subjectName}</h3>
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-600">
+                            <div>
+                              <p className="text-gray-500">Total Siswa</p>
+                              <p className="font-semibold text-gray-900">{subject.totalStudents}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Penilaian</p>
+                              <p className="font-semibold text-gray-900">{subject.gradesCount}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Guru</p>
+                              <p className="font-semibold text-gray-900">{subject.teachersCount}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Status</p>
+                              <p className={`font-semibold ${subject.isComplete ? 'text-green-600' : 'text-amber-600'}`}>
+                                {subject.isComplete ? 'Lengkap' : 'Belum Lengkap'}
+                              </p>
+                            </div>
+                          </div>
+                          {subject.teachers.length > 0 && (
+                            <p className="text-xs text-gray-500 mt-2">
+                              Guru: {subject.teachers.join(', ')}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => subject.isFullyApproved ? null : setSelectedSubject(subject)}
+                          disabled={subject.isFullyApproved || (approving !== null && !subject.isFullyApproved)}
+                          title={subject.isFullyApproved ? 'Mata pelajaran ini sudah disetujui dan tidak dapat diubah' : 'Klik untuk menyetujui penilaian'}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                            subject.isFullyApproved
+                              ? 'bg-green-100 text-green-700 cursor-not-allowed opacity-75'
+                              : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed'
+                          }`}
+                        >
+                          {subject.isFullyApproved ? '✓ Sudah Disetujui' : 'Setujui'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
             </div>
           )}
         </div>
@@ -291,12 +335,29 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess }: ApprovalMo
               </div>
 
               <div className="p-6 space-y-6 max-h-96 overflow-y-auto">
-                {console.log('[Debug] Modal opened with selectedSubject:', {
-                  subjectName: selectedSubject.subjectName,
-                  isFullyApproved: selectedSubject.isFullyApproved,
-                  approvedDataCount: selectedSubject.approvedData?.length || 0,
-                  approvedData: selectedSubject.approvedData,
-                })}
+                {/* Approval Status Banner */}
+                {selectedSubject.isFullyApproved ? (
+                  <div className="border-2 border-green-300 rounded-lg p-4 bg-green-50">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle size={24} className="text-green-600 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="font-bold text-green-900">✓ Sudah Disetujui</p>
+                        <p className="text-xs text-green-800 mt-1">Mata pelajaran ini telah disetujui oleh Wali Kelas dan tidak dapat diubah</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="border-2 border-amber-300 rounded-lg p-4 bg-amber-50">
+                    <div className="flex items-center gap-3">
+                      <AlertCircle size={24} className="text-amber-600 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="font-bold text-amber-900">⊗ Belum Disetujui</p>
+                        <p className="text-xs text-amber-800 mt-1">Silakan review data dan klik tombol Setujui & Simpan untuk menyetujui</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Subject & Class Info */}
                 <div className="border border-blue-200 rounded-lg p-4 bg-blue-50">
                   <div className="grid grid-cols-2 gap-4 text-sm">

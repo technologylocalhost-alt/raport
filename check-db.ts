@@ -34,8 +34,8 @@ async function checkDatabase() {
       console.log(`[${idx + 1}] ${record.subject?.name || 'N/A'} (${record.subject?.code || 'N/A'})`);
       console.log(`    averageSubject: ${record.averageSubject}`);
       console.log(`    averageStudent: ${record.averageStudent}`);
-      console.log(`    midScore: ${record.midScore}, finalScore: ${record.finalScore}`);
-      console.log(`    isApproved: ${record.isApproved}\n`);
+      // console.log(`    midScore: ${record.midScore}, finalScore: ${record.finalScore}`);
+      // console.log(`    isApproved: ${record.isApproved}\n`);
     });
     
     // Check specifically for IMLA ARABI

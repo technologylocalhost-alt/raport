@@ -93,7 +93,10 @@ export async function GET(request: NextRequest) {
     const approvedGrades = await prisma.nilaiApprove.findMany({
       where: {
         ...(studentId ? { studentId: studentId } : {}),
-        // Optional: can filter by classId through subject's levelId if needed
+        // Filter by classId through student's class relationship
+        student: {
+          classId: classId,
+        },
       },
       include: {
         subject: {
@@ -132,64 +135,36 @@ export async function GET(request: NextRequest) {
       ],
     });
 
-    // Group by subject and aggregate scores
-    const groupedBySubject: { [key: string]: any } = {};
-    
-    approvedGrades.forEach((grade) => {
-      const subjectId = grade.subjectId;
-      
-      if (!groupedBySubject[subjectId]) {
-        groupedBySubject[subjectId] = {
-          id: grade.id,
-          studentId: grade.studentId,
-          subjectId: grade.subjectId,
-          levelId: grade.levelId,
-          teacherId: grade.teacherId,
-          scoringType: grade.scoringType,
-          notes: grade.notes,
-          nomorRaport: grade.nomorRaport,
-          suluk: grade.suluk,
-          muazobah: grade.muazobah,
-          nazofah: grade.nazofah,
-          averageStudent: grade.averageStudent,
-          averageSubject: grade.averageSubject,
-          subject: grade.subject,
-          dailyScore: 0,
-          midScore: 0,
-          finalScore: 0,
-          scores: [], // all raw scores by assessment type
-          createdAt: grade.createdAt,
-          updatedAt: grade.updatedAt,
-        };
-      }
-      
-      // Map assessment types to score fields
-      const scoreValue = parseFloat(grade.score || '0');
-      switch (grade.assessmentType) {
-        case 'DAILY':
-          groupedBySubject[subjectId].dailyScore = scoreValue;
-          break;
-        case 'MIDTERM':
-          groupedBySubject[subjectId].midScore = scoreValue;
-          break;
-        case 'FINAL':
-        case 'UAS':
-          groupedBySubject[subjectId].finalScore = scoreValue;
-          break;
-      }
-      
-      groupedBySubject[subjectId].scores.push({
-        assessmentType: grade.assessmentType,
-        score: scoreValue,
-      });
-    });
-
-    const data = Object.values(groupedBySubject);
+    // Return raw data without grouping - let the client handle grouping
+    // Format the data to include all necessary fields
+    const formattedData = approvedGrades.map((grade) => ({
+      id: grade.id,
+      studentId: grade.studentId,
+      studentName: grade.student.name,
+      studentNo: grade.student.studentNo,
+      subjectId: grade.subjectId,
+      subjectName: grade.subject.name,
+      competencyId: grade.competencyId,
+      competencyName: grade.competency.name,
+      levelId: grade.levelId,
+      teacherId: grade.teacherId,
+      teacherName: grade.teacher.name,
+      score: grade.score,
+      scoringType: grade.scoringType,
+      assessmentType: grade.assessmentType,
+      notes: grade.notes,
+      nomorRaport: grade.nomorRaport,
+      suluk: grade.suluk,
+      muazobah: grade.muazobah,
+      nazofah: grade.nazofah,
+      createdAt: grade.createdAt,
+      updatedAt: grade.updatedAt,
+    }));
 
     return successResponse(
       {
-        data,
-        total: data.length,
+        data: formattedData,
+        total: formattedData.length,
       },
       200
     );

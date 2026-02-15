@@ -98,6 +98,32 @@ export async function POST(request: NextRequest) {
       return errorResponse('No grades found for this subject and class', 404);
     }
 
+    // Check if this subject+class combination has already been approved
+    const existingApprovals = await prisma.nilaiApprove.findMany({
+      where: {
+        subjectId: validatedData.subjectId,
+        student: {
+          classId: validatedData.classId,
+        },
+      },
+      select: {
+        id: true,
+        studentId: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      take: 1,
+    });
+
+    if (existingApprovals.length > 0) {
+      return errorResponse(
+        `Mata pelajaran ini sudah pernah disetujui pada ${new Date(
+          existingApprovals[0].updatedAt || existingApprovals[0].createdAt
+        ).toLocaleString('id-ID')}. Tidak dapat disetujui ulang.`,
+        409
+      );
+    }
+
     // Get level and semester info from first grade
     const levelId = grades[0].levelId || '';
     const schoolYear = grades[0].student.class.schoolYear;

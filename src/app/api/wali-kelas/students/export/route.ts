@@ -46,7 +46,6 @@ export async function GET(request: NextRequest) {
     const classData = await prisma.class.findFirst({
       where: {
         id: classId,
-        school: { id: user.schoolId },
       },
     });
 
