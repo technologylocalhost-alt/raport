@@ -55,6 +55,14 @@ export async function POST(request: NextRequest) {
       return result;
     };
 
+    // Helper: Format score - only show decimals if they exist
+    const formatScore = (score: number): string => {
+      if (score % 1 === 0) {
+        return Math.floor(score).toString();
+      }
+      return score.toFixed(1);
+    };
+
     // Generate HTML content
     const rightColumn = subjectScores.slice(0, Math.ceil(subjectScores.length / 2));
     const leftColumn = subjectScores.slice(Math.ceil(subjectScores.length / 2));
@@ -70,12 +78,13 @@ export async function POST(request: NextRequest) {
       if (rightSubject) {
         const subjectName = rightSubject.subjectArabicName || rightSubject.subject;
         subjectsHTML += `<td style="text-align: right; white-space: nowrap; padding: 8px;">${subjectName}</td>`;
-        subjectsHTML += `<td style="text-align: center; padding: 8px;">${toArabicNumerals(rightSubject.kkm.toString())}</td>`;
         
         if (rightSubject.hasApproval) {
           subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>${toArabicNumerals(rightSubject.averageScore.toFixed(1))}</strong></td>`;
-          subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>${scoreToArabicText(rightSubject.averageScore)}</strong></td>`;
+          subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>${toArabicNumerals(formatScore(rightSubject.rawScore))}</strong></td>`;
+          subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>${scoreToArabicText(rightSubject.rawScore)}</strong></td>`;
         } else {
+          subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>—</strong></td>`;
           subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>—</strong></td>`;
           subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>—</strong></td>`;
         }
@@ -87,12 +96,13 @@ export async function POST(request: NextRequest) {
       if (leftSubject) {
         const subjectName = leftSubject.subjectArabicName || leftSubject.subject;
         subjectsHTML += `<td style="text-align: right; white-space: nowrap; padding: 8px;">${subjectName}</td>`;
-        subjectsHTML += `<td style="text-align: center; padding: 8px;">${toArabicNumerals(leftSubject.kkm.toString())}</td>`;
         
         if (leftSubject.hasApproval) {
           subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>${toArabicNumerals(leftSubject.averageScore.toFixed(1))}</strong></td>`;
-          subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>${scoreToArabicText(leftSubject.averageScore)}</strong></td>`;
+          subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>${toArabicNumerals(formatScore(leftSubject.rawScore))}</strong></td>`;
+          subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>${scoreToArabicText(leftSubject.rawScore)}</strong></td>`;
         } else {
+          subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>—</strong></td>`;
           subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>—</strong></td>`;
           subjectsHTML += `<td style="text-align: center; padding: 8px;"><strong>—</strong></td>`;
         }
@@ -103,6 +113,10 @@ export async function POST(request: NextRequest) {
     }
 
     const avgScore = (subjectScores.reduce((sum: number, s: any) => sum + (s.hasApproval ? s.averageScore : 0), 0) / subjectScores.filter((s: any) => s.hasApproval).length).toFixed(1);
+    const totalScoreValue = subjectScores.filter((s: any) => s.hasApproval).reduce((sum: number, s: any) => sum + s.rawScore, 0);
+    const averageRawScoreValue = (subjectScores.filter((s: any) => s.hasApproval).reduce((sum: number, s: any) => sum + s.rawScore, 0) / subjectScores.filter((s: any) => s.hasApproval).length);
+    const totalScore = formatScore(totalScoreValue);
+    const averageRawScore = formatScore(averageRawScoreValue);
 
     // Convert image to base64
     let logoBase64 = '';
@@ -263,11 +277,13 @@ export async function POST(request: NextRequest) {
                 <table style="margin-top: 8px;">
                     <tbody>
                         <tr>
-                            <th>الرتبة</th>
-                            <td class="center">---</td>
+                            <th>المجموع الكليّ</th>
+                            <td class="center">
+                                <strong>${toArabicNumerals(totalScore)}</strong>
+                            </td>
                             <th>المعدل العام</th>
                             <td class="center">
-                                <strong>${toArabicNumerals(avgScore)}</strong>
+                                <strong>${toArabicNumerals(averageRawScore)}</strong>
                             </td>
                         </tr>
                     </tbody>
