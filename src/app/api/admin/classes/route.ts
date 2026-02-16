@@ -64,8 +64,8 @@ export async function GET(request: NextRequest) {
     if (page < 1) {
       return errorResponse('Nomor halaman tidak valid', 400);
     }
-    if (limit < 1 || limit > 100) {
-      return errorResponse('Limit harus antara 1-100', 400);
+    if (limit < 1 || limit > 1000) {
+      return errorResponse('Limit harus antara 1-1000', 400);
     }
 
     const skip = (page - 1) * limit;

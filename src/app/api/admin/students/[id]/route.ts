@@ -76,3 +76,104 @@ export async function GET(
     return errorResponse('Gagal memuat data siswa', 500);
   }
 }
+
+/**
+ * PUT /api/admin/students/[id]
+ * Update a student
+ */
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const admin = await verifyAdmin(request);
+
+    if (!admin) {
+      return errorResponse('Unauthorized', 401);
+    }
+
+    const student = await prisma.student.findUnique({
+      where: { id },
+    });
+
+    if (!student) {
+      return errorResponse('Siswa tidak ditemukan', 404);
+    }
+
+    const body = await request.json();
+    const { name, studentNo, email, phone, address, birthDate, classId, parentPhoneNo } = body;
+
+    const updatedStudent = await prisma.student.update({
+      where: { id },
+      data: {
+        ...(name && { name }),
+        ...(studentNo && { studentNo }),
+        ...(email && { email }),
+        ...(phone && { phone }),
+        ...(address && { address }),
+        ...(birthDate && { birthDate: new Date(birthDate) }),
+        ...(classId && { classId }),
+        ...(parentPhoneNo && { parentPhoneNo }),
+      },
+      include: {
+        class: {
+          include: {
+            level: true,
+            schoolYear: true,
+          },
+        },
+      },
+    });
+
+    return successResponse({
+      id: updatedStudent.id,
+      name: updatedStudent.name,
+      studentNo: updatedStudent.studentNo,
+      email: updatedStudent.email,
+      phone: updatedStudent.phone,
+      address: updatedStudent.address,
+      birthDate: updatedStudent.birthDate,
+      className: updatedStudent.class?.name || '-',
+      classId: updatedStudent.classId,
+    });
+  } catch (error) {
+    console.error('Error updating student:', error);
+    return errorResponse('Gagal mengubah data siswa', 500);
+  }
+}
+
+/**
+ * DELETE /api/admin/students/[id]
+ * Delete a student
+ */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const admin = await verifyAdmin(request);
+
+    if (!admin) {
+      return errorResponse('Unauthorized', 401);
+    }
+
+    const student = await prisma.student.findUnique({
+      where: { id },
+    });
+
+    if (!student) {
+      return errorResponse('Siswa tidak ditemukan', 404);
+    }
+
+    await prisma.student.delete({
+      where: { id },
+    });
+
+    return successResponse(null, 'Siswa berhasil dihapus');
+  } catch (error) {
+    console.error('Error deleting student:', error);
+    return errorResponse('Gagal menghapus data siswa', 500);
+  }
+}

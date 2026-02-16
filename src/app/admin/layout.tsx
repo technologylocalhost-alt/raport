@@ -43,6 +43,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       ],
     },
     {
+      title: 'Penilaian',
+      items: [
+        { title: 'Penilian', icon: Users, href: '/admin/raports' },
+        { title: 'Siswa', icon: BarChart3, href: '/admin/students' },
+      ],
+    },
+    {
       title: 'Manajemen',
       items: [
         { title: 'Pengguna', icon: Users, href: '/admin/users' },

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Building2, Users, BarChart3, BookOpen, Calendar, GraduationCap, ArrowRight } from 'lucide-react';
+import { Building2, Users, BarChart3, BookOpen, Calendar, GraduationCap, ArrowRight, FileText } from 'lucide-react';
 
 interface User {
   id: string;
@@ -142,7 +142,22 @@ export default function AdminDashboard() {
       {/* Coming Soon Section */}
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-4">Fitur Lainnya</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Manajemen Raport */}
+          <Link
+            href="/admin/raports"
+            className="bg-white rounded-lg shadow hover:shadow-lg transition-all group border-l-4 border-indigo-500 p-6"
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div className="p-3 bg-indigo-100 rounded-lg group-hover:bg-indigo-200 transition-colors">
+                <FileText size={24} className="text-indigo-600" />
+              </div>
+              <ArrowRight size={20} className="text-gray-300 group-hover:text-indigo-600 transition-colors" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900">Manajemen Raport</h3>
+            <p className="text-gray-600 text-sm mt-1">Lihat dan kelola semua raport</p>
+          </Link>
+
           {/* Users */}
           <div className="bg-white rounded-lg shadow border-l-4 border-red-500 p-6 opacity-60">
             <div className="flex items-start justify-between mb-3">
