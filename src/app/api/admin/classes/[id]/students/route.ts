@@ -140,6 +140,21 @@ export async function GET(
           birthDate: true,
           parentPhoneNo: true,
           classId: true,
+          nilaiApproves: {
+            where: {
+              nomorRaport: {
+                not: null,
+                not: '',
+              },
+            },
+            select: {
+              nomorRaport: true,
+            },
+            take: 1,
+            orderBy: {
+              createdAt: 'desc',
+            },
+          },
         },
         skip,
         take: limit,
@@ -150,7 +165,21 @@ export async function GET(
       }),
     ]);
 
-    return paginatedResponse(students, total, page, limit);
+    // Transform the data to include raportNo at the top level
+    const studentsWithRaportNo = students.map(student => ({
+      id: student.id,
+      studentNo: student.studentNo,
+      name: student.name,
+      email: student.email,
+      phone: student.phone,
+      address: student.address,
+      birthDate: student.birthDate,
+      parentPhoneNo: student.parentPhoneNo,
+      classId: student.classId,
+      raportNo: student.nilaiApproves[0]?.nomorRaport || null,
+    }));
+
+    return paginatedResponse(studentsWithRaportNo, total, page, limit);
   } catch (error) {
     console.error('Get class students error:', error);
     return errorResponse('Gagal memuat data siswa', 500);

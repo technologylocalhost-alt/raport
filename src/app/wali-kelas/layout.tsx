@@ -74,13 +74,17 @@ export default function WaliKelasLayout({ children }: WaliKelasLayoutProps) {
     }
   }
 
-  // Check if we're on detail report page - hide sidebar
-  const isDetailReportPage = pathname.includes('/reports/detail');
+  // Check if we're on pages that need full width without sidebar
+  const isFullWidthPage = pathname.includes('/reports/detail') || 
+                          pathname.includes('/raport-arab/detail') ||
+                          pathname.includes('/raport-arab/cover-preview') ||
+                          pathname.includes('/raport-arab/bulk-review') ||
+                          pathname.includes('/raport-arab/bulk-download');
 
   return (
     <div className="flex h-screen bg-gray-100">
-      {/* Sidebar - Hidden on detail report page */}
-      {!isDetailReportPage && (
+      {/* Sidebar - Hidden on full width pages */}
+      {!isFullWidthPage && (
       <aside
         className={`${
           sidebarOpen ? 'w-64' : 'w-20'
@@ -169,8 +173,8 @@ export default function WaliKelasLayout({ children }: WaliKelasLayoutProps) {
       )}
 
       {/* Main Content */}
-      <main className={`overflow-auto ${isDetailReportPage ? 'w-full' : 'flex-1'}`}>
-        {isDetailReportPage ? children : <div className="p-8">{children}</div>}
+      <main className={`overflow-auto ${isFullWidthPage ? 'w-full' : 'flex-1'}`}>
+        {isFullWidthPage ? children : <div className="p-8">{children}</div>}
       </main>
     </div>
   );

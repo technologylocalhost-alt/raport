@@ -14,6 +14,7 @@ interface Student {
   id: string;
   name: string;
   studentNo: string;
+  raportNo?: string;
 }
 
 interface ClassWithStudents extends Class {
@@ -84,6 +85,7 @@ export default function RaportArabPage() {
                     id: s.id,
                     name: s.name,
                     studentNo: s.studentNo,
+                    raportNo: s.raportNo || null,
                   }));
                 }
               }
@@ -224,6 +226,7 @@ export default function RaportArabPage() {
                           <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">NO</th>
                           <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">NAMA SISWA</th>
                           <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">NOMOR INDUK</th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">NOMOR RAPORT</th>
                           <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">AKSI</th>
                         </tr>
                       </thead>
@@ -233,8 +236,17 @@ export default function RaportArabPage() {
                             <td className="px-6 py-4 text-sm text-gray-900 font-medium">{idx + 1}</td>
                             <td className="px-6 py-4 text-sm text-gray-900">{student.name}</td>
                             <td className="px-6 py-4 text-sm text-gray-600">{student.studentNo}</td>
+                            <td className="px-6 py-4 text-sm text-gray-600">{student.raportNo || '-'}</td>
                             <td className="px-6 py-4 text-sm">
                               <div className="flex items-center justify-center gap-2">
+                                <button
+                                  onClick={() => router.push(`/wali-kelas/raport-arab/cover-preview?classId=${selectedClass}&studentId=${student.id}`)}
+                                  className="flex items-center gap-1 px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors text-xs font-medium"
+                                  title="Sampul Raport"
+                                >
+                                  <Printer size={16} />
+                                  Sampul
+                                </button>
                                 <button
                                   onClick={() => handleViewRaport(selectedClass, student.id)}
                                   className="flex items-center gap-1 px-3 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors text-xs font-medium"
@@ -280,6 +292,7 @@ export default function RaportArabPage() {
         <div className="mt-8 p-6 bg-emerald-50 border-l-4 border-emerald-600 rounded-lg">
           <h3 className="font-semibold text-emerald-900 mb-2">Panduan Penggunaan</h3>
           <ul className="text-sm text-emerald-800 space-y-1">
+            <li>• <strong>Sampul</strong> - Lihat dan cetak sampul raport siswa</li>
             <li>• <strong>Review</strong> - Lihat raport individual siswa</li>
             <li>• <strong>Semua</strong> - Review raport keseluruhan kelas</li>
             <li>• <strong>Unduh</strong> - Download raport dalam format PDF</li>

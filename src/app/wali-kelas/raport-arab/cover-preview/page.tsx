@@ -2,12 +2,18 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Printer, Download } from 'lucide-react';
+import { ArrowLeft, Printer, Download, Eye } from 'lucide-react';
 
 interface Student {
   id: string;
   name: string;
   studentNo: string;
+  raportNo?: string;
+}
+
+interface ClassData {
+  id: string;
+  name: string;
 }
 
 function CoverPreviewContent() {
@@ -17,8 +23,11 @@ function CoverPreviewContent() {
   const studentId = searchParams.get('studentId');
 
   const [student, setStudent] = useState<Student | null>(null);
+  const [classData, setClassData] = useState<ClassData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [allStudents, setAllStudents] = useState<Student[]>([]);
+  const [currentStudentIndex, setCurrentStudentIndex] = useState(-1);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -29,21 +38,41 @@ function CoverPreviewContent() {
           return;
         }
 
-        // Fetch student data
-        const studentResponse = await fetch(`/api/admin/classes/${classId}/students?limit=100`, {
+        // Fetch class data
+        const classResponse = await fetch(`/api/admin/classes/${classId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (classResponse.ok) {
+          const classDataJson = await classResponse.json();
+          if (classDataJson.success) {
+            setClassData({
+              id: classDataJson.data.id,
+              name: classDataJson.data.name || 'N/A',
+            });
+          }
+        }
+
+        // Fetch student data with raport number
+        const studentResponse = await fetch(`/api/admin/classes/${classId}/students?limit=1000`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
         if (studentResponse.ok) {
           const studentData = await studentResponse.json();
           if (studentData.success && Array.isArray(studentData.data)) {
-            const found = studentData.data.find((s: any) => s.id === studentId);
-            if (found) {
-              setStudent({
-                id: found.id,
-                name: found.name || 'N/A',
-                studentNo: found.studentNo || 'N/A',
-              });
+            const students = studentData.data.map((s: any) => ({
+              id: s.id,
+              name: s.name || 'N/A',
+              studentNo: s.studentNo || 'N/A',
+              raportNo: s.raportNo || null,
+            }));
+            setAllStudents(students);
+            
+            const foundIndex = students.findIndex((s: any) => s.id === studentId);
+            if (foundIndex !== -1) {
+              setStudent(students[foundIndex]);
+              setCurrentStudentIndex(foundIndex);
             }
           }
         }
@@ -60,9 +89,26 @@ function CoverPreviewContent() {
     }
   }, [classId, studentId]);
 
-  const getCurrentDateArabic = () => {
-    const now = new Date();
-    return now.toLocaleDateString('ar-SA', { year: 'numeric', month: 'long', day: 'numeric' });
+  const handlePreviousStudent = () => {
+    if (currentStudentIndex > 0) {
+      const prevStudent = allStudents[currentStudentIndex - 1];
+      router.push(`/wali-kelas/raport-arab/cover-preview?classId=${classId}&studentId=${prevStudent.id}`);
+    }
+  };
+
+  const handleNextStudent = () => {
+    if (currentStudentIndex < allStudents.length - 1) {
+      const nextStudent = allStudents[currentStudentIndex + 1];
+      router.push(`/wali-kelas/raport-arab/cover-preview?classId=${classId}&studentId=${nextStudent.id}`);
+    }
+  };
+
+  const handleViewDetail = () => {
+    router.push(`/wali-kelas/raport-arab/detail?classId=${classId}&studentId=${studentId}`);
+  };
+
+  const handleSeeAllStudents = () => {
+    router.push('/wali-kelas/raport-arab');
   };
 
   if (isLoading) {
@@ -90,7 +136,7 @@ function CoverPreviewContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-emerald-100 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-emerald-100">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap');
         
@@ -274,32 +320,147 @@ function CoverPreviewContent() {
           font-weight: bold;
           color: #333;
         }
+
+        .toolbar {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          background: #f5f5f5;
+          padding: 12px 20px;
+          border-bottom: 1px solid #ddd;
+          display: flex;
+          gap: 12px;
+          align-items: center;
+          z-index: 200;
+          width: 100%;
+        }
+
+        body {
+          padding-top: 60px;
+        }
+
+        @media print {
+          * {
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          html, body {
+            width: 215mm !important;
+            height: 330mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+          }
+
+          body > * {
+            display: none !important;
+          }
+
+          body > div:nth-child(n) {
+            display: block !important;
+          }
+
+          body > div > .a4-wrapper {
+            display: flex !important;
+          }
+
+          aside, nav, .sidebar, .navbar, .toolbar, footer {
+            display: none !important;
+          }
+
+          .toolbar {
+            display: none !important;
+          }
+
+          .a4-wrapper {
+            background: white !important;
+            padding: 0 !important;
+            min-height: auto !important;
+            margin: 0 !important;
+            width: 100% !important;
+            display: flex !important;
+            justify-content: center !important;
+          }
+
+          .cover-page {
+            box-shadow: none !important;
+            page-break-after: avoid !important;
+          }
+        }
       `}</style>
 
-      <div className="max-w-7xl mx-auto w-full">
-        {/* Toolbar */}
-        <div className="flex items-center justify-between mb-8 bg-white p-4 rounded-lg shadow-md">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-800">Preview Sampul Raport</h2>
-            <p className="text-sm text-gray-600">Siswa: {student.name}</p>
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => window.print()}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-            >
-              <Printer size={18} />
-              Print
-            </button>
-            <button
-              onClick={() => router.back()}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500 transition-colors"
-            >
-              <ArrowLeft size={18} />
-              Kembali
-            </button>
-          </div>
+      <div className="toolbar">
+        <button
+          onClick={() => router.back()}
+          className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-300 rounded"
+        >
+          <ArrowLeft size={20} />
+          Kembali
+        </button>
+        <div className="h-6 w-px bg-gray-300"></div>
+        <span className="text-gray-600 text-sm">Sampul Raport Bahasa Arab - F4 (215 × 330 mm)</span>
+        
+        {/* Navigation Buttons */}
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={handlePreviousStudent}
+            disabled={currentStudentIndex <= 0}
+            className={`flex items-center gap-2 px-4 py-2 rounded ${
+              currentStudentIndex <= 0
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-gray-400 text-white hover:bg-gray-500'
+            }`}
+          >
+            ← Siswa Sebelumnya
+          </button>
+          
+          <button
+            onClick={handleSeeAllStudents}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+          >
+            Lihat Semua Siswa
+          </button>
+          
+          <button
+            onClick={handleNextStudent}
+            disabled={currentStudentIndex >= allStudents.length - 1}
+            className={`flex items-center gap-2 px-4 py-2 rounded ${
+              currentStudentIndex >= allStudents.length - 1
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-gray-400 text-white hover:bg-gray-500'
+            }`}
+          >
+            Siswa Berikutnya →
+          </button>
+
+          <span className="text-gray-700 font-medium px-4 ml-4">
+            Siswa {currentStudentIndex >= 0 ? currentStudentIndex + 1 : 1} / {allStudents.length}
+          </span>
         </div>
+
+        <div className="h-6 w-px bg-gray-300 ml-4"></div>
+        
+        <button
+          onClick={handleViewDetail}
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 ml-4"
+          title="Lihat detail raport"
+        >
+          <Eye size={20} />
+          Raport Detail
+        </button>
+        
+        <button
+          onClick={() => window.print()}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+        >
+          <Printer size={20} />
+          Print
+        </button>
+      </div>
+
+      <div className="max-w-7xl mx-auto w-full" style={{ paddingTop: '20px' }}>
 
         {/* Cover Page Preview */}
         <div className="a4-wrapper">
@@ -340,7 +501,7 @@ function CoverPreviewContent() {
                   <span className="cover-info-label">اسم الطالب</span>
                 </div>
                 <div className="cover-info-row">
-                  <span className="cover-info-value"><strong>الفصل الأول</strong></span>
+                  <span className="cover-info-value"><strong>{classData?.name || 'الفصل الأول'}</strong></span>
                   <span className="cover-info-label">الفصل</span>
                 </div>
                 <div className="cover-info-row">
@@ -355,41 +516,13 @@ function CoverPreviewContent() {
 
               {/* Serial Number */}
               <div className="cover-serial-section">
-                <div className="cover-serial-box">UAS-SMT-2-24/25-PA-1</div>
+                <div className="cover-serial-box">{student.raportNo || '-'}</div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Instructions */}
-        <div className="mt-8 bg-white p-6 rounded-lg shadow-md max-w-4xl mx-auto">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">💡 Catatan Preview</h3>
-          <ul className="space-y-2 text-gray-700 text-sm">
-            <li>• Ini adalah tampilan preview sampul (cover page) raport</li>
-            <li>• Saat download PDF, sampul ini akan disertakan sebagai halaman pertama</li>
-            <li>• Logo institusi akan ditampilkan saat data tersedia di sistem</li>
-            <li>• Gunakan tombol "Print" untuk mencetak preview ini dengan kualitas tinggi</li>
-            <li>• Tampilan di printer akan lebih presisi dari preview layar</li>
-          </ul>
-        </div>
       </div>
-
-      <style>{`
-        @media print {
-          body {
-            background: white;
-          }
-          .max-w-7xl > div:nth-child(1),
-          .max-w-7xl > div:nth-child(3) {
-            display: none;
-          }
-          .a4-wrapper {
-            padding: 0;
-            background: white;
-            min-height: 100vh;
-          }
-        }
-      `}</style>
     </div>
   );
 }
