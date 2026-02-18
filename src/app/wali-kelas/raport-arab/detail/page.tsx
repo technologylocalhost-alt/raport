@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Printer, Download } from 'lucide-react';
+import { ArrowLeft, Printer, Download, Eye } from 'lucide-react';
 
 interface Student {
   id: string;
@@ -567,6 +567,12 @@ function RaportArabDetailContent() {
     }
   }
 
+  const handleViewCoverPreview = () => {
+    router.push(
+      `/wali-kelas/raport-arab/cover-preview?classId=${classId}&studentId=${studentId}`
+    );
+  };
+
   const handlePrint = () => {
     window.print();
   };
@@ -956,8 +962,16 @@ function RaportArabDetailContent() {
         <div className="h-6 w-px bg-gray-300 ml-4"></div>
         
         <button
+          onClick={handleViewCoverPreview}
+          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 ml-4"
+          title="Lihat preview sampul raport"
+        >
+          <Eye size={20} />
+          Preview Sampul
+        </button>
+        <button
           onClick={handleDownloadPDF}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ml-4"
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ml-2"
         >
           <Download size={20} />
           Download PDF

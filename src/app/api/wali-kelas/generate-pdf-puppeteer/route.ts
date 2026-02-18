@@ -120,12 +120,48 @@ export async function POST(request: NextRequest) {
 
     // Convert image to base64
     let logoBase64 = '';
+    let kmiLogoBase64 = '';
+    let mahadLogoBase64 = '';
+    let kasyfuImageBase64 = '';
+    let bingkaiImageBase64 = '';
     try {
       const imagePath = join(process.cwd(), 'public', 'namapondok.png');
       const imageBuffer = readFileSync(imagePath);
       logoBase64 = imageBuffer.toString('base64');
     } catch (err) {
       console.log('Logo not found, continuing without it');
+    }
+
+    try {
+      const kmiImagePath = join(process.cwd(), 'public', 'KMI.jpg');
+      const kmiImageBuffer = readFileSync(kmiImagePath);
+      kmiLogoBase64 = kmiImageBuffer.toString('base64');
+    } catch (err) {
+      console.log('KMI logo not found, continuing without it');
+    }
+
+    try {
+      const mahadImagePath = join(process.cwd(), 'public', 'mahad.png');
+      const mahadImageBuffer = readFileSync(mahadImagePath);
+      mahadLogoBase64 = mahadImageBuffer.toString('base64');
+    } catch (err) {
+      console.log('Mahad logo not found, continuing without it');
+    }
+
+    try {
+      const kasyfuImagePath = join(process.cwd(), 'public', 'kasyfu.jpg');
+      const kasyfuImageBuffer = readFileSync(kasyfuImagePath);
+      kasyfuImageBase64 = kasyfuImageBuffer.toString('base64');
+    } catch (err) {
+      console.log('Kasyfu image not found, continuing without it');
+    }
+
+    try {
+      const bingkaiImagePath = join(process.cwd(), 'public', 'bingkai.png');
+      const bingkaiImageBuffer = readFileSync(bingkaiImagePath);
+      bingkaiImageBase64 = bingkaiImageBuffer.toString('base64');
+    } catch (err) {
+      console.log('Bingkai image not found, continuing without it');
     }
 
     const htmlContent = `
@@ -161,6 +197,151 @@ export async function POST(request: NextRequest) {
                 overflow: visible;
                 display: flex;
                 flex-direction: column;
+            }
+            .cover-page {
+                width: 215mm;
+                height: 330mm;
+                background: white;
+                font-size: 11px;
+                line-height: 1.2;
+                direction: rtl;
+                position: relative;
+                overflow: hidden;
+                page-break-after: always;
+                box-sizing: border-box;
+            }
+            .cover-frame {
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                width: 215mm;
+                height: 330mm;
+                z-index: 0;
+                pointer-events: none;
+            }
+            .cover-frame img {
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+            }
+            .cover-content {
+                position: relative;
+                z-index: 1;
+                display: flex;
+                flex-direction: column;
+                height: 100%;
+                padding: 20mm 15mm;
+                box-sizing: border-box;
+            }
+            .cover-logo-section {
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 10mm;
+                width: 100%;
+            }
+            .cover-logo-section img {
+                max-width: 440px;
+                height: auto;
+                object-fit: contain;
+            }
+            .cover-header-section {
+                text-align: center;
+                margin-bottom: 8mm;
+                padding-bottom: 8px;
+            }
+            .cover-institution-main {
+                font-size: 26px;
+                font-weight: bold;
+                color: #1a1a1a;
+                margin-bottom: 8px;
+                line-height: 1.4;
+            }
+            .cover-institution-sub {
+                font-size: 16px;
+                color: #333;
+                margin-bottom: 6px;
+                font-weight: 500;
+            }
+            .cover-institution-location {
+                font-size: 45px;
+                color: #666;
+                margin-bottom: 0;
+            }
+            .cover-title-section {
+                text-align: center;
+                margin: 10mm 0 8mm 0;
+            }
+            .cover-title-image {
+                max-width: 440px;
+                height: auto;
+                object-fit: contain;
+                margin-bottom: 6px;
+            }
+            .cover-semester-info {
+                text-align: center;
+                font-size: 45px;
+                color: #555;
+                margin-bottom: 4px;
+                line-height: 1.2;
+            }
+            .cover-year-info {
+                text-align: center;
+                font-size: 11px;
+                color: #666;
+                margin-bottom: 10mm;
+            }
+            .cover-student-info {
+                background: white;
+                padding: 15px 20px;
+                width: 100%;
+                font-size: 13px;
+                margin: 0 auto 15mm auto;
+                max-width: 100%;
+            }
+            .cover-info-row {
+                display: flex;
+                justify-content: flex-start;
+                align-items: center;
+                margin: 10px 0;
+                padding: 8px 0;
+                border-bottom: 1px solid #ddd;
+            }
+            .cover-info-row:last-child {
+                border-bottom: none;
+            }
+            .cover-info-label {
+                font-weight: bold;
+                text-align: right;
+                flex: 0 0 35%;
+                padding-right: 15px;
+                color: #1a1a1a;
+                font-size: 13px;
+            }
+            .cover-info-value {
+                text-align: left;
+                flex: 1;
+                font-weight: 500;
+                color: #333;
+                font-size: 13px;
+            }
+            .cover-serial-section {
+                text-align: center;
+                margin-top: auto;
+                padding-top: 5mm;
+            }
+            .cover-serial-box {
+                border: 1px solid #333;
+                display: inline-block;
+                padding: 6px 16px;
+                font-family: 'Courier New', monospace;
+                font-size: 11px;
+                font-weight: bold;
+                color: #333;
             }
             .footer-section {
                 margin-top: auto;
@@ -235,6 +416,63 @@ export async function POST(request: NextRequest) {
         </style>
     </head>
     <body>
+        <!-- COVER PAGE -->
+        <div class="cover-page">
+            <!-- Frame Background -->
+            <div class="cover-frame">
+                ${bingkaiImageBase64 ? `<img src="data:image/png;base64,${bingkaiImageBase64}" alt="Frame" />` : ''}
+            </div>
+            
+            <!-- Cover Content -->
+            <div class="cover-content">
+                <!-- Logo Section -->
+                <div class="cover-logo-section">
+                    ${kmiLogoBase64 ? `<img src="data:image/jpeg;base64,${kmiLogoBase64}" alt="KMI Logo" />` : ''}
+                    ${mahadLogoBase64 ? `<img src="data:image/png;base64,${mahadLogoBase64}" alt="Mahad Logo" />` : ''}
+                </div>
+
+                <!-- Institution Header -->
+                <div class="cover-header-section">
+                    <div class="cover-institution-location">لاهات – سومطرة الجنوبية – اندونيسيا</div>
+                </div>
+
+                <!-- Title Section -->
+                <div class="cover-title-section">
+                    ${kasyfuImageBase64 ? `<img src="data:image/jpeg;base64,${kasyfuImageBase64}" alt="Kasyfu Title" class="cover-title-image" />` : '<div style="font-size: 32px; font-weight: bold; color: #1a1a1a; margin-bottom: 12px;">كشف الدرجات</div>'}
+                    <div class="cover-semester-info">للفصل الدراسي الثاني</div>
+                    <div class="cover-year-info">
+                        <div>عام ٢٠٢٥-٢٠٢٤ | ١٤٤٦ – ١٤٤٥</div>
+                    </div>
+                </div>
+
+                <!-- Student Information -->
+                <div class="cover-student-info">
+                    <div class="cover-info-row">
+                        <span class="cover-info-value"><strong>${student.name || '-'}</strong></span>
+                        <span class="cover-info-label">اسم الطالب</span>
+                    </div>
+                    <div class="cover-info-row">
+                        <span class="cover-info-value"><strong>الفصل الأول</strong></span>
+                        <span class="cover-info-label">الفصل</span>
+                    </div>
+                    <div class="cover-info-row">
+                        <span class="cover-info-value"><strong>${student.studentNo || '-'}</strong></span>
+                        <span class="cover-info-label">رقم دفتر القيد</span>
+                    </div>
+                    <div class="cover-info-row">
+                        <span class="cover-info-value"><strong>LAHAT</strong></span>
+                        <span class="cover-info-label">البرنامج</span>
+                    </div>
+                </div>
+
+                <!-- Serial Number -->
+                <div class="cover-serial-section">
+                    <div class="cover-serial-box">UAS-SMT-2-24/25-PA-1</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- REPORT PAGE -->
         <div class="a4-page">
             <div class="watermark-bg">
                 ${logoBase64 ? `<img src="data:image/png;base64,${logoBase64}" alt="Trademark" />` : ''}
