@@ -4,18 +4,16 @@ import { verifyAccessToken } from '@/lib/auth/jwt';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { studentId: string } }
+  context: { params: Promise<{ studentId: string }> }
 ) {
   try {
     const token = request.headers.get('authorization')?.split(' ')[1];
-    
     if (!token) {
       return NextResponse.json(
         { success: false, message: 'Token tidak ditemukan', data: null },
         { status: 401 }
       );
     }
-
     const payload = await verifyAccessToken(token);
     if (!payload) {
       return NextResponse.json(
@@ -23,8 +21,7 @@ export async function GET(
         { status: 401 }
       );
     }
-
-    const { studentId } = params;
+    const { studentId } = await context.params;
 
     // Get raport number from NilaiApprove - get distinct nomorRaport for this student
     const nilaiApproveRecords = await prisma.nilaiApprove.findMany({
@@ -32,7 +29,6 @@ export async function GET(
         studentId: studentId,
         nomorRaport: {
           not: null,
-          not: '',
         },
       },
       select: {
