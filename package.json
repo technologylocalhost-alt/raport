@@ -7,10 +7,16 @@
     "build": "bun run prisma:generate && PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
-    "seed": "bun scripts/seed.ts"
+    "seed": "bun scripts/seed.ts",
+    "db:push": "prisma db push",
+    "db:seed": "bun run seed"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.3.0",

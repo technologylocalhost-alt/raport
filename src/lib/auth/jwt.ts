@@ -1,12 +1,5 @@
 import jwt, { SignOptions } from 'jsonwebtoken';
-
-interface TokenPayload {
-  userId: string;
-  email: string;
-  role: string;
-  exp?: number;
-  iat?: number;
-}
+import { TokenPayload } from '@/types';
 
 interface TokenResponse {
   accessToken: string;
@@ -66,6 +59,19 @@ export function verifyAccessToken(token: string): TokenPayload | null {
   } catch (error) {
     console.error('[Token Verify Failed]', error instanceof Error ? error.message : String(error));
     return null;
+  }
+}
+
+/**
+ * Verify token (throws error if invalid)
+ * Used by middleware
+ */
+export function verifyToken(token: string): TokenPayload {
+  try {
+    const decoded = jwt.verify(token, JWT_ACCESS_SECRET as any) as TokenPayload;
+    return decoded;
+  } catch (error) {
+    throw new Error('Invalid or expired token');
   }
 }
 

@@ -40,5 +40,20 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# prisma generated files
 /src/generated/prisma
+
+# test artifacts
+/coverage
+*.log
+/test-results
+
+# temporary files
+*.tmp
+*.swp
+*~
+
+# NEW_FILES_SUMMARY.md (temporary documentation)
+NEW_FILES_SUMMARY.md
+
 /docs
