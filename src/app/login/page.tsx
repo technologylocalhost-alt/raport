@@ -1,7 +1,7 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { FormEvent, useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface LoginResponse {
   success: boolean;
@@ -17,10 +17,42 @@ interface LoginResponse {
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
+
+  // Check if user is already logged in
+  useEffect(() => {
+    const accessToken = localStorage.getItem('accessToken');
+    if (accessToken) {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      redirectAfterLogin(user.role);
+    }
+  }, []);
+
+  function redirectAfterLogin(role: string) {
+    // Get redirect parameter from URL
+    const redirectTo = searchParams.get('redirect');
+    
+    // If there's a redirect parameter and it's a valid internal route, use it
+    if (redirectTo && redirectTo.startsWith('/')) {
+      router.push(redirectTo);
+      return;
+    }
+
+    // Otherwise, redirect based on role
+    if (role === 'ADMIN' || role === 'PRINCIPAL') {
+      router.push('/admin/dashboard');
+    } else if (role === 'TEACHER') {
+      router.push('/teacher/dashboard');
+    } else if (role === 'WALI_KELAS') {
+      router.push('/wali-kelas/dashboard');
+    } else {
+      router.push('/admin/dashboard'); // fallback
+    }
+  }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -47,14 +79,8 @@ export default function LoginPage() {
       localStorage.setItem('accessToken', data.accessToken!);
       localStorage.setItem('user', JSON.stringify(data.user));
 
-      // Redirect based on role
-      if (data.user?.role === 'ADMIN' || data.user?.role === 'PRINCIPAL') {
-        router.push('/admin/dashboard');
-      } else if (data.user?.role === 'TEACHER') {
-        router.push('/teacher/dashboard');
-      } else if (data.user?.role === 'WALI_KELAS') {
-        router.push('/wali-kelas/dashboard');
-      }
+      // Redirect to appropriate page
+      redirectAfterLogin(data.user?.role || 'ADMIN');
     } catch (error) {
       setError(error instanceof Error ? error.message : 'An error occurred');
     } finally {
