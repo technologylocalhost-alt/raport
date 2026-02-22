@@ -12,7 +12,7 @@ const gradeUpdateSchema = z.object({
       message: 'Score must be a number between 1 and 10',
     })
     .optional(),
-  assessmentType: z.enum(['QUIZ', 'MIDTERM', 'FINAL', 'TASK', 'PROJECT', 'DAILY']).optional(),
+  assessmentType: z.enum(['UTS_1', 'UAS_1', 'UTS_2', 'UAS_2', 'FINAL_EXAM_1', 'FINAL_EXAM_2']).optional(),
   notes: z.string().optional(),
 });
 

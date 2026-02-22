@@ -66,12 +66,12 @@ export default function PenilaianPage() {
     .sort((a, b) => a.name.localeCompare(b.name));
   
   const assessmentTypes = [
-    { code: 'DAILY', label: 'Harian' },
-    { code: 'QUIZ', label: 'Kuis' },
-    { code: 'TASK', label: 'Tugas' },
-    { code: 'PROJECT', label: 'Proyek' },
-    { code: 'MIDTERM', label: 'UTS' },
-    { code: 'FINAL', label: 'UAS' },
+    { code: 'UTS_1', label: 'Ujian Tengah Semester 1 (UTS 1)' },
+    { code: 'UAS_1', label: 'Ujian Akhir Semester 1 (UAS 1)' },
+    { code: 'UTS_2', label: 'Ujian Tengah Semester 2 (UTS 2)' },
+    { code: 'UAS_2', label: 'Ujian Akhir Semester 2 (UAS 2)' },
+    { code: 'FINAL_EXAM_1', label: 'Ujian Akhir Siswa Akhir Gel 1' },
+    { code: 'FINAL_EXAM_2', label: 'Ujian Akhir Siswa Gel 2' },
   ].filter((type) => {
     const relevantGrades = selectedClass 
       ? grades.filter((g) => g.className === selectedClass)
@@ -286,7 +286,7 @@ export default function PenilaianPage() {
               competencyName: grade.competencyName || 'N/A',
               subjectName: grade.subjectName || 'N/A',
               score: String(grade.score || 0),
-              assessmentType: grade.assessmentType || 'DAILY',
+              assessmentType: grade.assessmentType || 'UTS_1',
               teacherName: grade.teacherName || 'N/A',
               isApproved: approvalSet.has(key),
             };
@@ -314,12 +314,12 @@ export default function PenilaianPage() {
 
   const translateAssessmentType = (type: string) => {
     const translations: { [key: string]: string } = {
-      DAILY: 'Harian',
-      QUIZ: 'Kuis',
-      MIDTERM: 'UTS',
-      FINAL: 'UAS',
-      TASK: 'Tugas',
-      PROJECT: 'Proyek',
+      UTS_1: 'Ujian Tengah Semester 1 (UTS 1)',
+      UAS_1: 'Ujian Akhir Semester 1 (UAS 1)',
+      UTS_2: 'Ujian Tengah Semester 2 (UTS 2)',
+      UAS_2: 'Ujian Akhir Semester 2 (UAS 2)',
+      FINAL_EXAM_1: 'Ujian Akhir Siswa Akhir Gel 1',
+      FINAL_EXAM_2: 'Ujian Akhir Siswa Gel 2',
     };
     return translations[type] || type;
   };
@@ -352,7 +352,7 @@ export default function PenilaianPage() {
         // If filtered by assessment type, only show that type; otherwise show all available types
         const typesToShow = selectedAssessmentType 
           ? [selectedAssessmentType]
-          : ['DAILY', 'QUIZ', 'TASK', 'PROJECT', 'MIDTERM', 'FINAL'];
+          : ['UTS_1', 'UAS_1', 'UTS_2', 'UAS_2', 'FINAL_EXAM_1', 'FINAL_EXAM_2'];
         
         typesToShow.forEach((type) => {
           const columnKey = `${subject.name} - ${getAssessmentTypeLabel(type)}`;
@@ -377,7 +377,7 @@ export default function PenilaianPage() {
         subjectsToShow.forEach((subject) => {
           const typesToShow = selectedAssessmentType 
             ? [selectedAssessmentType]
-            : ['DAILY', 'QUIZ', 'TASK', 'PROJECT', 'MIDTERM', 'FINAL'];
+            : ['UTS_1', 'UAS_1', 'UTS_2', 'UAS_2', 'FINAL_EXAM_1', 'FINAL_EXAM_2'];
           
           typesToShow.forEach((type) => {
             const columnKey = `${subject.name} - ${getAssessmentTypeLabel(type)}`;
@@ -401,12 +401,12 @@ export default function PenilaianPage() {
 
   const getAssessmentTypeLabel = (type: string): string => {
     const translations: { [key: string]: string } = {
-      DAILY: 'Harian',
-      QUIZ: 'Kuis',
-      TASK: 'Tugas',
-      PROJECT: 'Proyek',
-      MIDTERM: 'UTS',
-      FINAL: 'UAS',
+      UTS_1: 'Ujian Tengah Semester 1 (UTS 1)',
+      UAS_1: 'Ujian Akhir Semester 1 (UAS 1)',
+      UTS_2: 'Ujian Tengah Semester 2 (UTS 2)',
+      UAS_2: 'Ujian Akhir Semester 2 (UAS 2)',
+      FINAL_EXAM_1: 'Ujian Akhir Siswa Akhir Gel 1',
+      FINAL_EXAM_2: 'Ujian Akhir Siswa Gel 2',
     };
     return translations[type] || type;
   };

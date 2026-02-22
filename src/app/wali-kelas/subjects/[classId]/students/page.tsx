@@ -65,12 +65,12 @@ export default function WaliKelasStudentsPage() {
   
   // Mapping assessment type to Indonesian labels
   const assessmentTypeLabels: { [key: string]: string } = {
-    DAILY: 'Harian',
-    QUIZ: 'Kuis',
-    TASK: 'Tugas',
-    PROJECT: 'Proyek',
-    MIDTERM: 'UTS',
-    FINAL: 'UAS',
+    UTS_1: 'Ujian Tengah Semester 1 (UTS 1)',
+    UAS_1: 'Ujian Akhir Semester 1 (UAS 1)',
+    UTS_2: 'Ujian Tengah Semester 2 (UTS 2)',
+    UAS_2: 'Ujian Akhir Semester 2 (UAS 2)',
+    FINAL_EXAM_1: 'Ujian Akhir Siswa Akhir Gel 1',
+    FINAL_EXAM_2: 'Ujian Akhir Siswa Gel 2',
   };
 
   const getAssessmentTypeLabel = (type: string): string => {
@@ -92,7 +92,7 @@ export default function WaliKelasStudentsPage() {
   const [gradeFormData, setGradeFormData] = useState({
     competencyId: '',
     score: '',
-    assessmentType: 'DAILY',
+    assessmentType: 'UTS_1',
     notes: '',
   });
   const [editingGradeId, setEditingGradeId] = useState<string | null>(null);
@@ -300,7 +300,7 @@ export default function WaliKelasStudentsPage() {
     setGradeFormData({
       competencyId: '',
       score: '',
-      assessmentType: 'DAILY',
+      assessmentType: 'UTS_1',
       notes: '',
     });
     setGradeError('');
@@ -369,7 +369,7 @@ export default function WaliKelasStudentsPage() {
         setGradeFormData({
           competencyId: '',
           score: '',
-          assessmentType: 'DAILY',
+          assessmentType: 'UTS_1',
           notes: '',
         });
         // Fetch latest grades and ensure the list is expanded to show them
@@ -382,8 +382,17 @@ export default function WaliKelasStudentsPage() {
           setExpandedStudentId(selectedStudent.id);
         }
       } else {
-        const errorResponse = await response.json();
-        console.error('Grade submission error:', errorResponse);
+        let errorResponse: any = {};
+        try {
+          const text = await response.text();
+          if (text) {
+            errorResponse = JSON.parse(text);
+          }
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
+        }
+        
+        console.error('Grade submission error:', errorResponse, 'Status:', response.status);
         
         // Handle field errors from validation
         if (errorResponse.details && Array.isArray(errorResponse.details)) {
@@ -392,7 +401,7 @@ export default function WaliKelasStudentsPage() {
             .join(', ');
           setGradeError(`${errorResponse.error}: ${fieldErrorMessages}`);
         } else {
-          setGradeError(errorResponse.error || 'Gagal menyimpan nilai');
+          setGradeError(errorResponse.error || `Gagal menyimpan nilai (Status: ${response.status})`);
         }
       }
     } catch (error) {
@@ -755,7 +764,7 @@ export default function WaliKelasStudentsPage() {
                     setGradeFormData({
                       competencyId: '',
                       score: '',
-                      assessmentType: 'DAILY',
+                      assessmentType: 'UTS_1',
                       notes: '',
                     });
                   }}
@@ -861,7 +870,7 @@ export default function WaliKelasStudentsPage() {
                           setGradeFormData({
                             competencyId: '',
                             score: '',
-                            assessmentType: 'DAILY',
+                            assessmentType: 'UTS_1',
                             notes: '',
                           });
                         }}
@@ -878,7 +887,7 @@ export default function WaliKelasStudentsPage() {
                         setGradeFormData({
                           competencyId: '',
                           score: '',
-                          assessmentType: 'DAILY',
+                          assessmentType: 'UTS_1',
                           notes: '',
                         });
                       }}

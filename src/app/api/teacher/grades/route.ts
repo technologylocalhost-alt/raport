@@ -14,12 +14,12 @@ const gradeSchema = z.object({
       message: 'Score must be a number between 1 and 10',
     }),
   assessmentType: z.enum([
-    'QUIZ',
-    'MIDTERM',
-    'FINAL',
-    'TASK',
-    'PROJECT',
-    'DAILY',
+    'UTS_1',
+    'UAS_1',
+    'UTS_2',
+    'UAS_2',
+    'FINAL_EXAM_1',
+    'FINAL_EXAM_2',
   ]),
   notes: z.string().optional(),
 });

@@ -132,12 +132,12 @@ export async function POST(request: NextRequest) {
     // Helper function to translate assessmentType to Indonesian code
     const getAssessmentTypeCode = (type: string): string => {
       const mapping: { [key: string]: string } = {
-        MIDTERM: 'UTS',
-        FINAL: 'UAS',
-        DAILY: 'HRI',
-        QUIZ: 'KUI',
-        TASK: 'TGS',
-        PROJECT: 'PRJ',
+        UTS_1: 'UTS1',
+        UAS_1: 'UAS1',
+        UTS_2: 'UTS2',
+        UAS_2: 'UAS2',
+        FINAL_EXAM_1: 'FE1',
+        FINAL_EXAM_2: 'FE2',
       };
       return mapping[type] || type;
     };

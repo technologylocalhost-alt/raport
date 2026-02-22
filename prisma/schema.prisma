@@ -347,12 +347,12 @@ enum ScoringType {
 }
 
 enum AssessmentType {
-  QUIZ
-  MIDTERM
-  FINAL
-  TASK
-  PROJECT
-  DAILY
+  UTS_1       // Ujian Tengah Semester 1
+  UAS_1       // Ujian Akhir Semester 1
+  UTS_2       // Ujian Tengah Semester 2
+  UAS_2       // Ujian Akhir Semester 2
+  FINAL_EXAM_1  // Ujian Akhir Siswa Akhir Gel 1
+  FINAL_EXAM_2  // ujian Akhir Siswa Akhir Gel 2
 }
 
 enum AttendanceStatus {

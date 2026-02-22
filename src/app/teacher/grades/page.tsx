@@ -53,7 +53,7 @@ export default function GradesPage() {
     studentId: '',
     competencyId: '',
     score: '',
-    assessmentType: 'DAILY',
+    assessmentType: 'UTS_1',
     notes: '',
   });
 
@@ -197,7 +197,7 @@ export default function GradesPage() {
         setTimeout(() => {
           setShowForm(false);
           setEditingId(null);
-          setFormData({ studentId: '', competencyId: '', score: '', assessmentType: 'DAILY', notes: '' });
+          setFormData({ studentId: '', competencyId: '', score: '', assessmentType: 'UTS_1', notes: '' });
           setSuccessMessage('');
           setPage(1);
           fetchGrades();
@@ -266,7 +266,7 @@ export default function GradesPage() {
   const handleCancel = () => {
     setShowForm(false);
     setEditingId(null);
-    setFormData({ studentId: '', competencyId: '', score: '', assessmentType: 'DAILY', notes: '' });
+    setFormData({ studentId: '', competencyId: '', score: '', assessmentType: 'UTS_1', notes: '' });
     setErrorMessage('');
   };
 
@@ -386,12 +386,12 @@ export default function GradesPage() {
                 className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white text-gray-900 font-medium"
               >
                 <option value="">Semua Jenis Penilaian</option>
-                <option value="DAILY">Penilaian Harian</option>
-                <option value="QUIZ">Kuis</option>
-                <option value="TASK">Tugas</option>
-                <option value="PROJECT">Proyek</option>
-                <option value="MIDTERM">UTS</option>
-                <option value="FINAL">UAS</option>
+                <option value="UTS_1">Ujian Tengah Semester 1 (UTS 1)</option>
+                <option value="UAS_1">Ujian Akhir Semester 1 (UAS 1)</option>
+                <option value="UTS_2">Ujian Tengah Semester 2 (UTS 2)</option>
+                <option value="UAS_2">Ujian Akhir Semester 2 (UAS 2)</option>
+                <option value="FINAL_EXAM_1">Ujian Akhir 1</option>
+                <option value="FINAL_EXAM_2">Ujian Akhir 2</option>
               </select>
             </div>
           </div>
@@ -492,12 +492,12 @@ export default function GradesPage() {
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                   required
                 >
-                  <option value="DAILY">Penilaian Harian</option>
-                  <option value="QUIZ">Kuis</option>
-                  <option value="TASK">Tugas</option>
-                  <option value="PROJECT">Proyek</option>
-                  <option value="MIDTERM">UTS (Ujian Tengah Semester)</option>
-                  <option value="FINAL">UAS (Ujian Akhir Semester)</option>
+                  <option value="UTS_1">Ujian Tengah Semester 1 (UTS 1)</option>
+                  <option value="UAS_1">Ujian Akhir Semester 1 (UAS 1)</option>
+                  <option value="UTS_2">Ujian Tengah Semester 2 (UTS 2)</option>
+                  <option value="UAS_2">Ujian Akhir Semester 2 (UAS 2)</option>
+                  <option value="FINAL_EXAM_1">Ujian Akhir 1</option>
+                  <option value="FINAL_EXAM_2">Ujian Akhir 2</option>
                 </select>
               </div>
             </div>
@@ -584,12 +584,12 @@ export default function GradesPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
-                        {grade.assessmentType === 'DAILY' && 'Penilaian Harian'}
-                        {grade.assessmentType === 'QUIZ' && 'Kuis'}
-                        {grade.assessmentType === 'TASK' && 'Tugas'}
-                        {grade.assessmentType === 'PROJECT' && 'Proyek'}
-                        {grade.assessmentType === 'MIDTERM' && 'UTS'}
-                        {grade.assessmentType === 'FINAL' && 'UAS'}
+                        {grade.assessmentType === 'UTS_1' && 'Ujian Tengah Semester 1 (UTS 1)'}
+                        {grade.assessmentType === 'UAS_1' && 'Ujian Akhir Semester 1 (UAS 1)'}
+                        {grade.assessmentType === 'UTS_2' && 'Ujian Tengah Semester 2 (UTS 2)'}
+                        {grade.assessmentType === 'UAS_2' && 'Ujian Akhir Semester 2 (UAS 2)'}
+                        {grade.assessmentType === 'FINAL_EXAM_1' && 'Ujian Akhir 1'}
+                        {grade.assessmentType === 'FINAL_EXAM_2' && 'Ujian Akhir 2'}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">{grade.date}</td>
                     </tr>
