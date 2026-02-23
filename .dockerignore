@@ -1,0 +1,43 @@
+# Dependencies
+node_modules
+npm-debug.log
+bun.lock
+
+# Build artifacts
+.next
+.turbo
+dist
+build
+*.tsbuildinfo
+
+# Development
+.env.local
+.env.development
+.env.test
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test & Coverage
+coverage
+.nyc_output
+test-results
+
+# Log files
+*.log
+logs
+
+# Security
+.ssh
+*.pem
+
+# OS
+.DS_Store
+Thumbs.db
