@@ -4,13 +4,8 @@ import { config } from "dotenv";
 import { defineConfig } from "prisma/config";
 import path from "path";
 
-// Load from .env.local if it exists (local development)
-// Otherwise use environment variables (Docker/production)
-if (process.env.NODE_ENV !== "production") {
-  config({ path: path.resolve(__dirname, ".env.local") });
-} else {
-  config({ path: path.resolve(__dirname, ".env") });
-}
+// Load environment variables from .env
+config({ path: path.resolve(__dirname, ".env") });
 
 const databaseUrl = process.env.DATABASE_URL;
 

@@ -677,7 +677,7 @@ export async function POST(request: NextRequest) {
       error: String(error),
       errorMsg: error instanceof Error ? error.message : 'Unknown error',
       errorCode: error instanceof Error && 'code' in error ? (error as any).code : 'N/A',
-      environment: process.env.VERCEL ? 'Vercel' : 'Local',
+      environment: 'Docker',
       nodeVersion: process.version,
     });
     if (browser) {
@@ -691,7 +691,7 @@ export async function POST(request: NextRequest) {
       { 
         success: false, 
         error: String(error),
-        environment: process.env.VERCEL ? 'Vercel' : 'Local',
+        environment: 'Docker',
         debug: process.env.NODE_ENV === 'development' ? {
           errorMsg: error instanceof Error ? error.message : 'Unknown error',
           stack: error instanceof Error ? error.stack : undefined,

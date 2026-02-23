@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 
 interface LoginResponse {
   success: boolean;
@@ -17,7 +17,6 @@ interface LoginResponse {
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -34,6 +33,7 @@ export default function LoginPage() {
 
   function redirectAfterLogin(role: string) {
     // Get redirect parameter from URL
+    const searchParams = new URLSearchParams(window.location.search);
     const redirectTo = searchParams.get('redirect');
     
     // If there's a redirect parameter and it's a valid internal route, use it
