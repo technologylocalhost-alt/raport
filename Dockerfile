@@ -71,6 +71,7 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV NODE_OPTIONS="--max-old-space-size=384"
+ENV PATH="/app/node_modules/.bin:$PATH"
 
 # Expose port
 EXPOSE 3000

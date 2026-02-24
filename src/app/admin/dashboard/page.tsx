@@ -43,12 +43,13 @@ export default function AdminDashboard() {
           'Authorization': `Bearer ${token}`,
         },
       });
-
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      // Always clear storage and redirect, even if API call fails
       localStorage.removeItem('accessToken');
       localStorage.removeItem('user');
       router.push('/login');
-    } catch (error) {
-      console.error('Logout error:', error);
     }
   }
 

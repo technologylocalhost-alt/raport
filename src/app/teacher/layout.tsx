@@ -23,6 +23,7 @@ interface TeacherLayoutProps {
 export default function TeacherLayout({ children }: TeacherLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -60,22 +61,30 @@ export default function TeacherLayout({ children }: TeacherLayoutProps) {
     },
   ];
 
-  async function handleLogout() {
-    try {
-      const token = localStorage.getItem('accessToken');
-      await fetch('/api/auth/logout', {
+  function handleLogout() {
+    if (isLoggingOut) return; // Prevent multiple clicks
+    
+    setIsLoggingOut(true);
+    
+    // Clear storage and redirect IMMEDIATELY
+    const token = localStorage.getItem('accessToken');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('user');
+    
+    // Call logout API in background (don't wait)
+    if (token) {
+      fetch('/api/auth/logout', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
         },
+      }).catch(() => {
+        // Ignore errors
       });
-
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('user');
-      router.push('/login');
-    } catch (error) {
-      console.error('Logout error:', error);
     }
+    
+    // Force redirect immediately
+    window.location.replace('/login');
   }
 
   return (
@@ -164,11 +173,18 @@ export default function TeacherLayout({ children }: TeacherLayoutProps) {
         <div className="p-2 sm:p-3 border-t border-slate-700">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-2 p-2 sm:p-2.5 rounded-lg text-slate-300 hover:bg-red-600 hover:text-white transition-all"
+            disabled={isLoggingOut}
+            className={`w-full flex items-center gap-2 p-2 sm:p-2.5 rounded-lg transition-all ${
+              isLoggingOut 
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                : 'text-slate-300 hover:bg-red-600 hover:text-white'
+            }`}
             title="Logout"
           >
-            <LogOut size={18} className="flex-shrink-0" />
-            <span className="text-xs sm:text-sm">Logout</span>
+            <LogOut size={18} className={`flex-shrink-0 ${isLoggingOut ? 'animate-spin' : ''}`} />
+            <span className="text-xs sm:text-sm">
+              {isLoggingOut ? 'Logging out...' : 'Logout'}
+            </span>
           </button>
         </div>
       </aside>
