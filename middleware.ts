@@ -11,12 +11,17 @@ export function middleware(request: NextRequest) {
   const accessToken = request.cookies.get('accessToken')?.value;
 
   // Skip middleware for static files and Next.js internals
-  if (pathname.startsWith('/_next') || pathname.startsWith('/static') || pathname.includes('.')) {
+  if (pathname.startsWith('/_next') || pathname.startsWith('/static') || pathname.startsWith('/public')) {
     return NextResponse.next();
   }
 
-  // Allow public routes
+  // Allow public routes - handle them without redirect logic for API endpoints
   if (publicRoutes.includes(pathname)) {
+    // For API endpoints, always allow access without redirects
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.next();
+    }
+    
     // If user already logged in and tries to access /login, redirect to their dashboard
     if (pathname === '/login' && accessToken) {
       // We can't verify the token here (Edge Runtime limitation)

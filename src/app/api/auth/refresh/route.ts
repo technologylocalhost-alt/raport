@@ -57,10 +57,26 @@ export async function POST(request: NextRequest) {
       role: user.role,
     });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       accessToken: newAccessToken,
     });
+
+    // Set new access token cookie if needed
+    response.cookies.set('accessToken', newAccessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 3600, // 1 hour
+      path: '/',
+    });
+
+    // Add cache control headers
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
+
+    return response;
   } catch (error) {
     console.error('Refresh token error:', error);
     return NextResponse.json(

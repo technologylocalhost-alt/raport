@@ -75,14 +75,28 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Set access token as HttpOnly cookie (optional, for better security)
+    response.cookies.set('accessToken', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 3600, // 1 hour
+      path: '/',
+    });
+
     // Set refresh token as HttpOnly secure cookie
     response.cookies.set('refreshToken', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: refreshTokenExpiry / 1000, // Convert to seconds
       path: '/',
     });
+
+    // Add cache control headers to prevent caching issues
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
 
     return response;
   } catch (error) {
