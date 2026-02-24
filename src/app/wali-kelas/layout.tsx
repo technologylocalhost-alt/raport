@@ -76,8 +76,8 @@ export default function WaliKelasLayout({ children }: WaliKelasLayoutProps) {
     
     const token = localStorage.getItem('accessToken');
     
-    // Call logout API with short timeout
-    if (token) {
+    // Call logout API with short timeout - only if token exists and is valid
+    if (token && token !== 'null' && token !== 'undefined' && token.length > 20) {
       try {
         await Promise.race([
           fetch('/api/auth/logout', {
@@ -90,9 +90,12 @@ export default function WaliKelasLayout({ children }: WaliKelasLayoutProps) {
           }),
           new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000))
         ]);
+        console.log('Logout API called successfully');
       } catch (error) {
-        console.log('Logout API call:', error);
+        console.log('Logout API error:', error);
       }
+    } else {
+      console.log('No valid token, skipping API call');
     }
     
     // Clear storage
