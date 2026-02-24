@@ -39,11 +39,15 @@ export function middleware(request: NextRequest) {
     const loginUrl = new URL('/login', request.url);
     // Add the original URL as redirect parameter
     loginUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(loginUrl);
+    return NextResponse.redirect(loginUrl, { status: 307 });
   }
 
-  // Redirect root path to login if not authenticated
+  // Don't redirect root if user is making an API call or RSC request
   if (pathname === '/' && !accessToken) {
+    // Check if it's an API or RSC request - don't redirect those
+    if (request.headers.get('next-router-state-tree') || request.headers.get('rsc')) {
+      return NextResponse.next();
+    }
     return NextResponse.redirect(new URL('/login', request.url));
   }
 

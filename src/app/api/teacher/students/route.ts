@@ -1,33 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { withAuth } from '@/lib/auth/middleware';
+import { TokenPayload } from '@/types';
 
-async function getTeacher(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const teacher = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (teacher && teacher.role === 'TEACHER') {
-    return teacher;
-  }
-  return null;
+// GET: Fetch students for teacher
+export async function GET(req: NextRequest) {
+  return withAuth(handleGET)(req);
 }
 
-export async function GET(req: NextRequest) {
+async function handleGET(
+  req: NextRequest,
+  user: TokenPayload
+): Promise<NextResponse> {
   try {
-    const teacher = await getTeacher(req);
+    const teacher = await prisma.user.findUnique({
+      where: { id: user.userId },
+    });
+
     if (!teacher || teacher.role !== 'TEACHER') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -71,7 +60,6 @@ export async function GET(req: NextRequest) {
         class: {
           include: {
             level: true,
-            schoolYear: true,
           },
         },
       },
@@ -105,9 +93,20 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// POST: Create student
 export async function POST(req: NextRequest) {
+  return withAuth(handlePOST)(req);
+}
+
+async function handlePOST(
+  req: NextRequest,
+  user: TokenPayload
+): Promise<NextResponse> {
   try {
-    const teacher = await getTeacher(req);
+    const teacher = await prisma.user.findUnique({
+      where: { id: user.userId },
+    });
+
     if (!teacher || teacher.role !== 'TEACHER') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

@@ -3,14 +3,14 @@ import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-res
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { extractAccessToken } from '@/lib/auth/token-extractor';
 
 async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
+  const token = extractAccessToken(req);
+  if (!token) {
     return null;
   }
 
-  const token = authHeader.slice(7);
   const payload = verifyAccessToken(token);
   
   if (!payload) {

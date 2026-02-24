@@ -6,7 +6,10 @@ services:
     container_name: raport-app
     environment:
       NODE_ENV: production
-      DATABASE_URL: ${DATABASE_URL:-postgresql://raport:raport_password_123@103.181.182.52:5432/raport_db}
+      # Supabase connection pooling URL (default untuk runtime)
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres.ylkadmkjyqlijhmsrsqc:password@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true}
+      # Direct connection untuk migrations (jika diperlukan)
+      DIRECT_URL: ${DIRECT_URL:-postgresql://postgres.ylkadmkjyqlijhmsrsqc:password@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       JWT_ACCESS_EXPIRY: ${JWT_ACCESS_EXPIRY:-15m}

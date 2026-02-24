@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate tokens
-    const { accessToken, refreshToken } = generateTokens({
+    const { accessToken, refreshToken: initialRefreshToken } = generateTokens({
       userId: user.id,
       email: user.email,
       role: user.role,
@@ -54,13 +54,43 @@ export async function POST(request: NextRequest) {
     const refreshTokenExpiry = parseExpiryString(process.env.JWT_REFRESH_EXPIRY || '7d');
     const expiresAt = getTokenExpiryDate(refreshTokenExpiry);
 
-    await prisma.refreshToken.create({
-      data: {
+    // Delete expired refresh tokens for this user first to avoid conflicts
+    await prisma.refreshToken.deleteMany({
+      where: {
         userId: user.id,
-        token: refreshToken,
-        expiresAt,
       },
     });
+
+    // Then create new refresh token with retry logic for concurrent requests
+    let refreshToken = initialRefreshToken;
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    while (retryCount < maxRetries) {
+      try {
+        await prisma.refreshToken.create({
+          data: {
+            userId: user.id,
+            token: refreshToken,
+            expiresAt,
+          },
+        });
+        break; // Success, exit loop
+      } catch (err: any) {
+        // If unique constraint error, regenerate token and retry
+        if (err?.code === 'P2002' && retryCount < maxRetries - 1) {
+          retryCount++;
+          const newTokens = generateTokens({
+            userId: user.id,
+            email: user.email,
+            role: user.role,
+          });
+          refreshToken = newTokens.refreshToken;
+          continue;
+        }
+        throw err; // Rethrow if not a retry-able error or max retries reached
+      }
+    }
 
     // Create response with secure cookie
     const response = NextResponse.json({
@@ -75,10 +105,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Set access token as HttpOnly cookie (optional, for better security)
+    // Set access token as HttpOnly cookie
     response.cookies.set('accessToken', accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_APP_URL?.startsWith('https'),
       sameSite: 'lax',
       maxAge: 3600, // 1 hour
       path: '/',
@@ -87,7 +117,7 @@ export async function POST(request: NextRequest) {
     // Set refresh token as HttpOnly secure cookie
     response.cookies.set('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_APP_URL?.startsWith('https'),
       sameSite: 'lax',
       maxAge: refreshTokenExpiry / 1000, // Convert to seconds
       path: '/',
@@ -105,6 +135,22 @@ export async function POST(request: NextRequest) {
         { error: 'Validation error', details: error.issues },
         { status: 400 }
       );
+    }
+
+    // Handle specific Prisma errors
+    if (error instanceof Error && error.name === 'PrismaClientKnownRequestError') {
+      const prismaError = error as any;
+      if (prismaError.code === 'P2002') {
+        console.error('Unique constraint error during refresh token creation:', {
+          code: prismaError.code,
+          meta: prismaError.meta,
+        });
+        // Return 500 as this is a server-side issue that should be investigated
+        return NextResponse.json(
+          { error: 'Authentication service temporarily unavailable' },
+          { status: 500 }
+        );
+      }
     }
 
     console.error('Login error:', error);

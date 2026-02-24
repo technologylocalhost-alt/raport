@@ -20,9 +20,10 @@ RUN bun install --network-timeout=300000
 
 # Copy only necessary source files
 COPY prisma ./prisma
+COPY scripts ./scripts
 COPY src ./src
 COPY public ./public
-COPY next.config.ts tsconfig.json next-env.d.ts ./
+COPY next.config.ts tsconfig.json next-env.d.ts bunfig.toml ./
 COPY middleware.ts ./
 COPY eslint.config.mjs postcss.config.mjs prisma.config.ts ./
 
@@ -58,7 +59,12 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/src ./src
 COPY --from=builder /app/next.config.ts ./
+COPY --from=builder /app/prisma.config.ts ./
+COPY --from=builder /app/tsconfig.json ./
+COPY --from=builder /app/bunfig.toml ./
 
 # Set environment variables for low memory
 ENV NODE_ENV=production

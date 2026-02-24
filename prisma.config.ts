@@ -8,7 +8,10 @@ import path from "path";
 config({ path: path.resolve(__dirname, ".env") });
 
 const databaseUrl = process.env.DATABASE_URL;
+// Use DIRECT_URL for migrations (Supabase requires direct connection, not pooler)
+const directUrl = process.env.DIRECT_URL;
 
+// For build stage, allow DATABASE_URL from environment (set in Dockerfile)
 if (!databaseUrl) {
   throw new Error("DATABASE_URL environment variable is not set");
 }
@@ -19,7 +22,8 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: databaseUrl,
+    // Use DIRECT_URL for migrations if available, otherwise fallback to DATABASE_URL
+    url: directUrl || databaseUrl,
   },
 });
 

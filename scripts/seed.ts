@@ -2,7 +2,7 @@ import "dotenv/config";
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
-import { hashPassword } from '../src/lib/auth/password';
+import { hashPassword } from '@/lib/auth/password';
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {

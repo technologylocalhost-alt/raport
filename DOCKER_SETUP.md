@@ -1,14 +1,14 @@
 # Docker Deployment Guide
 
 ## Overview
-Dockerfile untuk menjalankan aplikasi Raport Next.js dalam Docker dengan **Bun runtime**. Database sudah ada di external server (103.181.182.52:5432).
+Dockerfile untuk menjalankan aplikasi Raport Next.js dalam Docker dengan **Bun runtime**. Database menggunakan **Supabase PostgreSQL** (managed cloud database).
 
 **⚡ OPTIMIZED FOR LOW-RESOURCE VPS**: Docker setup ini telah dioptimalkan untuk VPS dengan spesifikasi rendah (1GB RAM, 20GB Storage).
 
 ## Prerequisites
 - Docker & Docker Compose installed
 - `.env` file dengan konfigurasi yang benar
-- External PostgreSQL sudah running di 103.181.182.52:5432
+- **Supabase Project** dengan PostgreSQL database (gratis tier available)
 - **Minimal VPS Requirements**: 1GB RAM, 20GB Storage (sudah dioptimalkan)
 
 ## 🚀 Low-Resource VPS Optimization
@@ -77,14 +77,52 @@ docker compose build --no-cache
 
 ## Quick Start
 
+### 0. Setup Supabase Database (First Time Only)
+
+#### A. Create Supabase Project
+1. Go to [https://supabase.com](https://supabase.com) and sign up (free tier available)
+2. Create a new project
+3. Wait for database provisioning (~2 minutes)
+
+#### B. Get Database Connection Strings
+1. Go to **Project Settings** → **Database**
+2. Scroll down to **Connection String** section
+3. Copy both URLs:
+   - **Connection Pooling** (for runtime) - Port 6543
+   - **Direct Connection** (for migrations) - Port 5432
+
+#### C. Run Database Migrations
+```bash
+# Copy example env and update with your Supabase credentials
+cp .env.example .env
+
+# Edit .env and replace [YOUR-PASSWORD] with your actual password
+nano .env
+
+# Run migrations (use DIRECT_URL for migrations)
+bun run prisma:migrate:deploy
+
+# Or if using npm
+npm run prisma:migrate:deploy
+```
+
+#### D. (Optional) Seed Database
+```bash
+bun run db:seed
+```
+
 ### 1. Prepare Environment
 ```bash
-# Ensure .env is configured
+# Ensure .env is configured with Supabase credentials
 cat .env
-# DATABASE_URL=postgresql://raport:raport_password_123@103.181.182.52:5432/raport_db
+
+# Example .env content:
+# DATABASE_URL=postgresql://postgres.xxxxx:[PASSWORD]@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+# DIRECT_URL=postgresql://postgres.xxxxx:[PASSWORD]@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres
 # NODE_ENV=production
 # JWT_ACCESS_SECRET=...
 # JWT_REFRESH_SECRET=...
+# NEXTAUTH_SECRET=...
 ```
 
 ### 2. Build & Run with Docker Compose
@@ -122,22 +160,34 @@ docker logs -f raport-app
 
 ### Environment Variables (in .env)
 ```env
-# Required
-DATABASE_URL=postgresql://raport:password@103.181.182.52:5432/raport_db
+# Required - Supabase Database
+# Get from: https://supabase.com/dashboard/project/_/settings/database
+DATABASE_URL=postgresql://postgres.xxxxx:[YOUR-PASSWORD]@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+DIRECT_URL=postgresql://postgres.xxxxx:[YOUR-PASSWORD]@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres
+
 NODE_ENV=production
 
-# JWT
-JWT_ACCESS_SECRET=<your-secret-key>
-JWT_REFRESH_SECRET=<your-secret-key>
+# JWT - Generate with: openssl rand -base64 32
+JWT_ACCESS_SECRET=<your-secret-key-min-32-chars>
+JWT_REFRESH_SECRET=<your-secret-key-min-32-chars>
 JWT_ACCESS_EXPIRY=15m
 JWT_REFRESH_EXPIRY=7d
+
+# NextAuth - Generate with: openssl rand -base64 32
+NEXTAUTH_SECRET=<your-secret-min-32-chars>
+NEXTAUTH_URL=http://localhost:3000
 
 # Optional
 APP_PORT=3000
 NEXT_PUBLIC_APP_URL=http://localhost:3000
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=<your-secret>
 ```
+
+### Supabase Configuration Notes
+- **DATABASE_URL** (Port 6543): Uses connection pooling via pgbouncer - recommended for production
+- **DIRECT_URL** (Port 5432): Direct connection - required for migrations only
+- **Free Tier**: 500MB database, 50,000 monthly active users
+- **Backup**: Automatic daily backups (7 days retention on free tier)
+- **Security**: SSL enabled by default
 
 ## Health Check
 The container includes a health check that verifies the application is running:
@@ -158,9 +208,23 @@ GET http://localhost:3000/api/health
 
 ### Database Connection Error
 ```
-Error: connect ECONNREFUSED 103.181.182.52:5432
+Error: connect ECONNREFUSED
 ```
-**Solution**: Check if external PostgreSQL is running and DATABASE_URL is correct
+**Solution**: 
+1. Check if DATABASE_URL is correctly set in `.env`
+2. Verify Supabase project is active (not paused)
+3. Check your password is correct (get from Supabase dashboard)
+4. Ensure you're using the correct connection string format:
+   ```
+   postgresql://postgres.xxxxx:[PASSWORD]@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+   ```
+
+### Supabase Project Paused
+**Issue**: Free tier projects pause after 1 week of inactivity
+**Solution**: 
+1. Go to Supabase dashboard
+2. Click "Restore" on your project
+3. Restart Docker container: `docker compose restart app`
 
 ### Build Fails
 ```

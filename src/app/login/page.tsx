@@ -66,6 +66,7 @@ export default function LoginPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ email, password }),
+        credentials: 'include', // Ensure cookies are sent/received
       });
 
       const data: LoginResponse = await response.json();
@@ -78,6 +79,9 @@ export default function LoginPage() {
       // Store access token in localStorage
       localStorage.setItem('accessToken', data.accessToken!);
       localStorage.setItem('user', JSON.stringify(data.user));
+
+      // Small delay to ensure cookies are processed
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       // Redirect to appropriate page
       redirectAfterLogin(data.user?.role || 'ADMIN');
