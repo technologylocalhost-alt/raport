@@ -71,29 +71,37 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     },
   ];
 
-  function handleLogout() {
+  async function handleLogout() {
     if (isLoggingOut) return; // Prevent multiple clicks
     
     setIsLoggingOut(true);
     
-    // Clear storage and redirect IMMEDIATELY
     const token = localStorage.getItem('accessToken');
+    
+    // Call logout API with short timeout
+    if (token) {
+      try {
+        await Promise.race([
+          fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            keepalive: true,
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000))
+        ]);
+      } catch (error) {
+        console.log('Logout API call:', error);
+      }
+    }
+    
+    // Clear storage
     localStorage.removeItem('accessToken');
     localStorage.removeItem('user');
     
-    // Call logout API in background (don't wait)
-    if (token) {
-      fetch('/api/auth/logout', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      }).catch(() => {
-        // Ignore errors
-      });
-    }
-    
-    // Force redirect immediately
+    // Force redirect
     window.location.replace('/login');
   }
 
