@@ -69,41 +69,26 @@ export default function WaliKelasLayout({ children }: WaliKelasLayoutProps) {
     },
   ];
 
-  async function handleLogout() {
-    if (isLoggingOut) return; // Prevent multiple clicks
-    
+  function handleLogout() {
+    if (isLoggingOut) return;
     setIsLoggingOut(true);
     
     const token = localStorage.getItem('accessToken');
     
-    // Call logout API with short timeout - only if token exists and is valid
-    if (token && token !== 'null' && token !== 'undefined' && token.length > 20) {
-      try {
-        await Promise.race([
-          fetch('/api/auth/logout', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-            keepalive: true,
-          }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000))
-        ]);
-        console.log('Logout API called successfully');
-      } catch (error) {
-        console.log('Logout API error:', error);
-      }
-    } else {
-      console.log('No valid token, skipping API call');
-    }
-    
-    // Clear storage
+    // Clear storage FIRST
     localStorage.removeItem('accessToken');
     localStorage.removeItem('user');
     
-    // Force redirect
-    window.location.replace('/login');
+    // Call logout API in background (fire and forget)
+    if (token && token !== 'null' && token !== 'undefined' && token.length > 20) {
+      fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+      }).catch(() => {});
+    }
+    
+    // Redirect immediately - do NOT use setTimeout or await
+    window.location.href = '/login';
   }
 
   // Check if we're on pages that need full width without sidebar

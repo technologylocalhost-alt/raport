@@ -71,41 +71,49 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     },
   ];
 
-  async function handleLogout() {
-    if (isLoggingOut) return; // Prevent multiple clicks
+  function handleLogout() {
+    console.log('[Logout] Button clicked!');
     
-    setIsLoggingOut(true);
-    
-    const token = localStorage.getItem('accessToken');
-    
-    // Call logout API with short timeout - only if token exists and is valid
-    if (token && token !== 'null' && token !== 'undefined' && token.length > 20) {
-      try {
-        await Promise.race([
-          fetch('/api/auth/logout', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-            keepalive: true,
-          }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000))
-        ]);
-        console.log('Logout API called successfully');
-      } catch (error) {
-        console.log('Logout API error:', error);
-      }
-    } else {
-      console.log('No valid token, skipping API call');
+    if (isLoggingOut) {
+      console.log('[Logout] Already logging out, returning');
+      return;
     }
     
-    // Clear storage
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('user');
+    setIsLoggingOut(true);
+    const token = localStorage.getItem('accessToken');
     
-    // Force redirect
-    window.location.replace('/login');
+    console.log('[Logout] Token:', token ? `${token.substring(0, 20)}...` : 'null');
+    console.log('[Logout] Starting logout process...');
+    
+    // Call logout API immediately - don't clear cookies yet
+    const logoutPromise = fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token || ''}`,
+      },
+      credentials: 'include', // Send cookies with request
+    })
+    .then(res => {
+      console.log('[Logout] Response received, status:', res.status);
+      return res.json();
+    })
+    .then(data => {
+      console.log('[Logout] Response data:', data);
+    })
+    .catch((err) => {
+      console.error('[Logout] Fetch error:', err.message);
+    })
+    .finally(() => {
+      console.log('[Logout] Fetch complete, clearing storage...');
+      // Clear storage AFTER API attempt
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      console.log('[Logout] Redirecting to /login');
+      // Use full page reload to ensure clean state
+      window.location.replace('/login');
+    });
   }
 
   return (

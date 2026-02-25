@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // Public routes that don't require authentication
-const publicRoutes = ['/login', '/api/auth/login', '/api/auth/register', '/api/auth/refresh', '/api/health'];
+const publicRoutes = ['/login', '/api/auth/login', '/api/auth/register', '/api/auth/refresh', '/api/auth/logout', '/api/health', '/api/debug'];
 
 // Protected route prefixes that require authentication
 const protectedPrefixes = ['/admin', '/teacher', '/wali-kelas', '/api/admin', '/api/teacher', '/api/wali-kelas'];
@@ -16,7 +16,7 @@ export function middleware(request: NextRequest) {
   }
 
   // Allow public routes - handle them without redirect logic for API endpoints
-  if (publicRoutes.includes(pathname)) {
+  if (publicRoutes.some(route => pathname === route || pathname.startsWith(route + '/'))) {
     // For API endpoints, always allow access without redirects
     if (pathname.startsWith('/api/')) {
       return NextResponse.next();
