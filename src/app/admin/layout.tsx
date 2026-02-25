@@ -24,6 +24,7 @@ interface AdminLayoutProps {
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -70,22 +71,49 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     },
   ];
 
-  async function handleLogout() {
-    try {
-      const token = localStorage.getItem('accessToken');
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('user');
-      router.push('/login');
-    } catch (error) {
-      console.error('Logout error:', error);
+  function handleLogout() {
+    console.log('[Logout] Button clicked!');
+    
+    if (isLoggingOut) {
+      console.log('[Logout] Already logging out, returning');
+      return;
     }
+    
+    setIsLoggingOut(true);
+    const token = localStorage.getItem('accessToken');
+    
+    console.log('[Logout] Token:', token ? `${token.substring(0, 20)}...` : 'null');
+    console.log('[Logout] Starting logout process...');
+    
+    // Call logout API immediately - don't clear cookies yet
+    const logoutPromise = fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token || ''}`,
+      },
+      credentials: 'include', // Send cookies with request
+    })
+    .then(res => {
+      console.log('[Logout] Response received, status:', res.status);
+      return res.json();
+    })
+    .then(data => {
+      console.log('[Logout] Response data:', data);
+    })
+    .catch((err) => {
+      console.error('[Logout] Fetch error:', err.message);
+    })
+    .finally(() => {
+      console.log('[Logout] Fetch complete, clearing storage...');
+      // Clear storage AFTER API attempt
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      console.log('[Logout] Redirecting to /login');
+      // Use full page reload to ensure clean state
+      window.location.replace('/login');
+    });
   }
 
   return (
@@ -174,11 +202,18 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         <div className="p-3 sm:p-4 border-t border-slate-700">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-lg text-slate-300 hover:bg-red-600 hover:text-white transition-all"
+            disabled={isLoggingOut}
+            className={`w-full flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-lg transition-all ${
+              isLoggingOut 
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                : 'text-slate-300 hover:bg-red-600 hover:text-white'
+            }`}
             title="Logout"
           >
-            <LogOut size={20} className="flex-shrink-0" />
-            <span className="text-sm sm:text-base">Logout</span>
+            <LogOut size={20} className={`flex-shrink-0 ${isLoggingOut ? 'animate-spin' : ''}`} />
+            <span className="text-sm sm:text-base">
+              {isLoggingOut ? 'Logging out...' : 'Logout'}
+            </span>
           </button>
         </div>
       </aside>

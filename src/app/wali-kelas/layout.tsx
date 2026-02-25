@@ -23,6 +23,7 @@ interface WaliKelasLayoutProps {
 export default function WaliKelasLayout({ children }: WaliKelasLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -68,22 +69,26 @@ export default function WaliKelasLayout({ children }: WaliKelasLayoutProps) {
     },
   ];
 
-  async function handleLogout() {
-    try {
-      const token = localStorage.getItem('accessToken');
-      await fetch('/api/auth/logout', {
+  function handleLogout() {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    
+    const token = localStorage.getItem('accessToken');
+    
+    // Clear storage FIRST
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('user');
+    
+    // Call logout API in background (fire and forget)
+    if (token && token !== 'null' && token !== 'undefined' && token.length > 20) {
+      fetch('/api/auth/logout', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('user');
-      router.push('/login');
-    } catch (error) {
-      console.error('Logout error:', error);
+        headers: { 'Authorization': `Bearer ${token}` },
+      }).catch(() => {});
     }
+    
+    // Redirect immediately - do NOT use setTimeout or await
+    window.location.href = '/login';
   }
 
   // Check if we're on pages that need full width without sidebar
@@ -180,11 +185,18 @@ export default function WaliKelasLayout({ children }: WaliKelasLayoutProps) {
         <div className="p-2 sm:p-3 border-t border-emerald-700">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-2 p-2 sm:p-2.5 rounded-lg text-emerald-300 hover:bg-red-600 hover:text-white transition-all"
+            disabled={isLoggingOut}
+            className={`w-full flex items-center gap-2 p-2 sm:p-2.5 rounded-lg transition-all ${
+              isLoggingOut 
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                : 'text-emerald-300 hover:bg-red-600 hover:text-white'
+            }`}
             title="Logout"
           >
-            <LogOut size={18} className="flex-shrink-0" />
-            <span className="text-xs sm:text-sm">Logout</span>
+            <LogOut size={18} className={`flex-shrink-0 ${isLoggingOut ? 'animate-spin' : ''}`} />
+            <span className="text-xs sm:text-sm">
+              {isLoggingOut ? 'Logging out...' : 'Logout'}
+            </span>
           </button>
         </div>
       </aside>

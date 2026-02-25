@@ -18,21 +18,33 @@ export default function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (!storedUser) {
-      router.push('/login');
-      return;
-    }
+    // Check after component mounts and localStorage is accessible
+    const checkAuth = () => {
+      const storedUser = localStorage.getItem('user');
+      if (!storedUser) {
+        router.push('/login');
+        return;
+      }
 
-    const userData = JSON.parse(storedUser);
-    if (userData.role !== 'ADMIN' && userData.role !== 'PRINCIPAL') {
-      router.push('/teacher/dashboard');
-      return;
-    }
+      try {
+        const userData = JSON.parse(storedUser);
+        if (userData.role !== 'ADMIN' && userData.role !== 'PRINCIPAL') {
+          router.push('/teacher/dashboard');
+          return;
+        }
 
-    setUser(userData);
-    setIsLoading(false);
-  }, [router]);
+        setUser(userData);
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+        router.push('/login');
+      }
+    };
+
+    // Small delay to ensure localStorage is ready
+    const timer = setTimeout(checkAuth, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   async function handleLogout() {
     try {
@@ -43,12 +55,13 @@ export default function AdminDashboard() {
           'Authorization': `Bearer ${token}`,
         },
       });
-
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      // Always clear storage and redirect, even if API call fails
       localStorage.removeItem('accessToken');
       localStorage.removeItem('user');
       router.push('/login');
-    } catch (error) {
-      console.error('Logout error:', error);
     }
   }
 

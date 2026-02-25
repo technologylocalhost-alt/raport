@@ -25,9 +25,19 @@ export default function LoginPage() {
   // Check if user is already logged in
   useEffect(() => {
     const accessToken = localStorage.getItem('accessToken');
-    if (accessToken) {
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      redirectAfterLogin(user.role);
+    const user = localStorage.getItem('user');
+    
+    // Only redirect if BOTH token and user exist
+    if (accessToken && user) {
+      try {
+        const userData = JSON.parse(user);
+        if (userData?.role) {
+          redirectAfterLogin(userData.role);
+        }
+      } catch (error) {
+        console.error('Error parsing user:', error);
+        localStorage.clear();
+      }
     }
   }, []);
 
@@ -42,16 +52,14 @@ export default function LoginPage() {
       return;
     }
 
-    // Otherwise, redirect based on role
-    if (role === 'ADMIN' || role === 'PRINCIPAL') {
-      router.push('/admin/dashboard');
-    } else if (role === 'TEACHER') {
-      router.push('/teacher/dashboard');
-    } else if (role === 'WALI_KELAS') {
-      router.push('/wali-kelas/dashboard');
-    } else {
-      router.push('/admin/dashboard'); // fallback
-    }
+    // Otherwise, redirect based on role (with small delay for stability)
+    const redirectPath = 
+      role === 'ADMIN' || role === 'PRINCIPAL' ? '/admin/dashboard' :
+      role === 'TEACHER' ? '/teacher/dashboard' :
+      role === 'WALI_KELAS' ? '/wali-kelas/dashboard' :
+      '/admin/dashboard';
+
+    setTimeout(() => router.push(redirectPath), 50);
   }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
