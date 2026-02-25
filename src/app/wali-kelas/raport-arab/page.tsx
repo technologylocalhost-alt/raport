@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Printer, Search, Download, Eye, FileText } from 'lucide-react';
 
 interface Class {
@@ -21,14 +21,37 @@ interface ClassWithStudents extends Class {
   students: Student[];
 }
 
-export default function RaportArabPage() {
+function RaportArabPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [classes, setClasses] = useState<ClassWithStudents[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClass, setSelectedClass] = useState<string>('');
+  const [selectedAssessmentType, setSelectedAssessmentType] = useState<string>('');
 
+  const assessmentTypes = [
+    { value: 'UTS_1', label: 'UTS Semester 1' },
+    { value: 'UAS_1', label: 'UAS Semester 1' },
+    { value: 'UTS_2', label: 'UTS Semester 2' },
+    { value: 'UAS_2', label: 'UAS Semester 2' },
+    { value: 'FINAL_EXAM_1', label: 'Ujian Akhir Gel 1' },
+    { value: 'FINAL_EXAM_2', label: 'Ujian Akhir Gel 2' },
+  ];
+
+  // Set initial values from URL params
+  useEffect(() => {
+    const classIdParam = searchParams.get('classId');
+    const assessmentTypeParam = searchParams.get('assessmentType');
+    
+    if (classIdParam) {
+      setSelectedClass(classIdParam);
+    }
+    if (assessmentTypeParam) {
+      setSelectedAssessmentType(assessmentTypeParam);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     fetchClasses();
@@ -115,9 +138,14 @@ export default function RaportArabPage() {
   };
 
   const handleViewRaport = (classId: string, studentId: string) => {
-    router.push(
-      `/wali-kelas/raport-arab/detail?classId=${classId}&studentId=${studentId}`
-    );
+    const params = new URLSearchParams({
+      classId,
+      studentId,
+    });
+    if (selectedAssessmentType) {
+      params.append('assessmentType', selectedAssessmentType);
+    }
+    router.push(`/wali-kelas/raport-arab/detail?${params.toString()}`);
   };
 
   // Filter classes based on search and selected class
@@ -173,13 +201,13 @@ export default function RaportArabPage() {
             <>
               {/* Filter Section */}
               <div className="p-6 border-b border-gray-200 bg-gray-50 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* Search */}
                   <div className="relative">
                     <Search size={18} className="absolute left-3 top-3 text-gray-400" />
                     <input
                       type="text"
-                      placeholder="Cari nama, nomor induk, atau kelas..."
+                      placeholder="Cari nama atau nomor induk..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-gray-900"
@@ -192,10 +220,24 @@ export default function RaportArabPage() {
                     onChange={(e) => setSelectedClass(e.target.value)}
                     className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-gray-900 bg-white"
                   >
-                    <option value="">Semua Kelas</option>
+                    <option value="">Pilih Kelas</option>
                     {classes.map((cls) => (
                       <option key={cls.id} value={cls.id}>
                         {cls.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Assessment Type Filter */}
+                  <select
+                    value={selectedAssessmentType}
+                    onChange={(e) => setSelectedAssessmentType(e.target.value)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-gray-900 bg-white"
+                  >
+                    <option value="">Pilih Jenis Penilaian</option>
+                    {assessmentTypes.map((type) => (
+                      <option key={type.value} value={type.value}>
+                        {type.label}
                       </option>
                     ))}
                   </select>
@@ -204,7 +246,12 @@ export default function RaportArabPage() {
                 {/* Summary */}
                 <p className="text-sm text-gray-600">
                   {selectedClass ? (
-                    <>Total: {filteredStudents.length} siswa di kelas {selectedClassObj?.name}</>
+                    <>
+                      Total: {filteredStudents.length} siswa di kelas {selectedClassObj?.name}
+                      {selectedAssessmentType && (
+                        <> • Jenis: {assessmentTypes.find(t => t.value === selectedAssessmentType)?.label}</>
+                      )}
+                    </>
                   ) : (
                     <>Silakan pilih kelas untuk melihat data</>
                   )}
@@ -240,7 +287,16 @@ export default function RaportArabPage() {
                             <td className="px-6 py-4 text-sm">
                               <div className="flex items-center justify-center gap-2">
                                 <button
-                                  onClick={() => router.push(`/wali-kelas/raport-arab/cover-preview?classId=${selectedClass}&studentId=${student.id}`)}
+                                  onClick={() => {
+                                    const params = new URLSearchParams({
+                                      classId: selectedClass,
+                                      studentId: student.id,
+                                    });
+                                    if (selectedAssessmentType) {
+                                      params.append('assessmentType', selectedAssessmentType);
+                                    }
+                                    router.push(`/wali-kelas/raport-arab/cover-preview?${params.toString()}`);
+                                  }}
                                   className="flex items-center gap-1 px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors text-xs font-medium"
                                   title="Sampul Raport"
                                 >
@@ -256,7 +312,15 @@ export default function RaportArabPage() {
                                   Review
                                 </button>
                                 <button
-                                  onClick={() => router.push('/wali-kelas/raport-arab/bulk-review')}
+                                  onClick={() => {
+                                    const params = new URLSearchParams({
+                                      classId: selectedClass,
+                                    });
+                                    if (selectedAssessmentType) {
+                                      params.append('assessmentType', selectedAssessmentType);
+                                    }
+                                    router.push(`/wali-kelas/raport-arab/bulk-review?${params.toString()}`);
+                                  }}
                                   className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-xs font-medium"
                                   title="Review Keseluruhan"
                                 >
@@ -264,7 +328,15 @@ export default function RaportArabPage() {
                                   Semua
                                 </button>
                                 <button
-                                  onClick={() => router.push('/wali-kelas/raport-arab/bulk-download')}
+                                  onClick={() => {
+                                    const params = new URLSearchParams({
+                                      classId: selectedClass,
+                                    });
+                                    if (selectedAssessmentType) {
+                                      params.append('assessmentType', selectedAssessmentType);
+                                    }
+                                    router.push(`/wali-kelas/raport-arab/bulk-download?${params.toString()}`);
+                                  }}
                                   className="flex items-center gap-1 px-3 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 transition-colors text-xs font-medium"
                                   title="Download"
                                 >
@@ -292,14 +364,28 @@ export default function RaportArabPage() {
         <div className="mt-8 p-6 bg-emerald-50 border-l-4 border-emerald-600 rounded-lg">
           <h3 className="font-semibold text-emerald-900 mb-2">Panduan Penggunaan</h3>
           <ul className="text-sm text-emerald-800 space-y-1">
+            <li>• <strong>Pilih Kelas</strong> - Pilih kelas untuk menampilkan daftar siswa</li>
+            <li>• <strong>Pilih Jenis Penilaian</strong> - Filter berdasarkan UTS/UAS/Ujian Akhir</li>
             <li>• <strong>Sampul</strong> - Lihat dan cetak sampul raport siswa</li>
             <li>• <strong>Review</strong> - Lihat raport individual siswa</li>
             <li>• <strong>Semua</strong> - Review raport keseluruhan kelas</li>
             <li>• <strong>Unduh</strong> - Download raport dalam format PDF</li>
-            <li>• Gunakan pencarian atau filter untuk menemukan siswa tertentu</li>
+            <li>• Gunakan pencarian untuk menemukan siswa tertentu</li>
           </ul>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function RaportArabPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-emerald-100 p-6 flex items-center justify-center">
+        <p className="text-gray-600">Memuat halaman...</p>
+      </div>
+    }>
+      <RaportArabPageContent />
+    </Suspense>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Download, Eye } from 'lucide-react';
 
 interface Student {
@@ -18,12 +18,25 @@ interface Class {
   students: Student[];
 }
 
-export default function BulkReviewPage() {
+function BulkReviewPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const classIdParam = searchParams.get('classId');
+  const assessmentType = searchParams.get('assessmentType');
+  
   const [classes, setClasses] = useState<Class[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [allStudents, setAllStudents] = useState<(Student & { classId: string; className: string })[]>([]);
+
+  const assessmentTypeLabels: Record<string, string> = {
+    'UTS_1': 'UTS Semester 1',
+    'UAS_1': 'UAS Semester 1',
+    'UTS_2': 'UTS Semester 2',
+    'UAS_2': 'UAS Semester 2',
+    'FINAL_EXAM_1': 'Ujian Akhir Gel 1',
+    'FINAL_EXAM_2': 'Ujian Akhir Gel 2',
+  };
 
   useEffect(() => {
     fetchAllData();
@@ -119,10 +132,20 @@ export default function BulkReviewPage() {
   };
 
   const handleViewRaport = (classId: string, studentId: string) => {
-    router.push(
-      `/wali-kelas/raport-arab/detail?classId=${classId}&studentId=${studentId}`
-    );
+    const params = new URLSearchParams({
+      classId,
+      studentId,
+    });
+    if (assessmentType) {
+      params.append('assessmentType', assessmentType);
+    }
+    router.push(`/wali-kelas/raport-arab/detail?${params.toString()}`);
   };
+
+  // Filter students based on classId if provided
+  const filteredStudents = classIdParam 
+    ? allStudents.filter(s => s.classId === classIdParam)
+    : allStudents;
 
   if (isLoading) {
     return (
@@ -144,7 +167,20 @@ export default function BulkReviewPage() {
             <ArrowLeft size={20} />
             Kembali
           </button>
-          <h1 className="text-3xl font-bold text-emerald-900">Review Keseluruhan Raport</h1>
+          <div>
+            <h1 className="text-3xl font-bold text-emerald-900">Review Keseluruhan Raport</h1>
+            {(classIdParam || assessmentType) && (
+              <p className="text-sm text-gray-600 mt-1">
+                {classIdParam && (
+                  <span>Kelas: {classes.find(c => c.id === classIdParam)?.name || 'N/A'}</span>
+                )}
+                {classIdParam && assessmentType && <span> • </span>}
+                {assessmentType && (
+                  <span>Jenis: {assessmentTypeLabels[assessmentType] || assessmentType}</span>
+                )}
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Menu Tabs */}
@@ -163,7 +199,12 @@ export default function BulkReviewPage() {
             Review Keseluruhan
           </button>
           <button
-            onClick={() => router.push('/wali-kelas/raport-arab/bulk-download')}
+            onClick={() => {
+              const params = new URLSearchParams();
+              if (classIdParam) params.append('classId', classIdParam);
+              if (assessmentType) params.append('assessmentType', assessmentType);
+              router.push(`/wali-kelas/raport-arab/bulk-download?${params.toString()}`);
+            }}
             className="flex items-center gap-2 px-6 py-3 bg-white text-emerald-600 border-2 border-emerald-600 rounded-lg font-semibold hover:bg-emerald-50 transition-colors"
           >
             <Download size={20} />
@@ -179,7 +220,7 @@ export default function BulkReviewPage() {
 
         {/* Main Content */}
         <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-          {allStudents.length > 0 ? (
+          {filteredStudents.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -191,7 +232,7 @@ export default function BulkReviewPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {allStudents.map((student, index) => (
+                  {filteredStudents.map((student, index) => (
                     <tr
                       key={`${student.classId}-${student.id}`}
                       className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
@@ -239,5 +280,17 @@ export default function BulkReviewPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function BulkReviewPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-emerald-100 p-6 flex items-center justify-center">
+        <p className="text-gray-600">Memuat data...</p>
+      </div>
+    }>
+      <BulkReviewPageContent />
+    </Suspense>
   );
 }

@@ -61,12 +61,22 @@ function RaportArabDetailContent() {
   const router = useRouter();
   const classId = searchParams.get('classId');
   const studentId = searchParams.get('studentId');
+  const assessmentType = searchParams.get('assessmentType');
 
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [allStudents, setAllStudents] = useState<Student[]>([]);
   const [currentStudentIndex, setCurrentStudentIndex] = useState(-1);
+
+  const assessmentTypeLabels: Record<string, string> = {
+    'UTS_1': 'UTS Semester 1',
+    'UAS_1': 'UAS Semester 1',
+    'UTS_2': 'UTS Semester 2',
+    'UAS_2': 'UAS Semester 2',
+    'FINAL_EXAM_1': 'Ujian Akhir Gel 1',
+    'FINAL_EXAM_2': 'Ujian Akhir Gel 2',
+  };
 
   // Helper: Convert numeric score to letter grade (1-10 scale)
   const getLetterGrade = (score: number): string => {
@@ -277,7 +287,7 @@ function RaportArabDetailContent() {
     if (classId && studentId) {
       fetchReportData();
     }
-  }, [classId, studentId]);
+  }, [classId, studentId, assessmentType]);
 
   async function fetchReportData() {
     try {
@@ -407,8 +417,14 @@ function RaportArabDetailContent() {
         let approvedData: any = null;
         
         try {
+          // Build API URL with assessmentType parameter if provided
+          let apiUrl = `/api/wali-kelas/nilai-approve?studentId=${studentId}&classId=${classId}&limit=100`;
+          if (assessmentType) {
+            apiUrl += `&assessmentType=${assessmentType}`;
+          }
+          
           const approvedResponse = await fetch(
-            `/api/wali-kelas/nilai-approve?studentId=${studentId}&classId=${classId}&limit=100`,
+            apiUrl,
             { headers: { Authorization: `Bearer ${token}` } }
           );
 
@@ -425,8 +441,13 @@ function RaportArabDetailContent() {
         // If primary endpoint failed, try fallback endpoint
         if (!approvedData?.success) {
           console.log('[Raport] Trying fallback: grades-for-approval');
+          let fallbackUrl = `/api/wali-kelas/grades-for-approval?classId=${classId}&studentId=${studentId}`;
+          if (assessmentType) {
+            fallbackUrl += `&assessmentType=${assessmentType}`;
+          }
+          
           const fallbackResponse = await fetch(
-            `/api/wali-kelas/grades-for-approval?classId=${classId}&studentId=${studentId}`,
+            fallbackUrl,
             { headers: { Authorization: `Bearer ${token}` } }
           );
 
@@ -463,6 +484,13 @@ function RaportArabDetailContent() {
           }
         } else {
           console.log('[Raport] No success or data in approvedData');
+        }
+        
+        // Filter by assessmentType if specified (client-side filtering as fallback)
+        if (assessmentType && approvedGrades.length > 0) {
+          const beforeFilter = approvedGrades.length;
+          approvedGrades = approvedGrades.filter(grade => grade.assessmentType === assessmentType);
+          console.log(`[Raport] Filter by assessmentType ${assessmentType}: ${beforeFilter} -> ${approvedGrades.length}`);
         }
       } catch (err) {
         console.warn('Could not fetch approved grades:', err);
@@ -616,23 +644,40 @@ function RaportArabDetailContent() {
   const handlePreviousStudent = () => {
     if (currentStudentIndex > 0) {
       const previousStudent = allStudents[currentStudentIndex - 1];
-      router.push(
-        `/wali-kelas/raport-arab/detail?classId=${classId}&studentId=${previousStudent.id}`
-      );
+      const params = new URLSearchParams({
+        classId: classId || '',
+        studentId: previousStudent.id,
+      });
+      if (assessmentType) {
+        params.append('assessmentType', assessmentType);
+      }
+      router.push(`/wali-kelas/raport-arab/detail?${params.toString()}`);
     }
   };
 
   const handleNextStudent = () => {
     if (currentStudentIndex < allStudents.length - 1) {
       const nextStudent = allStudents[currentStudentIndex + 1];
-      router.push(
-        `/wali-kelas/raport-arab/detail?classId=${classId}&studentId=${nextStudent.id}`
-      );
+      const params = new URLSearchParams({
+        classId: classId || '',
+        studentId: nextStudent.id,
+      });
+      if (assessmentType) {
+        params.append('assessmentType', assessmentType);
+      }
+      router.push(`/wali-kelas/raport-arab/detail?${params.toString()}`);
     }
   };
 
   const handleSeeAllStudents = () => {
-    router.push(`/wali-kelas/raport-arab/bulk-review`);
+    const params = new URLSearchParams();
+    if (classId) {
+      params.append('classId', classId);
+    }
+    if (assessmentType) {
+      params.append('assessmentType', assessmentType);
+    }
+    router.push(`/wali-kelas/raport-arab/bulk-review?${params.toString()}`);
   };
 
   if (isLoading) {
@@ -919,7 +964,14 @@ function RaportArabDetailContent() {
           Kembali
         </button>
         <div className="h-6 w-px bg-gray-300"></div>
-        <span className="text-gray-600 text-sm">Raport Peserta Didik Bahasa Arab - F4 (215 × 330 mm)</span>
+        <div className="flex flex-col">
+          <span className="text-gray-600 text-sm">Raport Peserta Didik Bahasa Arab - F4 (215 × 330 mm)</span>
+          {assessmentType && (
+            <span className="text-emerald-700 text-xs font-semibold">
+              Jenis Penilaian: {assessmentTypeLabels[assessmentType] || assessmentType}
+            </span>
+          )}
+        </div>
         
         {/* Navigation Buttons */}
         <div className="ml-auto flex items-center gap-2">

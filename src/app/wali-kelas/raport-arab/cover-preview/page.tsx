@@ -21,6 +21,7 @@ function CoverPreviewContent() {
   const router = useRouter();
   const classId = searchParams.get('classId');
   const studentId = searchParams.get('studentId');
+  const assessmentType = searchParams.get('assessmentType');
 
   const [student, setStudent] = useState<Student | null>(null);
   const [classData, setClassData] = useState<ClassData | null>(null);
@@ -28,6 +29,15 @@ function CoverPreviewContent() {
   const [error, setError] = useState('');
   const [allStudents, setAllStudents] = useState<Student[]>([]);
   const [currentStudentIndex, setCurrentStudentIndex] = useState(-1);
+
+  const assessmentTypeLabels: Record<string, string> = {
+    'UTS_1': 'UTS Semester 1',
+    'UAS_1': 'UAS Semester 1',
+    'UTS_2': 'UTS Semester 2',
+    'UAS_2': 'UAS Semester 2',
+    'FINAL_EXAM_1': 'Ujian Akhir Gel 1',
+    'FINAL_EXAM_2': 'Ujian Akhir Gel 2',
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -92,23 +102,52 @@ function CoverPreviewContent() {
   const handlePreviousStudent = () => {
     if (currentStudentIndex > 0) {
       const prevStudent = allStudents[currentStudentIndex - 1];
-      router.push(`/wali-kelas/raport-arab/cover-preview?classId=${classId}&studentId=${prevStudent.id}`);
+      const params = new URLSearchParams({
+        classId: classId || '',
+        studentId: prevStudent.id,
+      });
+      if (assessmentType) {
+        params.append('assessmentType', assessmentType);
+      }
+      router.push(`/wali-kelas/raport-arab/cover-preview?${params.toString()}`);
     }
   };
 
   const handleNextStudent = () => {
     if (currentStudentIndex < allStudents.length - 1) {
       const nextStudent = allStudents[currentStudentIndex + 1];
-      router.push(`/wali-kelas/raport-arab/cover-preview?classId=${classId}&studentId=${nextStudent.id}`);
+      const params = new URLSearchParams({
+        classId: classId || '',
+        studentId: nextStudent.id,
+      });
+      if (assessmentType) {
+        params.append('assessmentType', assessmentType);
+      }
+      router.push(`/wali-kelas/raport-arab/cover-preview?${params.toString()}`);
     }
   };
 
   const handleViewDetail = () => {
-    router.push(`/wali-kelas/raport-arab/detail?classId=${classId}&studentId=${studentId}`);
+    const params = new URLSearchParams({
+      classId: classId || '',
+      studentId: studentId || '',
+    });
+    if (assessmentType) {
+      params.append('assessmentType', assessmentType);
+    }
+    router.push(`/wali-kelas/raport-arab/detail?${params.toString()}`);
   };
 
   const handleSeeAllStudents = () => {
-    router.push('/wali-kelas/raport-arab');
+    const params = new URLSearchParams();
+    if (classId) {
+      params.append('classId', classId);
+    }
+    if (assessmentType) {
+      params.append('assessmentType', assessmentType);
+    }
+    const queryString = params.toString();
+    router.push(`/wali-kelas/raport-arab${queryString ? '?' + queryString : ''}`);
   };
 
   if (isLoading) {
@@ -400,7 +439,14 @@ function CoverPreviewContent() {
           Kembali
         </button>
         <div className="h-6 w-px bg-gray-300"></div>
-        <span className="text-gray-600 text-sm">Sampul Raport Bahasa Arab - F4 (215 × 330 mm)</span>
+        <div className="flex flex-col">
+          <span className="text-gray-600 text-sm">Sampul Raport Bahasa Arab - F4 (215 × 330 mm)</span>
+          {assessmentType && (
+            <span className="text-emerald-700 text-xs font-semibold">
+              Jenis Penilaian: {assessmentTypeLabels[assessmentType] || assessmentType}
+            </span>
+          )}
+        </div>
         
         {/* Navigation Buttons */}
         <div className="ml-auto flex items-center gap-2">

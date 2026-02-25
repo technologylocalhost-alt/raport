@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Download, Eye, Check } from 'lucide-react';
 
 interface Student {
@@ -23,14 +23,27 @@ interface StudentWithClass extends Student {
   className: string;
 }
 
-export default function BulkDownloadPage() {
+function BulkDownloadPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const classIdParam = searchParams.get('classId');
+  const assessmentType = searchParams.get('assessmentType');
+  
   const [classes, setClasses] = useState<Class[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [allStudents, setAllStudents] = useState<StudentWithClass[]>([]);
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [isDownloading, setIsDownloading] = useState(false);
+
+  const assessmentTypeLabels: Record<string, string> = {
+    'UTS_1': 'UTS Semester 1',
+    'UAS_1': 'UAS Semester 1',
+    'UTS_2': 'UTS Semester 2',
+    'UAS_2': 'UAS Semester 2',
+    'FINAL_EXAM_1': 'Ujian Akhir Gel 1',
+    'FINAL_EXAM_2': 'Ujian Akhir Gel 2',
+  };
 
   useEffect(() => {
     fetchAllData();
@@ -135,7 +148,7 @@ export default function BulkDownloadPage() {
   };
 
   const toggleSelectAll = (classId: string) => {
-    const classStudents = allStudents.filter((s) => s.classId === classId);
+    const classStudents = filteredStudents.filter((s) => s.classId === classId);
     const newSelected = new Set(selectedStudents);
 
     const allSelected = classStudents.every((s) => newSelected.has(`${s.classId}-${s.id}`));
@@ -151,6 +164,16 @@ export default function BulkDownloadPage() {
 
     setSelectedStudents(newSelected);
   };
+
+  // Filter students based on classId if provided
+  const filteredStudents = classIdParam 
+    ? allStudents.filter(s => s.classId === classIdParam)
+    : allStudents;
+
+  // Filter classes to show only the selected class if classIdParam is set
+  const filteredClasses = classIdParam
+    ? classes.filter(c => c.id === classIdParam)
+    : classes;
 
   const handleDownloadSelected = async () => {
     if (selectedStudents.size === 0) {
@@ -244,7 +267,20 @@ export default function BulkDownloadPage() {
             <ArrowLeft size={20} />
             Kembali
           </button>
-          <h1 className="text-3xl font-bold text-emerald-900">Download Semua Raport</h1>
+          <div>
+            <h1 className="text-3xl font-bold text-emerald-900">Download Semua Raport</h1>
+            {(classIdParam || assessmentType) && (
+              <p className="text-sm text-gray-600 mt-1">
+                {classIdParam && (
+                  <span>Kelas: {classes.find(c => c.id === classIdParam)?.name || 'N/A'}</span>
+                )}
+                {classIdParam && assessmentType && <span> • </span>}
+                {assessmentType && (
+                  <span>Jenis: {assessmentTypeLabels[assessmentType] || assessmentType}</span>
+                )}
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Menu Tabs */}
@@ -256,7 +292,12 @@ export default function BulkDownloadPage() {
             Review Individual
           </button>
           <button
-            onClick={() => router.push('/wali-kelas/raport-arab/bulk-review')}
+            onClick={() => {
+              const params = new URLSearchParams();
+              if (classIdParam) params.append('classId', classIdParam);
+              if (assessmentType) params.append('assessmentType', assessmentType);
+              router.push(`/wali-kelas/raport-arab/bulk-review?${params.toString()}`);
+            }}
             className="flex items-center gap-2 px-6 py-3 bg-white text-emerald-600 border-2 border-emerald-600 rounded-lg font-semibold hover:bg-emerald-50 transition-colors"
           >
             <Eye size={20} />
@@ -279,7 +320,7 @@ export default function BulkDownloadPage() {
 
         {/* Classes and Students */}
         <div className="space-y-6">
-          {classes.map((cls) => (
+          {filteredClasses.map((cls) => (
             <div key={cls.id} className="bg-white rounded-lg shadow-lg overflow-hidden">
               <div className="bg-emerald-600 text-white px-6 py-4 flex items-center justify-between">
                 <h2 className="text-xl font-semibold">{cls.name}</h2>
@@ -343,7 +384,7 @@ export default function BulkDownloadPage() {
         {/* Download Button */}
         <div className="mt-8 flex gap-4 justify-end">
           <div className="text-gray-600 font-semibold">
-            {selectedStudents.size} siswa dipilih dari {allStudents.length}
+            {selectedStudents.size} siswa dipilih dari {filteredStudents.length}
           </div>
           <button
             onClick={handleDownloadSelected}
@@ -360,5 +401,17 @@ export default function BulkDownloadPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function BulkDownloadPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-emerald-100 p-6 flex items-center justify-center">
+        <p className="text-gray-600">Memuat data...</p>
+      </div>
+    }>
+      <BulkDownloadPageContent />
+    </Suspense>
   );
 }

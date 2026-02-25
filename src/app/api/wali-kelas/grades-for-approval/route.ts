@@ -39,6 +39,8 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const classId = searchParams.get('classId') || '';
+    const studentId = searchParams.get('studentId') || '';
+    const assessmentType = searchParams.get('assessmentType') || '';
 
     // Get the wali kelas's classes
     let query: any = {
@@ -71,7 +73,9 @@ export async function GET(request: NextRequest) {
           classId: {
             in: classIds,
           },
+          ...(studentId ? { id: studentId } : {}),
         },
+        ...(assessmentType ? { assessmentType: assessmentType as any } : {}),
       },
       include: {
         student: {

@@ -52,9 +52,10 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const studentId = searchParams.get('studentId') || '';
     const classId = searchParams.get('classId') || '';
+    const assessmentType = searchParams.get('assessmentType') || '';
     const limit = parseInt(searchParams.get('limit') || '100');
 
-    console.log('[NilaiApprove] Request params:', { studentId, classId, limit });
+    console.log('[NilaiApprove] Request params:', { studentId, classId, assessmentType, limit });
 
     // Validate at least classId is provided
     if (!classId) {
@@ -93,6 +94,7 @@ export async function GET(request: NextRequest) {
     const approvedGrades = await prisma.nilaiApprove.findMany({
       where: {
         ...(studentId ? { studentId: studentId } : {}),
+        ...(assessmentType ? { assessmentType: assessmentType as any } : {}),
         // Filter by classId through student's class relationship
         student: {
           classId: classId,
