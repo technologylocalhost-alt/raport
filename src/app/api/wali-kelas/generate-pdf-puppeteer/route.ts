@@ -596,12 +596,20 @@ export async function POST(request: NextRequest) {
 
     // Launch Puppeteer
     let executablePath: string;
-    try {
-      executablePath = await chromium.executablePath();
-      console.log('Using Chromium from @sparticuz/chromium:', executablePath);
-    } catch (err) {
-      console.log('Chromium path from @sparticuz failed, falling back to puppeteer');
-      executablePath = puppeteer.executablePath();
+    
+    // Check if we have system Chromium (Docker/Alpine)
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+      executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+      console.log('Using system Chromium from env:', executablePath);
+    } else {
+      // Try @sparticuz/chromium for serverless environments
+      try {
+        executablePath = await chromium.executablePath();
+        console.log('Using Chromium from @sparticuz/chromium:', executablePath);
+      } catch (err) {
+        console.log('Chromium path from @sparticuz failed, falling back to puppeteer');
+        executablePath = puppeteer.executablePath();
+      }
     }
     
     const launchArgs = [

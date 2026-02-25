@@ -50,8 +50,19 @@ FROM oven/bun:1-alpine
 
 WORKDIR /app
 
-# Install only runtime dependencies
-RUN apk add --no-cache tini
+# Install runtime dependencies including Chromium for Puppeteer
+RUN apk add --no-cache \
+    tini \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
+
+# Tell Puppeteer to use system Chromium
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Copy from builder
 COPY --from=builder /app/package.json /app/bun.lock* ./

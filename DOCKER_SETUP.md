@@ -232,6 +232,22 @@ error: Puppeteer download failed
 ```
 **Solution**: This is expected. Add `PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true` to .env
 
+### Chromium/PDF Generation Error
+```
+ENOENT: no such file or directory, posix_spawn '/tmp/chromium'
+```
+**Solution**: Chromium is installed in the Docker image. Rebuild the image:
+```bash
+docker compose down
+docker compose build --no-cache
+docker compose up -d
+```
+
+The Dockerfile now includes:
+- System Chromium for Alpine Linux
+- Required fonts and dependencies
+- Environment variable `PUPPETEER_EXECUTABLE_PATH` pointing to system Chromium
+
 ### Container Exits Immediately
 ```bash
 # Check logs
