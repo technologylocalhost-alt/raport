@@ -12,7 +12,7 @@ RUN apk add --no-cache ca-certificates
 WORKDIR /app
 
 # Copy package files
-COPY package.json ./
+COPY package.json bun.lock* ./
 
 # Install all dependencies (regenerate lockfile for clean install)
 # Increased timeout for slow VPS network
@@ -23,7 +23,7 @@ COPY prisma ./prisma
 COPY scripts ./scripts
 COPY src ./src
 COPY public ./public
-COPY next.config.ts tsconfig.json next-env.d.ts bunfig.toml ./
+COPY next.config.ts tsconfig.json bunfig.toml ./
 COPY middleware.ts ./
 COPY eslint.config.mjs postcss.config.mjs prisma.config.ts ./
 
