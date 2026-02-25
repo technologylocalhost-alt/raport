@@ -9,13 +9,14 @@ const protectedPrefixes = ['/admin', '/teacher', '/wali-kelas', '/api/admin', '/
 export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const accessToken = request.cookies.get('accessToken')?.value;
+  const refreshToken = request.cookies.get('refreshToken')?.value;
 
   // Skip middleware for static files and Next.js internals
   if (pathname.startsWith('/_next') || pathname.startsWith('/static') || pathname.startsWith('/public')) {
     return NextResponse.next();
   }
 
-  // Allow public routes - handle them without redirect logic for API endpoints
+  // Allow public routes
   if (publicRoutes.some(route => pathname === route || pathname.startsWith(route + '/'))) {
     // For API endpoints, always allow access without redirects
     if (pathname.startsWith('/api/')) {
@@ -34,16 +35,35 @@ export function middleware(request: NextRequest) {
   // Check if route requires authentication
   const isProtectedRoute = protectedPrefixes.some(prefix => pathname.startsWith(prefix));
 
-  // Redirect to login if accessing protected route without token
-  if (isProtectedRoute && !accessToken) {
+  // Redirect to login if accessing protected route without tokens
+  if (isProtectedRoute && !accessToken && !refreshToken) {
+    console.log('[Middleware] No tokens found, redirecting to login:', pathname);
+    
+    // Don't redirect API calls - just return 401
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'No authentication tokens found' },
+        { status: 401 }
+      );
+    }
+    
     const loginUrl = new URL('/login', request.url);
-    // Add the original URL as redirect parameter
-    loginUrl.searchParams.set('redirect', pathname);
+    // Add the original URL as redirect parameter (but not for API routes)
+    if (!pathname.startsWith('/api/')) {
+      loginUrl.searchParams.set('redirect', pathname);
+    }
     return NextResponse.redirect(loginUrl, { status: 307 });
   }
 
+  // If has refresh token but no access token, let it pass
+  // The API will handle refreshing or returning 401
+  if (isProtectedRoute && !accessToken && refreshToken) {
+    console.log('[Middleware] Has refresh token but no access token, allowing through:', pathname);
+    return NextResponse.next();
+  }
+
   // Don't redirect root if user is making an API call or RSC request
-  if (pathname === '/' && !accessToken) {
+  if (pathname === '/' && !accessToken && !refreshToken) {
     // Check if it's an API or RSC request - don't redirect those
     if (request.headers.get('next-router-state-tree') || request.headers.get('rsc')) {
       return NextResponse.next();
@@ -52,7 +72,7 @@ export function middleware(request: NextRequest) {
   }
 
   // Redirect root path to dashboard if authenticated
-  if (pathname === '/' && accessToken) {
+  if (pathname === '/' && (accessToken || refreshToken)) {
     return NextResponse.redirect(new URL('/admin/dashboard', request.url));
   }
 
