@@ -21,6 +21,7 @@ interface Student {
   id: string;
   studentNo: string;
   name: string;
+  nourut?: number;
   email?: string;
   phone?: string;
   address?: string;
@@ -32,6 +33,7 @@ interface Student {
 interface FormData {
   studentNo: string;
   name: string;
+  nourut: string;
   email: string;
   phone: string;
   address: string;
@@ -72,6 +74,7 @@ function StudentsPageContent() {
   const [formData, setFormData] = useState<FormData>({
     studentNo: '',
     name: '',
+    nourut: '',
     email: '',
     phone: '',
     address: '',
@@ -79,7 +82,7 @@ function StudentsPageContent() {
     parentPhoneNo: '',
   });
 
-  const itemsPerPage = 10;
+  const itemsPerPage = 20;
 
   useEffect(() => {
     const user = localStorage.getItem('user');
@@ -161,8 +164,7 @@ function StudentsPageContent() {
       const token = localStorage.getItem('accessToken');
       const headers = { Authorization: `Bearer ${token}` };
 
-      const skip = (currentPage - 1) * itemsPerPage;
-      const url = `/api/admin/classes/${selectedClassId}/students?limit=${itemsPerPage}&skip=${skip}${searchTerm ? `&search=${searchTerm}` : ''}`;
+      const url = `/api/admin/classes/${selectedClassId}/students?limit=${itemsPerPage}&page=${currentPage}${searchTerm ? `&search=${searchTerm}` : ''}`;
 
       const response = await fetch(url, { headers });
       const data = await response.json();
@@ -221,6 +223,7 @@ function StudentsPageContent() {
         setFormData({
           studentNo: '',
           name: '',
+          nourut: '',
           email: '',
           phone: '',
           address: '',
@@ -244,6 +247,7 @@ function StudentsPageContent() {
     setFormData({
       studentNo: student.studentNo || '',
       name: student.name || '',
+      nourut: student.nourut?.toString() || '',
       email: student.email || '',
       phone: student.phone || '',
       address: student.address || '',
@@ -536,6 +540,7 @@ function StudentsPageContent() {
               setFormData({
                 studentNo: '',
                 name: '',
+                nourut: '',
                 email: '',
                 phone: '',
                 address: '',
@@ -610,6 +615,18 @@ function StudentsPageContent() {
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 placeholder-gray-500 rounded-lg focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200"
                   required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">
+                  No Urut
+                </label>
+                <input
+                  type="number"
+                  placeholder="1"
+                  value={formData.nourut}
+                  onChange={(e) => setFormData({ ...formData, nourut: e.target.value })}
+                  className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 placeholder-gray-500 rounded-lg focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200"
                 />
               </div>
               <div>
@@ -720,6 +737,7 @@ function StudentsPageContent() {
         <table className="w-full">
           <thead className="bg-gray-50 border-b">
             <tr>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">No. Urut</th>
               <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Nomor Siswa</th>
               <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Nama Siswa</th>
               <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Email</th>
@@ -730,19 +748,20 @@ function StudentsPageContent() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                   Memuat data siswa...
                 </td>
               </tr>
             ) : displayedStudents.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                   Tidak ada data siswa ditemukan
                 </td>
               </tr>
             ) : (
-              displayedStudents.map((student) => (
+              displayedStudents.map((student, index) => (
                 <tr key={student.id} className="border-b hover:bg-gray-50">
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900 text-center font-bold text-blue-600">{student.nourut || '-'}</td>
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">{student.studentNo}</td>
                   <td className="px-6 py-4 text-sm text-gray-700">{student.name}</td>
                   <td className="px-6 py-4 text-sm text-gray-700">{student.email || '-'}</td>

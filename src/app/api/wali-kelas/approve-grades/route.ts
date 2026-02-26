@@ -148,7 +148,10 @@ export async function POST(request: NextRequest) {
     // Get all students in class sorted
     const studentsInClass = await prisma.student.findMany({
       where: { classId: validatedData.classId },
-      orderBy: [{ studentNo: 'asc' }],
+      orderBy: [
+        { nourut: { sort: 'asc', nulls: 'last' } },
+        { studentNo: 'asc' },
+      ],
     });
 
     // For each unique (assessmentType, gender) combo, assign numbers

@@ -65,7 +65,10 @@ async function handleGET(
       },
       skip,
       take: limit,
-      orderBy: { name: 'asc' },
+      orderBy: [
+        { nourut: { sort: 'asc', nulls: 'last' } },
+        { name: 'asc' },
+      ],
     });
 
     const total = await prisma.student.count({ where: whereClause });

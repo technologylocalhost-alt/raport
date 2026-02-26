@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
       {
         'Nomor Induk': 'STD001',
         Nama: 'Contoh: Ahmad Riyandi',
+        'No Urut': 1,
         Email: 'ahmad@email.com',
         Telepon: '082123456789',
         Alamat: 'Jl. Contoh No. 123',
@@ -48,6 +49,7 @@ export async function GET(request: NextRequest) {
       {
         'Nomor Induk': 'STD002',
         Nama: 'Contoh: Siti Nur Azizah',
+        'No Urut': 2,
         Email: 'siti@email.com',
         Telepon: '082223456789',
         Alamat: 'Jl. Pendidikan No. 456',
@@ -64,6 +66,7 @@ export async function GET(request: NextRequest) {
     worksheet['!cols'] = [
       { wch: 15 }, // Nomor Induk
       { wch: 25 }, // Nama
+      { wch: 10 }, // No Urut
       { wch: 20 }, // Email
       { wch: 15 }, // Telepon
       { wch: 30 }, // Alamat

@@ -107,9 +107,10 @@ export async function GET(
           },
         },
       },
-      orderBy: {
-        name: 'asc',
-      },
+      orderBy: [
+        { nourut: { sort: 'asc', nulls: 'last' } },
+        { name: 'asc' },
+      ],
     });
 
     // Transform the data to include className

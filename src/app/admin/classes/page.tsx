@@ -629,9 +629,9 @@ export default function ClassesPage() {
                     Semester {classData.semester.number}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-600">
-                    {classData.waliKelasId ? (
+                    {classData.waliKelas ? (
                       <span className="inline-block px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-mono">
-                        {classData.waliKelasId}
+                        {classData.waliKelas.name}
                       </span>
                     ) : (
                       <span className="text-gray-400">-</span>

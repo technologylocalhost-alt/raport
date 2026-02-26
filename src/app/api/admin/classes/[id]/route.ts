@@ -29,6 +29,9 @@ async function verifyAdmin(req: NextRequest) {
 
 const classUpdateSchema = z.object({
   name: z.string().min(1, 'Nama kelas harus diisi').optional(),
+  levelId: z.string().optional(),
+  schoolYearId: z.string().optional(),
+  semesterId: z.string().optional(),
   capacity: z.number().min(1, 'Kapasitas harus lebih dari 0').optional(),
   waliKelasId: z.string().optional(),
   teachers: z.array(z.object({
@@ -163,6 +166,9 @@ export async function PUT(
     // Update class basic info
     const updateData: any = {};
     if (validatedData.name) updateData.name = validatedData.name;
+    if (validatedData.levelId) updateData.levelId = validatedData.levelId;
+    if (validatedData.schoolYearId) updateData.schoolYearId = validatedData.schoolYearId;
+    if (validatedData.semesterId) updateData.semesterId = validatedData.semesterId;
     if (validatedData.capacity) updateData.capacity = validatedData.capacity;
     if (validatedData.waliKelasId !== undefined) updateData.waliKelasId = validatedData.waliKelasId || null;
 

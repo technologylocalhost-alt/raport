@@ -102,6 +102,7 @@ export async function GET(request: NextRequest) {
           level: { select: { id: true, name: true, code: true } },
           schoolYear: { select: { id: true, year: true } },
           semester: { select: { id: true, number: true } },
+          waliKelas: { select: { id: true, name: true, email: true } },
           teachers: {
             include: {
               teacher: { select: { id: true, name: true, email: true } },

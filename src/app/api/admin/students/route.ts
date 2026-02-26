@@ -72,7 +72,11 @@ export async function GET(request: NextRequest) {
         },
         skip,
         take: limit,
-        orderBy: [{ class: { name: 'asc' } }, { name: 'asc' }],
+        orderBy: [
+          { class: { name: 'asc' } },
+          { nourut: { sort: 'asc', nulls: 'last' } },
+          { name: 'asc' },
+        ],
       }),
       prisma.student.count({ where }),
     ]);

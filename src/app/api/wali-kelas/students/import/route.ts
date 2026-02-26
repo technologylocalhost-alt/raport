@@ -10,6 +10,7 @@ interface ImportRow {
 interface NormalizedRow {
   studentNo?: string;
   name?: string;
+  nourut?: number | string;
   email?: string;
   phone?: string;
   address?: string;
@@ -33,6 +34,7 @@ function normalizeRow(row: ImportRow): NormalizedRow {
 
   normalized.studentNo = columnMap['nomorinduk'] || columnMap['studentno'] || columnMap['nomor'];
   normalized.name = columnMap['nama'] || columnMap['name'];
+  normalized.nourut = columnMap['nourut'] || columnMap['nomourut'] || columnMap['urut'];
   normalized.email = columnMap['email'] || columnMap['surel'];
   normalized.phone = columnMap['telepon'] || columnMap['phone'] || columnMap['notelepon'];
   normalized.address = columnMap['alamat'] || columnMap['address'];
@@ -137,6 +139,7 @@ export async function POST(request: NextRequest) {
         // Trim values
         const studentNo = row.studentNo?.toString().trim() || '';
         const name = row.name?.toString().trim() || '';
+        const nourut = row.nourut ? parseInt(row.nourut.toString().trim()) : null;
         const email = row.email?.toString().trim() || '';
         const phone = row.phone?.toString().trim() || '';
         const address = row.address?.toString().trim() || '';
@@ -197,6 +200,7 @@ export async function POST(request: NextRequest) {
           data: {
             studentNo,
             name,
+            nourut: nourut || null,
             email: email || null,
             phone: phone || null,
             address: address || null,

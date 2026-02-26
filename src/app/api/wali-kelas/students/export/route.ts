@@ -59,13 +59,17 @@ export async function GET(request: NextRequest) {
     // Get students for this class
     const students = await prisma.student.findMany({
       where: { classId },
-      orderBy: { studentNo: 'asc' },
+      orderBy: [
+        { nourut: { sort: 'asc', nulls: 'last' } },
+        { name: 'asc' },
+      ],
     });
 
     // Map to export format
     const exportData = students.map((student) => ({
       'Nomor Induk': student.studentNo,
       Nama: student.name,
+      'No Urut': student.nourut || '',
       Email: student.email || '',
       Telepon: student.phone || '',
       Alamat: student.address || '',
@@ -83,6 +87,7 @@ export async function GET(request: NextRequest) {
     worksheet['!cols'] = [
       { wch: 15 }, // Nomor Induk
       { wch: 25 }, // Nama
+      { wch: 10 }, // No Urut
       { wch: 20 }, // Email
       { wch: 15 }, // Telepon
       { wch: 30 }, // Alamat

@@ -30,6 +30,11 @@ async function verifyAdmin(req: NextRequest) {
 const studentSchema = z.object({
   studentNo: z.string().min(1, 'Nomor siswa harus diisi'),
   name: z.string().min(1, 'Nama harus diisi'),
+  nourut: z.union([z.string(), z.number()]).optional().transform(val => {
+    if (val === undefined || val === null || val === '') return null;
+    const num = typeof val === 'string' ? parseInt(val) : val;
+    return isNaN(num) ? null : num;
+  }),
   email: z.string().email('Email tidak valid').optional(),
   phone: z.string().optional(),
   address: z.string().optional(),
@@ -134,6 +139,7 @@ export async function GET(
           id: true,
           studentNo: true,
           name: true,
+          nourut: true,
           email: true,
           phone: true,
           address: true,
@@ -157,7 +163,10 @@ export async function GET(
         },
         skip,
         take: limit,
-        orderBy: { name: 'asc' },
+        orderBy: [
+          { nourut: { sort: 'asc', nulls: 'last' } },
+          { name: 'asc' },
+        ],
       }),
       prisma.student.count({
         where,
@@ -169,6 +178,7 @@ export async function GET(
       id: student.id,
       studentNo: student.studentNo,
       name: student.name,
+      nourut: student.nourut,
       email: student.email,
       phone: student.phone,
       address: student.address,
@@ -228,7 +238,7 @@ export async function POST(
       return errorResponse('Invalid input', 400);
     }
 
-    const { studentNo, name, email, phone, address, birthDate, parentPhoneNo } = validation.data;
+    const { studentNo, name, nourut, email, phone, address, birthDate, parentPhoneNo } = validation.data;
 
     // Check if student with this studentNo already exists in this class
     const existingStudent = await prisma.student.findUnique({
@@ -246,6 +256,7 @@ export async function POST(
         where: { id: existingStudent.id },
         data: {
           name,
+          nourut: nourut || null,
           email: email || null,
           phone: phone || null,
           address: address || null,
@@ -256,6 +267,7 @@ export async function POST(
           id: true,
           studentNo: true,
           name: true,
+          nourut: true,
           email: true,
           phone: true,
           address: true,
@@ -273,6 +285,7 @@ export async function POST(
         classId: id,
         studentNo,
         name,
+        nourut: nourut || null,
         email: email || null,
         phone: phone || null,
         address: address || null,
@@ -283,6 +296,7 @@ export async function POST(
         id: true,
         studentNo: true,
         name: true,
+        nourut: true,
         email: true,
         phone: true,
         address: true,
