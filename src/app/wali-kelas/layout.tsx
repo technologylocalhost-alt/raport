@@ -130,7 +130,7 @@ export default function WaliKelasLayout({ children }: WaliKelasLayoutProps) {
         </div>
 
         {/* Menu Items */}
-        <nav className="flex-1 overflow-y-auto py-3 sm:py-4 px-2 space-y-2">
+        <nav className="flex-1 overflow-y-auto py-3 sm:py-4 px-2 space-y-2 min-h-0">
           {menuItems.map((section, idx) => (
             <div key={idx}>
               {/* Main Item atau Section Title */}

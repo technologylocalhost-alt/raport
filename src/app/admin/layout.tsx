@@ -147,7 +147,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         </div>
 
         {/* Menu Items */}
-        <nav className="flex-1 overflow-y-auto py-4 sm:py-6 px-2 sm:px-3 space-y-3 sm:space-y-4">
+        <nav className="flex-1 overflow-y-auto py-4 sm:py-6 px-2 sm:px-3 space-y-3 sm:space-y-4 min-h-0">
           {menuItems.map((section, idx) => (
             <div key={idx}>
               {/* Main Item atau Section Title */}
