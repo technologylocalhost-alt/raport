@@ -15,12 +15,12 @@ services:
       JWT_ACCESS_EXPIRY: ${JWT_ACCESS_EXPIRY:-15m}
       JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY:-7d}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-your-secret-key}
-      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
-      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:25000}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:25000}
       # Memory optimization for Node.js
       NODE_OPTIONS: "--max-old-space-size=384"
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - "${APP_PORT:-25000}:3000"
     volumes:
       - ./.env:/app/.env
     restart: unless-stopped
