@@ -150,6 +150,53 @@ function CoverPreviewContent() {
     router.push(`/wali-kelas/raport-arab${queryString ? '?' + queryString : ''}`);
   };
 
+  const handleGeneratePDF = async () => {
+    try {
+      if (!student || !classData) {
+        alert('Data siswa atau kelas tidak tersedia');
+        return;
+      }
+
+      const coverElement = document.querySelector('.cover-page');
+      if (!coverElement) {
+        alert('Elemen cover tidak ditemukan');
+        return;
+      }
+
+      const response = await fetch('/api/wali-kelas/generate-cover-pdf', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+        },
+        body: JSON.stringify({
+          studentName: student.name,
+          className: classData.name,
+          studentNo: student.studentNo,
+          raportNo: student.raportNo,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Gagal membuat PDF cover');
+      }
+
+      const { pdf, fileName } = await response.json();
+
+      // Download PDF
+      const link = document.createElement('a');
+      link.href = pdf;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error generating cover PDF:', error);
+      alert(`Gagal membuat PDF cover: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -192,6 +239,14 @@ function CoverPreviewContent() {
           justify-content: center;
           align-items: flex-start;
           width: 100%;
+          margin-top: 120px;
+        }
+
+        @media (max-width: 640px) {
+          .a4-wrapper {
+            padding: 20px 10px 10px 10px;
+            margin-top: 140px;
+          }
         }
 
         .cover-page {
@@ -202,9 +257,19 @@ function CoverPreviewContent() {
           line-height: 1.2;
           direction: rtl;
           position: relative;
-          overflow: hidden;
+          overflow: auto;
           font-family: 'Amiri', 'Traditional Arabic', 'Arial Unicode MS', serif;
           box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        @media (max-width: 640px) {
+          .cover-page {
+            width: calc(100% - 8px);
+            max-width: 100%;
+            height: auto;
+            font-size: 10px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+          }
         }
 
         .cover-frame {
@@ -373,6 +438,34 @@ function CoverPreviewContent() {
           align-items: center;
           z-index: 200;
           width: 100%;
+          overflow-x: auto;
+          overflow-y: hidden;
+          flex-wrap: nowrap;
+          scroll-behavior: smooth;
+        }
+
+        .toolbar::-webkit-scrollbar {
+          height: 4px;
+        }
+
+        .toolbar::-webkit-scrollbar-track {
+          background: #f0f0f0;
+        }
+
+        .toolbar::-webkit-scrollbar-thumb {
+          background: #ccc;
+          border-radius: 2px;
+        }
+
+        .toolbar::-webkit-scrollbar-thumb:hover {
+          background: #999;
+        }
+
+        @media (max-width: 640px) {
+          .toolbar {
+            padding: 8px 12px;
+            gap: 8px;
+          }
         }
 
         body {
@@ -433,13 +526,13 @@ function CoverPreviewContent() {
       <div className="toolbar">
         <button
           onClick={() => router.back()}
-          className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-300 rounded"
+          className="flex items-center gap-1 md:gap-2 px-2 md:px-4 py-1 md:py-2 text-gray-700 hover:bg-gray-300 rounded text-sm md:text-base whitespace-nowrap"
         >
-          <ArrowLeft size={20} />
-          Kembali
+          <ArrowLeft size={18} className="md:w-5 md:h-5" />
+          <span className="hidden md:inline">Kembali</span>
         </button>
-        <div className="h-6 w-px bg-gray-300"></div>
-        <div className="flex flex-col">
+        <div className="hidden md:block h-6 w-px bg-gray-300"></div>
+        <div className="hidden md:flex flex-col">
           <span className="text-gray-600 text-sm">Sampul Raport Bahasa Arab - F4 (215 × 330 mm)</span>
           {assessmentType && (
             <span className="text-emerald-700 text-xs font-semibold">
@@ -449,64 +542,78 @@ function CoverPreviewContent() {
         </div>
         
         {/* Navigation Buttons */}
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1 md:gap-2 flex-nowrap">
           <button
             onClick={handlePreviousStudent}
             disabled={currentStudentIndex <= 0}
-            className={`flex items-center gap-2 px-4 py-2 rounded ${
+            className={`flex items-center gap-1 md:gap-2 px-2 md:px-4 py-1 md:py-2 rounded text-sm md:text-base whitespace-nowrap ${
               currentStudentIndex <= 0
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 : 'bg-gray-400 text-white hover:bg-gray-500'
             }`}
           >
-            ← Siswa Sebelumnya
+            <span className="hidden md:inline">←</span>
+            <span className="hidden md:inline">Sebelumnya</span>
+            <span className="md:hidden text-xs">‹</span>
           </button>
           
           <button
             onClick={handleSeeAllStudents}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+            className="flex items-center gap-1 md:gap-2 px-2 md:px-4 py-1 md:py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm md:text-base whitespace-nowrap"
           >
-            Lihat Semua Siswa
+            <span className="hidden md:inline">Lihat Semua</span>
+            <span className="md:hidden text-xs">Semua</span>
           </button>
           
           <button
             onClick={handleNextStudent}
             disabled={currentStudentIndex >= allStudents.length - 1}
-            className={`flex items-center gap-2 px-4 py-2 rounded ${
+            className={`flex items-center gap-1 md:gap-2 px-2 md:px-4 py-1 md:py-2 rounded text-sm md:text-base whitespace-nowrap ${
               currentStudentIndex >= allStudents.length - 1
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 : 'bg-gray-400 text-white hover:bg-gray-500'
             }`}
           >
-            Siswa Berikutnya →
+            <span className="hidden md:inline">Berikutnya</span>
+            <span className="md:hidden text-xs">›</span>
+            <span className="hidden md:inline">→</span>
           </button>
 
-          <span className="text-gray-700 font-medium px-4 ml-4">
-            Siswa {currentStudentIndex >= 0 ? currentStudentIndex + 1 : 1} / {allStudents.length}
+          <span className="text-gray-700 font-medium px-2 md:px-4 ml-1 md:ml-4 text-xs md:text-base whitespace-nowrap">
+            {currentStudentIndex >= 0 ? currentStudentIndex + 1 : 1}/{allStudents.length}
           </span>
         </div>
 
-        <div className="h-6 w-px bg-gray-300 ml-4"></div>
+        <div className="hidden md:block h-6 w-px bg-gray-300 ml-4"></div>
         
         <button
           onClick={handleViewDetail}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 ml-4"
+          className="flex items-center gap-1 md:gap-2 px-2 md:px-4 py-1 md:py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 md:ml-4 text-sm md:text-base whitespace-nowrap"
           title="Lihat detail raport"
         >
-          <Eye size={20} />
-          Raport Detail
+          <Eye size={18} className="md:w-5 md:h-5" />
+          <span className="hidden md:inline">Detail</span>
+        </button>
+        
+        <button
+          onClick={handleGeneratePDF}
+          className="flex items-center gap-1 md:gap-2 px-2 md:px-4 py-1 md:py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm md:text-base whitespace-nowrap"
+          title="Download cover sebagai PDF"
+        >
+          <Download size={18} className="md:w-5 md:h-5" />
+          <span className="hidden md:inline">PDF</span>
         </button>
         
         <button
           onClick={() => window.print()}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          className="flex items-center gap-1 md:gap-2 px-2 md:px-4 py-1 md:py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm md:text-base whitespace-nowrap"
         >
-          <Printer size={20} />
-          Print
+          <Printer size={18} className="md:w-5 md:h-5" />
+          <span className="hidden md:inline">Cetak</span>
         </button>
       </div>
 
-      <div className="max-w-7xl mx-auto w-full" style={{ paddingTop: '20px' }}>
+      <div className="w-full" style={{ paddingTop: '20px' }}>
 
         {/* Cover Page Preview */}
         <div className="a4-wrapper">

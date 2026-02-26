@@ -220,6 +220,8 @@ function BulkDownloadPageContent() {
               class: student.className,
             },
             subjectScores: grades,
+            semester: 'Semester 2',
+            schoolYear: '2024/2025',
           }),
         });
 

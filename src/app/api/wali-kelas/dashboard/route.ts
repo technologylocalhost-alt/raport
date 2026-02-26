@@ -11,6 +11,13 @@ interface Activity {
   activityType: 'success' | 'info' | 'warning';
 }
 
+interface SubjectTeacher {
+  subjectId: string;
+  subjectName: string;
+  teacherId: string;
+  teacherName: string;
+}
+
 async function getWaliKelas(token: string) {
   const payload = verifyAccessToken(token);
   if (!payload) throw new Error('Invalid token');
@@ -93,15 +100,26 @@ async function getWaliKelasStats(waliKelasId: string) {
       presentToday: 0,
       attendanceRate: 0,
       recentActivities: [],
+      subjectTeachers: [],
     };
   }
 
-  // Count total subjects in class
-  const subjects = await prisma.classTeacher.findMany({
+  // Get subjects and teachers for this class
+  const subjectTeachers = await prisma.classTeacher.findMany({
     where: { classId: class_.id },
-    distinct: ['subjectId'],
-    select: { subjectId: true },
+    include: {
+      subject: true,
+      teacher: true,
+    },
+    orderBy: { subject: { name: 'asc' } },
   });
+
+  const subjects = subjectTeachers.map((st) => ({
+    subjectId: st.subject.id,
+    subjectName: st.subject.name,
+    teacherId: st.teacher.id,
+    teacherName: st.teacher.name,
+  }));
 
   // Count hadir today
   const today = new Date();
@@ -136,6 +154,7 @@ async function getWaliKelasStats(waliKelasId: string) {
     presentToday,
     attendanceRate,
     recentActivities,
+    subjectTeachers: subjects,
   };
 }
 

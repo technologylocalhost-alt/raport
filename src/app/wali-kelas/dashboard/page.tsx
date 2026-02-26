@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   AlertCircle, BarChart3, BookOpen, CheckCircle, 
-  Clock, Users, TrendingUp, Loader
+  Clock, Users, TrendingUp, Loader, GraduationCap
 } from 'lucide-react';
 
 interface User {
@@ -23,6 +23,13 @@ interface ActivityItem {
   activityType: 'info' | 'warning' | 'success';
 }
 
+interface SubjectTeacher {
+  subjectId: string;
+  subjectName: string;
+  teacherId: string;
+  teacherName: string;
+}
+
 interface DashboardStats {
   className: string;
   totalStudents: number;
@@ -30,6 +37,7 @@ interface DashboardStats {
   presentToday: number;
   attendanceRate: number;
   recentActivities: ActivityItem[];
+  subjectTeachers: SubjectTeacher[];
 }
 
 interface StatCard {
@@ -176,6 +184,40 @@ function ActivityItemComponent({ activity }: { activity: ActivityItem }) {
   );
 }
 
+function SubjectsTeachersSection({ subjects }: { subjects: SubjectTeacher[] }) {
+  return (
+    <section>
+      <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6 flex items-center gap-2">
+        <GraduationCap size={24} className="text-emerald-600" />
+        Mata Pelajaran & Guru
+      </h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {subjects.length > 0 ? (
+          subjects.map((item) => (
+            <div key={item.subjectId} className="bg-white rounded-lg shadow-md p-4 sm:p-5 border-l-4 border-emerald-600">
+              <div className="space-y-2">
+                <div>
+                  <p className="text-gray-600 text-sm font-medium">Mata Pelajaran</p>
+                  <p className="text-lg font-bold text-gray-900">{item.subjectName}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600 text-sm font-medium">Guru Pengajar</p>
+                  <p className="text-base font-semibold text-emerald-700">{item.teacherName}</p>
+                </div>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="col-span-full text-center py-8 text-gray-500">
+            <BookOpen size={40} className="mx-auto mb-2 opacity-30" />
+            <p>Belum ada mata pelajaran ditugaskan</p>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function RecentActivitySection({ activities }: { activities: ActivityItem[] }) {
   return (
     <section>
@@ -265,6 +307,8 @@ export default function WaliKelasDashboard() {
       />
 
       <StatsSection stats={stats} />
+
+      <SubjectsTeachersSection subjects={stats.subjectTeachers} />
 
       <RecentActivitySection activities={stats.recentActivities} />
     </div>

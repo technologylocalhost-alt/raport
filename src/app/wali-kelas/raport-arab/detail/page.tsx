@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Printer, Download, Eye } from 'lucide-react';
+import { ArrowLeft, Download, Eye } from 'lucide-react';
 
 interface Student {
   id: string;
@@ -601,10 +601,6 @@ function RaportArabDetailContent() {
     );
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   const handleDownloadPDF = async () => {
     try {
       if (!reportData) {
@@ -667,17 +663,6 @@ function RaportArabDetailContent() {
       }
       router.push(`/wali-kelas/raport-arab/detail?${params.toString()}`);
     }
-  };
-
-  const handleSeeAllStudents = () => {
-    const params = new URLSearchParams();
-    if (classId) {
-      params.append('classId', classId);
-    }
-    if (assessmentType) {
-      params.append('assessmentType', assessmentType);
-    }
-    router.push(`/wali-kelas/raport-arab/bulk-review?${params.toString()}`);
   };
 
   if (isLoading) {
@@ -755,18 +740,20 @@ function RaportArabDetailContent() {
           font-family: 'Amiri', 'Traditional Arabic', serif;
           direction: rtl;
           position: relative;
-          overflow: visible;
+          overflow: auto;
           display: flex;
           flex-direction: column;
         }
 
         @media (max-width: 640px) {
           .a4-page {
-            width: 100%;
+            width: calc(100% - 4px);
             max-width: 100%;
-            padding: 4px 4px;
+            padding: 3px 2px;
             font-size: 11px;
             box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+            overflow-x: auto;
+            overflow-y: visible;
           }
         }
 
@@ -933,6 +920,24 @@ function RaportArabDetailContent() {
         tbody td {
           padding: 4px 5px;
         }
+
+        @media (max-width: 640px) {
+          table {
+            font-size: 10px;
+          }
+          
+          th, td {
+            padding: 3px 2px;
+          }
+          
+          thead th {
+            padding: 4px 2px;
+          }
+          
+          tbody td {
+            padding: 2px 1px;
+          }
+        }
         
         h1 {
           font-size: 16px;
@@ -1002,98 +1007,85 @@ function RaportArabDetailContent() {
       `}</style>
 
       <div className="toolbar">
-        <button
-          onClick={() => router.back()}
-          className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 text-gray-700 hover:bg-gray-300 rounded text-xs sm:text-sm"
-          title="Kembali"
-        >
-          <ArrowLeft size={16} className="flex-shrink-0" />
-          <span className="hidden sm:inline">Kembali</span>
-        </button>
-        <div className="hidden sm:block h-6 w-px bg-gray-300"></div>
-        <div className="hidden sm:flex flex-col whitespace-nowrap">
-          <span className="text-gray-600 text-xs">Raport Peserta Didik Bahasa Arab - F4 (210 × 330 mm)</span>
-          {assessmentType && (
-            <span className="text-emerald-700 text-xs font-semibold">
-              Jenis Penilaian: {assessmentTypeLabels[assessmentType] || assessmentType}
+        {/* Left Section: Back & Info */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            onClick={() => router.back()}
+            className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-gray-700 hover:bg-gray-200 rounded transition-colors text-xs sm:text-sm font-medium"
+            title="Kembali"
+          >
+            <ArrowLeft size={16} className="flex-shrink-0" />
+            <span className="hidden sm:inline">Kembali</span>
+          </button>
+          
+          <div className="hidden sm:inline-flex items-center gap-2">
+            <div className="h-5 w-px bg-gray-300"></div>
+            <div className="flex flex-col whitespace-nowrap">
+              <span className="text-gray-600 text-xs font-medium">Raport Peserta Didik Bahasa Arab</span>
+              {assessmentType && (
+                <span className="text-emerald-600 text-xs font-semibold">
+                  {assessmentTypeLabels[assessmentType] || assessmentType}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Center Section: Navigation & Student Info */}
+        <div className="flex items-center gap-1 sm:gap-2 flex-1 sm:justify-center px-2 sm:px-0">
+          <div className="flex items-center gap-1 sm:gap-2">
+            <button
+              onClick={handlePreviousStudent}
+              disabled={currentStudentIndex <= 0}
+              className={`flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded transition-colors text-xs sm:text-sm font-medium ${
+                currentStudentIndex <= 0
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-gray-600 text-white hover:bg-gray-700'
+              }`}
+              title="Siswa sebelumnya"
+            >
+              <span>←</span>
+              <span className="hidden sm:inline">Prev</span>
+            </button>
+
+            <span className="text-gray-700 font-semibold px-1 sm:px-2 text-xs sm:text-sm whitespace-nowrap bg-gray-100 rounded">
+              {currentStudentIndex >= 0 ? currentStudentIndex + 1 : 1}/{allStudents.length}
             </span>
-          )}
-        </div>
-        
-        {/* Navigation Buttons */}
-        <div className="flex flex-wrap items-center gap-1 sm:gap-2 sm:ml-auto">
-          <button
-            onClick={handlePreviousStudent}
-            disabled={currentStudentIndex <= 0}
-            className={`flex items-center gap-1 px-2 sm:px-3 py-2 rounded text-xs sm:text-sm ${
-              currentStudentIndex <= 0
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-gray-400 text-white hover:bg-gray-500'
-            }`}
-            title="Siswa sebelumnya"
-          >
-            <span className="hidden sm:inline">←</span>
-            <span className="hidden sm:inline">Sebelumnya</span>
-            <span className="sm:hidden">←</span>
-          </button>
-          
-          <button
-            onClick={handleSeeAllStudents}
-            className="flex items-center gap-1 px-2 sm:px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-xs sm:text-sm"
-            title="Lihat semua siswa"
-          >
-            <span className="hidden sm:inline">Lihat Semua Siswa</span>
-            <span className="sm:hidden">Semua</span>
-          </button>
-          
-          <button
-            onClick={handleNextStudent}
-            disabled={currentStudentIndex >= allStudents.length - 1}
-            className={`flex items-center gap-1 px-2 sm:px-3 py-2 rounded text-xs sm:text-sm ${
-              currentStudentIndex >= allStudents.length - 1
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-gray-400 text-white hover:bg-gray-500'
-            }`}
-            title="Siswa berikutnya"
-          >
-            <span className="sm:hidden">→</span>
-            <span className="hidden sm:inline">Berikutnya</span>
-            <span className="hidden sm:inline">→</span>
-          </button>
 
-          <span className="text-gray-700 font-medium px-2 text-xs sm:text-sm whitespace-nowrap">
-            <span className="hidden sm:inline">Siswa {currentStudentIndex >= 0 ? currentStudentIndex + 1 : 1} / </span>
-            <span className="">{allStudents.length}</span>
-          </span>
-        </div>
+            <button
+              onClick={handleNextStudent}
+              disabled={currentStudentIndex >= allStudents.length - 1}
+              className={`flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded transition-colors text-xs sm:text-sm font-medium ${
+                currentStudentIndex >= allStudents.length - 1
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-gray-600 text-white hover:bg-gray-700'
+              }`}
+              title="Siswa berikutnya"
+            >
+              <span className="hidden sm:inline">Next</span>
+              <span>→</span>
+            </button>
 
-        <div className="hidden sm:block h-6 w-px bg-gray-300 sm:ml-4"></div>
-        
-        <div className="flex flex-wrap items-center gap-1 sm:gap-2 sm:ml-4">
-          <button
-            onClick={handleViewCoverPreview}
-            className="flex items-center gap-1 px-2 sm:px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-xs sm:text-sm"
-            title="Lihat preview sampul raport"
-          >
-            <Eye size={14} className="flex-shrink-0" />
-            <span className="hidden sm:inline">Preview</span>
-          </button>
-          <button
-            onClick={handleDownloadPDF}
-            className="flex items-center gap-1 px-2 sm:px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs sm:text-sm"
-            title="Download PDF"
-          >
-            <Download size={14} className="flex-shrink-0" />
-            <span className="hidden sm:inline">PDF</span>
-          </button>
-          <button
-            onClick={handlePrint}
-            className="flex items-center gap-1 px-2 sm:px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs sm:text-sm"
-            title="Cetak"
-          >
-            <Printer size={14} className="flex-shrink-0" />
-            <span className="hidden sm:inline">Cetak</span>
-          </button>
+            <div className="hidden sm:inline-flex h-5 w-px bg-gray-300 mx-1"></div>
+
+            <button
+              onClick={handleViewCoverPreview}
+              className="flex items-center gap-1 px-2 sm:px-3 py-1.5 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors text-xs sm:text-sm font-medium"
+              title="Lihat sampul raport"
+            >
+              <Eye size={14} className="flex-shrink-0" />
+              <span className="hidden sm:inline">Cover</span>
+            </button>
+
+            <button
+              onClick={handleDownloadPDF}
+              className="flex items-center gap-1 px-2 sm:px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-xs sm:text-sm font-medium"
+              title="Download PDF"
+            >
+              <Download size={14} className="flex-shrink-0" />
+              <span className="hidden sm:inline">PDF</span>
+            </button>
+          </div>
         </div>
       </div>
 

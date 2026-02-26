@@ -157,6 +157,70 @@ sudo swapon --show                          # Enable swap jika perlu
 docker compose restart app
 ```
 
+### Chromium/PDF Generation SIGKILL on Low-Resource VPS
+Terjadi saat download PDF di mobile karena Chromium kehabisan memory.
+
+**Root Cause:** Chromium memerlukan ~200MB+ untuk generate PDF
+
+**Solutions:**
+
+**Option 1: Enable/Increase Swap (Recommended for 1GB VPS)**
+```bash
+# Add 1GB swap if not exists
+sudo fallocate -l 1G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+
+# Verify
+free -h
+```
+
+**Option 2: Optimize Chromium Launch (Add ke .env)**
+```bash
+# Puppeteer akan gunakan options ini
+PUPPETEER_ARGS=--no-sandbox,--disable-setuid-sandbox,--disable-gpu,--disable-dev-shm-usage
+NODE_OPTIONS=--max-old-space-size=256
+```
+
+**Option 3: Update docker-compose.yml Memory Limits**
+```yaml
+services:
+  app:
+    environment:
+      - PUPPETEER_ARGS=--no-sandbox,--disable-setuid-sandbox,--disable-gpu,--disable-dev-shm-usage
+      - NODE_OPTIONS=--max-old-space-size=256
+    deploy:
+      resources:
+        limits:
+          memory: 768M  # Increase dari 512M
+```
+
+**Option 4: Kill Other Processes Before PDF Generation**
+Add ke code yang handle PDF generation:
+```typescript
+// di production, stop other requests yang tidak penting
+// atau implement job queue untuk PDF generation
+```
+
+**Option 5: Reduce Concurrent PDF Generations**
+Implement queue untuk PDF generation agar tidak parallel → prevent memory spike
+
+**Recommended Approach:**
+1. Enable swap (Option 1) - paling mudah
+2. Reduce Chromium memory (Option 2) - add env vars
+3. Increase container memory limit (Option 3) - kalau VPS RAM cukup
+
+Setelah fix, test:
+```bash
+docker compose down
+docker compose up -d
+# Monitor memory
+watch -n 1 'free -h && echo "---" && docker stats --no-stream raport-app'
+```
+
+**If still fails:** Pertimbangkan cloud service untuk PDF generation (Cloudflare Workers, AWS Lambda, dll)
+
 **If VPS build fails:** Build locally, push to registry, pull di VPS
 ```bash
 docker tag raport:latest yourusername/raport:latest

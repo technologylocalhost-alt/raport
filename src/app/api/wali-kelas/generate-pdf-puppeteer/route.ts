@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
   let browser = null;
   try {
     const data = await request.json();
-    const { student, subjectScores } = data;
+    const { student, subjectScores, semester, schoolYear } = data;
 
     if (!student || !subjectScores) {
       return NextResponse.json(
@@ -675,10 +675,25 @@ export async function POST(request: NextRequest) {
     // Convert to base64
     const base64 = Buffer.from(pdfBuffer).toString('base64');
 
+    // Generate filename with format: Raport_StudentName_ClassName_SemesterNumber_SchoolYear
+    // Example: Raport_Muhammad_Akbar_kls1_smt2_24_25.pdf
+    const studentName = student.name?.replace(/\s+/g, '_') || 'student';
+    const className = student.class?.replace(/\s+/g, '') || 'unknown';
+    
+    // Extract semester number from "Semester 2" → "smt2"
+    const semesterMatch = semester?.match(/\d+/);
+    const semesterNum = semesterMatch ? `smt${semesterMatch[0]}` : 'smt1';
+    
+    // Extract last 2 digits from each year: "2024/2025" → "24_25"
+    const yearMatch = schoolYear?.match(/(\d{2})(\d{2})\/(\d{2})(\d{2})/);
+    const yearRange = yearMatch ? `${yearMatch[2]}_${yearMatch[4]}` : '24_25';
+    
+    const fileName = `Raport_${studentName}_${className}_${semesterNum}_${yearRange}.pdf`;
+
     return NextResponse.json({
       success: true,
       pdf: `data:application/pdf;base64,${base64}`,
-      fileName: `Raport_${student.name?.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`,
+      fileName: fileName,
     });
   } catch (error) {
     console.error('Error generating PDF with Puppeteer:', {

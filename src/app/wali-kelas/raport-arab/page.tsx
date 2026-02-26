@@ -14,6 +14,7 @@ interface Student {
   id: string;
   name: string;
   studentNo: string;
+  noUrut?: number;
   raportNo?: string;
 }
 
@@ -155,13 +156,20 @@ function RaportArabPageContent() {
     const selectedClassObj = classes.find((cls) => cls.id === selectedClass);
     if (!selectedClassObj) return [];
 
-    return selectedClassObj.students.filter((student) => {
+    const filtered = selectedClassObj.students.filter((student) => {
       const matchSearch =
         !searchQuery ||
         student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.studentNo.toLowerCase().includes(searchQuery.toLowerCase());
 
       return matchSearch;
+    });
+
+    // Sort by noUrut (ordinal number)
+    return filtered.sort((a, b) => {
+      const noA = a.noUrut || 0;
+      const noB = b.noUrut || 0;
+      return noA - noB;
     });
   };
 
