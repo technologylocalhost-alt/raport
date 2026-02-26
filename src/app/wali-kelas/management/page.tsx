@@ -325,40 +325,73 @@ export default function WaliKelasClassManagementPage() {
             <p className="text-yellow-800">Anda belum ditugaskan sebagai Wali Kelas.</p>
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Nama Kelas</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Tingkat</th>
-                  <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700">Kapasitas</th>
-                  <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700">Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {classes.map((classItem) => (
-                  <tr key={classItem.id} className="border-b hover:bg-gray-50 transition-colors cursor-pointer">
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">{classItem.name}</td>
-                    <td className="px-6 py-4 text-sm text-gray-700">{classItem.levelName}</td>
-                    <td className="px-6 py-4 text-center text-sm text-gray-700">{classItem.capacity} siswa</td>
-                    <td className="px-6 py-4 text-center">
-                      <button
-                        onClick={() => {
-                          setSelectedClassId(classItem.id);
-                          setSelectedClassName(classItem.name);
-                          setActiveTab('subjects');
-                          fetchAllSubjects();
-                        }}
-                        className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 font-medium transition-colors"
-                      >
-                        Kelola
-                      </button>
-                    </td>
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block bg-white rounded-lg shadow-lg overflow-hidden">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Nama Kelas</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Tingkat</th>
+                    <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700">Kapasitas</th>
+                    <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700">Aksi</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {classes.map((classItem) => (
+                    <tr key={classItem.id} className="border-b hover:bg-gray-50 transition-colors cursor-pointer">
+                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">{classItem.name}</td>
+                      <td className="px-6 py-4 text-sm text-gray-700">{classItem.levelName}</td>
+                      <td className="px-6 py-4 text-center text-sm text-gray-700">{classItem.capacity} siswa</td>
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          onClick={() => {
+                            setSelectedClassId(classItem.id);
+                            setSelectedClassName(classItem.name);
+                            setActiveTab('subjects');
+                            fetchAllSubjects();
+                          }}
+                          className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 font-medium transition-colors"
+                        >
+                          Kelola
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards View */}
+            <div className="md:hidden space-y-4">
+              {classes.map((classItem) => (
+                <div key={classItem.id} className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
+                  <div className="mb-4">
+                    <p className="font-bold text-lg text-gray-900">{classItem.name}</p>
+                    <p className="text-sm text-gray-600 mt-1">{classItem.levelName}</p>
+                  </div>
+                  
+                  <div className="mb-4 pb-4 border-b border-gray-200">
+                    <p className="text-sm text-gray-600">
+                      <span className="font-semibold text-gray-900">Kapasitas:</span> {classItem.capacity} siswa
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setSelectedClassId(classItem.id);
+                      setSelectedClassName(classItem.name);
+                      setActiveTab('subjects');
+                      fetchAllSubjects();
+                    }}
+                    className="w-full bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 font-medium transition-colors"
+                  >
+                    Kelola Kelas
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
     );
@@ -367,8 +400,8 @@ export default function WaliKelasClassManagementPage() {
   // View: Management
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
           <button
             onClick={() => {
               setSelectedClassId(null);
@@ -376,15 +409,15 @@ export default function WaliKelasClassManagementPage() {
               setShowSubjectForm(false);
               setShowTeacherForm(false);
             }}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
           >
             <ArrowLeft size={24} className="text-gray-600" />
           </button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
+          <div className="flex-1 sm:flex-initial">
+            <h1 className="text-xl sm:text-3xl font-bold text-gray-900">
               Manajemen Kelas - {selectedClassName}
             </h1>
-            <p className="text-gray-600 mt-1">Kelola mata pelajaran dan guru pengajar</p>
+            <p className="text-gray-600 mt-1 text-xs sm:text-base">Kelola mata pelajaran dan guru pengajar</p>
           </div>
         </div>
       </div>
@@ -410,41 +443,41 @@ export default function WaliKelasClassManagementPage() {
       )}
 
       {/* Tabs */}
-      <div className="bg-white rounded-t-lg border-b">
-        <div className="flex gap-8 px-6">
+      <div className="bg-white rounded-t-lg border-b overflow-x-auto">
+        <div className="flex gap-4 sm:gap-8 px-4 sm:px-6 min-w-min">
           <button
             onClick={() => {
               setActiveTab('subjects');
               if (!allSubjects.length) fetchAllSubjects();
             }}
-            className={`py-4 font-semibold flex items-center gap-2 transition-colors ${
+            className={`py-4 font-semibold flex items-center gap-2 transition-colors text-sm sm:text-base whitespace-nowrap ${
               activeTab === 'subjects'
                 ? 'text-emerald-600 border-b-2 border-emerald-600'
                 : 'text-gray-600 hover:text-gray-900'
             }`}
           >
             <BookOpen size={20} />
-            Mata Pelajaran ({classSubjects.length})
+            <span>Mata Pelajaran ({classSubjects.length})</span>
           </button>
           <button
             onClick={() => {
               setActiveTab('teachers');
               if (!allTeachers.length) fetchAllTeachers();
             }}
-            className={`py-4 font-semibold flex items-center gap-2 transition-colors ${
+            className={`py-4 font-semibold flex items-center gap-2 transition-colors text-sm sm:text-base whitespace-nowrap ${
               activeTab === 'teachers'
                 ? 'text-emerald-600 border-b-2 border-emerald-600'
                 : 'text-gray-600 hover:text-gray-900'
             }`}
           >
             <Users size={20} />
-            Guru Pengajar ({classTeachers.length})
+            <span>Guru Pengajar ({classTeachers.length})</span>
           </button>
         </div>
       </div>
 
       {/* Tab Content */}
-      <div className="bg-white rounded-b-lg p-6">
+      <div className="bg-white rounded-b-lg p-4 sm:p-6">
         {/* Subjects Tab */}
         {activeTab === 'subjects' && (
           <div className="space-y-6">
@@ -454,14 +487,14 @@ export default function WaliKelasClassManagementPage() {
                   setShowSubjectForm(true);
                   setSubjectFormData({ subjectId: '' });
                 }}
-                className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 flex items-center gap-2 transition-colors"
+                className="w-full sm:w-auto bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
               >
-                <Plus size={20} /> Tambah Mata Pelajaran
+                <Plus size={20} /> <span className="hidden sm:inline">Tambah Mata Pelajaran</span><span className="sm:hidden">Tambah</span>
               </button>
             )}
 
             {showSubjectForm && (
-              <div className="bg-emerald-50 rounded-lg p-6 border-l-4 border-emerald-600">
+              <div className="bg-emerald-50 rounded-lg p-4 sm:p-6 border-l-4 border-emerald-600">
                 <h3 className="text-lg font-semibold mb-4">Tambah Mata Pelajaran</h3>
                 <form onSubmit={handleAddSubject} className="space-y-4">
                   <div>
@@ -515,11 +548,11 @@ export default function WaliKelasClassManagementPage() {
                       )}
                     </div>
                   </div>
-                  <div className="flex gap-3">
+                  <div className="flex flex-col sm:flex-row gap-3">
                     <button
                       type="submit"
                       disabled={!subjectFormData.subjectId}
-                      className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex-1 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Tambahkan
                     </button>
@@ -531,7 +564,7 @@ export default function WaliKelasClassManagementPage() {
                         setShowSubjectDropdown(false);
                         setSubjectFormData({ subjectId: '' });
                       }}
-                      className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
+                      className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
                     >
                       Batal
                     </button>
@@ -540,8 +573,8 @@ export default function WaliKelasClassManagementPage() {
               </div>
             )}
 
-            {/* Subjects Table */}
-            <div className="overflow-hidden border rounded-lg">
+            {/* Subjects Table - Desktop */}
+            <div className="hidden md:block overflow-hidden border rounded-lg">
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
@@ -583,6 +616,41 @@ export default function WaliKelasClassManagementPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Subjects Cards - Mobile */}
+            <div className="md:hidden space-y-4">
+              {classSubjects.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  Belum ada mata pelajaran
+                </div>
+              ) : (
+                classSubjects.slice((subjectCurrentPage - 1) * itemsPerPage, subjectCurrentPage * itemsPerPage).map((cs) => (
+                  <div key={cs.id} className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
+                    <div className="mb-3 flex items-start justify-between">
+                      <div className="flex-1">
+                        <p className="font-bold text-lg text-gray-900">{cs.subject.code} - {cs.subject.name}</p>
+                        {cs.subject.nameArabic && (
+                          <p className="text-sm text-emerald-700 font-semibold mt-1">Arab: {cs.subject.nameArabic}</p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {cs.subject.description && (
+                      <div className="mb-3 pb-3 border-b border-gray-200">
+                        <p className="text-sm text-gray-600">{cs.subject.description}</p>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => handleDeleteSubject(cs.subject.id)}
+                      className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Trash2 size={16} /> Hapus
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
 
             {/* Subjects Pagination */}
@@ -639,17 +707,17 @@ export default function WaliKelasClassManagementPage() {
                   setSubjectSearchTeacherText('');
                   if (!allTeachers.length) fetchAllTeachers();
                 }}
-                className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 flex items-center gap-2 transition-colors"
+                className="w-full sm:w-auto bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
               >
-                <Plus size={20} /> Tambah Guru
+                <Plus size={20} /> <span className="hidden sm:inline">Tambah Guru</span><span className="sm:hidden">Tambah</span>
               </button>
             )}
 
             {showTeacherForm && (
-              <div className="bg-emerald-50 rounded-lg p-6 border-l-4 border-emerald-600">
+              <div className="bg-emerald-50 rounded-lg p-4 sm:p-6 border-l-4 border-emerald-600">
                 <h3 className="text-lg font-semibold mb-4">Tambah Guru Pengajar</h3>
                 <form onSubmit={handleAddTeacher} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-bold text-gray-900 mb-2">
                         Cari Guru <span className="text-red-500">*</span>
@@ -748,11 +816,11 @@ export default function WaliKelasClassManagementPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex gap-3">
+                  <div className="flex flex-col sm:flex-row gap-3">
                     <button
                       type="submit"
                       disabled={!teacherFormData.teacherId || !teacherFormData.subjectId}
-                      className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex-1 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Tambahkan
                     </button>
@@ -764,7 +832,7 @@ export default function WaliKelasClassManagementPage() {
                         setSubjectSearchTeacherText('');
                         setTeacherFormData({ teacherId: '', subjectId: '' });
                       }}
-                      className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
+                      className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
                     >
                       Batal
                     </button>
@@ -773,8 +841,8 @@ export default function WaliKelasClassManagementPage() {
               </div>
             )}
 
-            {/* Teachers Table */}
-            <div className="overflow-hidden border rounded-lg">
+            {/* Teachers Table - Desktop */}
+            <div className="hidden md:block overflow-hidden border rounded-lg">
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
@@ -812,6 +880,37 @@ export default function WaliKelasClassManagementPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Teachers Cards - Mobile */}
+            <div className="md:hidden space-y-4">
+              {classTeachers.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  Belum ada guru
+                </div>
+              ) : (
+                classTeachers.slice((teacherCurrentPage - 1) * itemsPerPage, teacherCurrentPage * itemsPerPage).map((ct) => (
+                  <div key={ct.id} className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
+                    <div className="mb-3">
+                      <p className="font-bold text-lg text-gray-900">{ct.teacher.name}</p>
+                      <p className="text-sm text-gray-600 mt-1">{ct.teacher.email}</p>
+                    </div>
+
+                    <div className="mb-3 pb-3 border-b border-gray-200">
+                      <p className="text-sm text-gray-600">
+                        <span className="font-semibold text-gray-900">Mata Pelajaran:</span> {ct.subject.code} - {ct.subject.name}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => handleDeleteTeacher(ct.id)}
+                      className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Trash2 size={16} /> Hapus
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
 
             {/* Teachers Pagination */}

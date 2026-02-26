@@ -3,7 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { BookOpen, Users, FileText, CheckCircle, ArrowRight, Library, Target } from 'lucide-react';
+import { 
+  AlertCircle, ArrowRight, BarChart3, BookOpen, CheckCircle, 
+  Clock, Users, TrendingUp
+} from 'lucide-react';
 
 interface User {
   id: string;
@@ -12,21 +15,207 @@ interface User {
   role: string;
 }
 
+interface DashboardStats {
+  totalClasses: number;
+  totalStudents: number;
+  pendingGrades: number;
+  attendanceToday: number;
+  recentActivities: ActivityItem[];
+}
+
+interface ActivityItem {
+  id: string;
+  type: 'grade' | 'attendance' | 'competency';
+  title: string;
+  description: string;
+  timestamp: string;
+  activityType: 'info' | 'warning' | 'success';
+}
+
+interface StatCard {
+  icon: React.ReactNode;
+  label: string;
+  value: number | string;
+  color: string;
+  subtext?: string;
+}
+
+// Components
+function LoadingSpinner() {
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+        <p className="text-gray-600 font-medium">Loading...</p>
+      </div>
+    </div>
+  );
+}
+
+function WelcomeCard({ name }: { name: string }) {
+  return (
+    <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 rounded-lg shadow-lg p-6 sm:p-8 text-white">
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-bold">Selamat Datang, {name}! 👋</h1>
+        <p className="text-indigo-100 mt-2 text-sm sm:text-base">
+          Kelola nilai, siswa, dan absensi kelas Anda dengan mudah dan efisien
+        </p>
+      </div>
+    </div>
+  );
+}
+
+interface StatCardComponentProps {
+  stat: StatCard;
+}
+
+function StatCardComponent({ stat }: StatCardComponentProps) {
+  return (
+    <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 border-t-4" style={{ borderColor: stat.color }}>
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <p className="text-gray-600 text-sm font-medium">{stat.label}</p>
+          <p className="text-3xl sm:text-4xl font-bold text-gray-900 mt-2">{stat.value}</p>
+          {stat.subtext && <p className="text-xs text-gray-500 mt-2">{stat.subtext}</p>}
+        </div>
+        <div 
+          className="p-3 rounded-lg flex-shrink-0"
+          style={{ backgroundColor: stat.color + '20', color: stat.color }}
+        >
+          {stat.icon}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatsSection({ stats }: { stats: DashboardStats }) {
+  const statCards: StatCard[] = [
+    {
+      icon: <BookOpen size={24} />,
+      label: 'Kelas Aktif',
+      value: stats.totalClasses,
+      color: '#3b82f6',
+      subtext: 'Kelas yang Anda ajar',
+    },
+    {
+      icon: <Users size={24} />,
+      label: 'Total Siswa',
+      value: stats.totalStudents,
+      color: '#8b5cf6',
+      subtext: 'Di semua kelas Anda',
+    },
+    {
+      icon: <Clock size={24} />,
+      label: 'Menunggu Input',
+      value: stats.pendingGrades,
+      color: '#f59e0b',
+      subtext: 'Nilai yang perlu diinput',
+    },
+    {
+      icon: <CheckCircle size={24} />,
+      label: 'Absensi Hari Ini',
+      value: `${stats.attendanceToday}%`,
+      color: '#10b981',
+      subtext: 'Tingkat kehadiran',
+    },
+  ];
+
+  return (
+    <section>
+      <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6 flex items-center gap-2">
+        <BarChart3 size={24} className="text-indigo-600" />
+        Ringkasan Data
+      </h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        {statCards.map((stat, idx) => (
+          <StatCardComponent key={idx} stat={stat} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ActivityItemComponent({ activity }: { activity: ActivityItem }) {
+  const iconMap = {
+    info: <BarChart3 size={20} className="text-blue-600" />,
+    warning: <AlertCircle size={20} className="text-yellow-600" />,
+    success: <CheckCircle size={20} className="text-green-600" />,
+  };
+
+  const bgColorMap = {
+    info: 'bg-blue-50 border-l-4 border-blue-600',
+    warning: 'bg-yellow-50 border-l-4 border-yellow-600',
+    success: 'bg-green-50 border-l-4 border-green-600',
+  };
+
+  return (
+    <div className={`rounded-lg p-4 ${bgColorMap[activity.activityType]}`}>
+      <div className="flex gap-3">
+        <div className="flex-shrink-0 mt-0.5">{iconMap[activity.activityType]}</div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-gray-900 text-sm">{activity.title}</p>
+          <p className="text-gray-600 text-sm mt-1">{activity.description}</p>
+          <p className="text-xs text-gray-500 mt-2">{activity.timestamp}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RecentActivitySection({ activities }: { activities: ActivityItem[] }) {
+  if (activities.length === 0) {
+    return (
+      <section>
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6 flex items-center gap-2">
+          <Clock size={24} className="text-gray-600" />
+          Aktivitas Terbaru
+        </h2>
+        <div className="bg-white rounded-lg shadow-md p-6 text-center">
+          <p className="text-gray-600">Belum ada aktivitas terbaru</p>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section>
+      <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6 flex items-center gap-2">
+        <Clock size={24} className="text-gray-600" />
+        Aktivitas Terbaru
+      </h2>
+      <div className="space-y-3">
+        {activities.map((activity) => (
+          <ActivityItemComponent key={activity.id} activity={activity} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// Main Component
 export default function TeacherDashboard() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  const [stats, setStats] = useState<DashboardStats>({
+    totalClasses: 0,
+    totalStudents: 0,
+    pendingGrades: 0,
+    attendanceToday: 0,
+    recentActivities: [],
+  });
 
   useEffect(() => {
-    // Check after component mounts and localStorage is accessible
-    const checkAuth = () => {
-      const storedUser = localStorage.getItem('user');
-      if (!storedUser) {
-        router.push('/login');
-        return;
-      }
-
+    const checkAuth = async () => {
       try {
+        const storedUser = localStorage.getItem('user');
+        if (!storedUser) {
+          router.push('/login');
+          return;
+        }
+
         const userData = JSON.parse(storedUser);
         if (userData.role !== 'TEACHER') {
           router.push('/admin/dashboard');
@@ -34,154 +223,77 @@ export default function TeacherDashboard() {
         }
 
         setUser(userData);
-        setIsLoading(false);
+
+        // Fetch dashboard stats from API
+        const token = localStorage.getItem('accessToken');
+        if (token) {
+          try {
+            const response = await fetch('/api/teacher/dashboard', {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+              },
+            });
+
+            if (response.ok) {
+              const result = await response.json();
+              if (result.success && result.data) {
+                setStats(result.data);
+              }
+            } else if (response.status === 401) {
+              console.error('Unauthorized: Token may be invalid or expired');
+              localStorage.removeItem('accessToken');
+              localStorage.removeItem('user');
+              router.push('/login');
+            } else {
+              console.error('Failed to fetch dashboard stats:', response.statusText);
+            }
+          } catch (fetchError) {
+            console.error('Error fetching dashboard stats:', fetchError);
+          }
+        } else {
+          console.warn('No access token found in localStorage');
+        }
       } catch (error) {
         console.error('Error parsing user data:', error);
-        router.push('/login');
+        setHasError(true);
+        setTimeout(() => router.push('/login'), 1000);
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    // Small delay to ensure localStorage is ready
     const timer = setTimeout(checkAuth, 0);
     return () => clearTimeout(timer);
-  }, []);
+  }, [router]);
 
   if (isLoading) {
+    return <LoadingSpinner />;
+  }
+
+  if (hasError) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Loading...</p>
+        <div className="text-center max-w-md px-4">
+          <AlertCircle size={48} className="mx-auto text-red-600 mb-4" />
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Terjadi Kesalahan</h2>
+          <p className="text-gray-600 mb-6">Tidak dapat memuat data pengguna. Silahkan login kembali.</p>
+          <Link href="/login" className="inline-block bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700">
+            Kembali ke Login
+          </Link>
         </div>
       </div>
     );
   }
 
+  if (!user) {
+    return <LoadingSpinner />;
+  }
+
   return (
-    <div className="space-y-6">
-      {/* Welcome Card */}
-      <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 rounded-lg shadow-lg p-8 text-white">
-        <h1 className="text-3xl font-bold">Selamat Datang, {user?.name}! 👋</h1>
-        <p className="text-indigo-100 mt-2">Kelola nilai, siswa, dan absensi kelas Anda dengan mudah dan efisien</p>
-      </div>
-
-      {/* Fitur Utama */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-6">Fitur Utama</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {/* Mata Pelajaran */}
-          <Link href="/teacher/subjects">
-            <div className="bg-white rounded-lg shadow-md hover:shadow-xl transition-all border-l-4 border-purple-600 p-6 hover:translate-y-[-2px] cursor-pointer">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <div className="bg-purple-100 p-3 rounded-lg mb-3">
-                    <Library className="text-purple-600" size={28} />
-                  </div>
-                  <h3 className="text-lg font-bold text-gray-900">Mata Pelajaran</h3>
-                  <p className="text-gray-600 text-sm mt-1">Kelola semua mata pelajaran yang Anda ajar</p>
-                </div>
-              </div>
-              <div className="flex items-center text-purple-600 font-medium text-sm group">
-                Lihat <ArrowRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-          </Link>
-
-          {/* Input Nilai */}
-          <Link href="/teacher/grades">
-            <div className="bg-white rounded-lg shadow-md hover:shadow-xl transition-all border-l-4 border-indigo-600 p-6 hover:translate-y-[-2px] cursor-pointer">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <div className="bg-indigo-100 p-3 rounded-lg mb-3">
-                    <BookOpen className="text-indigo-600" size={28} />
-                  </div>
-                  <h3 className="text-lg font-bold text-gray-900">Input Nilai</h3>
-                  <p className="text-gray-600 text-sm mt-1">Input nilai siswa berdasarkan kompetensi dan pencapaian</p>
-                </div>
-              </div>
-              <div className="flex items-center text-indigo-600 font-medium text-sm group">
-                Buka <ArrowRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-          </Link>
-
-          {/* Daftar Siswa */}
-          <Link href="/teacher/students">
-            <div className="bg-white rounded-lg shadow-md hover:shadow-xl transition-all border-l-4 border-blue-600 p-6 hover:translate-y-[-2px] cursor-pointer">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <div className="bg-blue-100 p-3 rounded-lg mb-3">
-                    <Users className="text-blue-600" size={28} />
-                  </div>
-                  <h3 className="text-lg font-bold text-gray-900">Daftar Siswa</h3>
-                  <p className="text-gray-600 text-sm mt-1">Kelola dan lihat data siswa di kelas Anda</p>
-                </div>
-              </div>
-              <div className="flex items-center text-blue-600 font-medium text-sm group">
-                Lihat <ArrowRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-          </Link>
-
-          {/* Absensi */}
-          <Link href="/teacher/attendance">
-            <div className="bg-white rounded-lg shadow-md hover:shadow-xl transition-all border-l-4 border-green-600 p-6 hover:translate-y-[-2px] cursor-pointer">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <div className="bg-green-100 p-3 rounded-lg mb-3">
-                    <CheckCircle className="text-green-600" size={28} />
-                  </div>
-                  <h3 className="text-lg font-bold text-gray-900">Absensi</h3>
-                  <p className="text-gray-600 text-sm mt-1">Kelola data kehadiran siswa setiap hari</p>
-                </div>
-              </div>
-              <div className="flex items-center text-green-600 font-medium text-sm group">
-                Kelola <ArrowRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-          </Link>
-
-
-
-          {/* Kompetensi */}
-          <Link href="/teacher/competencies">
-            <div className="bg-white rounded-lg shadow-md hover:shadow-xl transition-all border-l-4 border-red-600 p-6 hover:translate-y-[-2px] cursor-pointer">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <div className="bg-red-100 p-3 rounded-lg mb-3">
-                    <Target className="text-red-600" size={28} />
-                  </div>
-                  <h3 className="text-lg font-bold text-gray-900">Kompetensi</h3>
-                  <p className="text-gray-600 text-sm mt-1">Kelola kompetensi dan capaian pembelajaran siswa</p>
-                </div>
-              </div>
-              <div className="flex items-center text-red-600 font-medium text-sm group">
-                Kelola <ArrowRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-          </Link>
-        </div>
-      </div>
-
-      {/* Coming Soon Section */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-6">Fitur Lainnya</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Analytics */}
-          <div className="bg-white rounded-lg shadow-md border-l-4 border-purple-600 p-6 opacity-60">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <div className="bg-purple-100 p-3 rounded-lg mb-3 w-fit">
-                  <CheckCircle className="text-purple-600" size={28} />
-                </div>
-                <h3 className="text-lg font-bold text-gray-900">Analytics & Laporan</h3>
-                <p className="text-gray-600 text-sm mt-1">Lihat statistik dan laporan performa siswa</p>
-              </div>
-              <div className="bg-purple-100 text-purple-600 text-xs font-semibold px-3 py-1 rounded-full">Coming Soon</div>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto">
+      <WelcomeCard name={user.name} />
+      <StatsSection stats={stats} />
+      <RecentActivitySection activities={stats.recentActivities} />
     </div>
   );
 }

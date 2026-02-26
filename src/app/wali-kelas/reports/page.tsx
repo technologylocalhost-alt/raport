@@ -169,8 +169,8 @@ export default function WaliKelasReportsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Laporan Raport</h1>
-        <p className="text-gray-600 mt-2">Daftar siswa dan lihat raport individual</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Laporan Raport</h1>
+        <p className="text-sm sm:text-base text-gray-600 mt-2">Daftar siswa dan lihat raport individual</p>
       </div>
 
       {/* Error Message */}
@@ -201,40 +201,70 @@ export default function WaliKelasReportsPage() {
           </p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-emerald-100 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-4 text-left font-semibold text-gray-900">Kelas</th>
-                <th className="px-6 py-4 text-left font-semibold text-gray-900">No. Induk</th>
-                <th className="px-6 py-4 text-left font-semibold text-gray-900">Nama Siswa</th>
-                <th className="px-6 py-4 text-right font-semibold text-gray-900">Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {students.map((student, idx) => (
-                <tr key={student.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4">
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
-                      {student.className}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-gray-700">{student.studentNo}</td>
-                  <td className="px-6 py-4 text-gray-900 font-medium">{student.name}</td>
-                  <td className="px-6 py-4 text-right">
-                    <button
-                      onClick={() => router.push(`/wali-kelas/reports/detail?classId=${student.classId}&studentId=${student.id}`)}
-                      className="inline-flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-xs font-medium rounded hover:bg-emerald-700 transition-colors"
-                    >
-                      <Eye size={14} />
-                      Lihat Raport
-                    </button>
-                  </td>
+        <>
+          {/* Desktop Table View */}
+          <div className="hidden md:block bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-emerald-100 border-b border-gray-200">
+                <tr>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-900">Kelas</th>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-900">No. Induk</th>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-900">Nama Siswa</th>
+                  <th className="px-6 py-4 text-right font-semibold text-gray-900">Aksi</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {students.map((student, idx) => (
+                  <tr key={student.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                        {student.className}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-gray-700">{student.studentNo}</td>
+                    <td className="px-6 py-4 text-gray-900 font-medium">{student.name}</td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        onClick={() => router.push(`/wali-kelas/reports/detail?classId=${student.classId}&studentId=${student.id}`)}
+                        className="inline-flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-xs font-medium rounded hover:bg-emerald-700 transition-colors"
+                      >
+                        <Eye size={14} />
+                        Lihat Raport
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {students.map((student) => (
+              <div
+                key={student.id}
+                className="bg-white rounded-lg border border-gray-200 p-4 space-y-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-1 flex-1">
+                    <h3 className="font-semibold text-gray-900">{student.name}</h3>
+                    <p className="text-xs text-gray-600">No. Induk: {student.studentNo}</p>
+                  </div>
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 flex-shrink-0">
+                    {student.className}
+                  </span>
+                </div>
+                <button
+                  onClick={() => router.push(`/wali-kelas/reports/detail?classId=${student.classId}&studentId=${student.id}`)}
+                  className="w-full px-3 py-2 bg-emerald-600 text-white text-xs font-medium rounded hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Eye size={14} />
+                  Lihat Raport
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

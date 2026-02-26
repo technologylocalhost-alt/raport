@@ -502,36 +502,36 @@ function StudentsPageContent() {
   // View: Students List (after selecting a class)
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex items-center gap-4 w-full sm:w-auto">
           <button
             onClick={() => {
               router.push('/wali-kelas/classes');
             }}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
             title="Kembali ke Daftar Kelas"
           >
             <ArrowLeft size={24} className="text-gray-600" />
           </button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
+          <div className="flex-1 sm:flex-initial">
+            <h1 className="text-xl sm:text-3xl font-bold text-gray-900">
               Daftar Siswa - {selectedClassName}
             </h1>
-            <p className="text-gray-600 mt-1">Kelola data siswa di kelas ini</p>
+            <p className="text-gray-600 mt-1 text-sm">Kelola data siswa di kelas ini</p>
           </div>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2 w-full sm:w-auto">
           <button
             onClick={handleExport}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors"
+            className="flex-1 sm:flex-initial bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
           >
-            <Download size={20} /> Export
+            <Download size={20} /> <span className="hidden sm:inline">Export</span>
           </button>
           <button
             onClick={() => setShowImportModal(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors"
+            className="flex-1 sm:flex-initial bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
           >
-            <Upload size={20} /> Import
+            <Upload size={20} /> <span className="hidden sm:inline">Import</span>
           </button>
           <button
             onClick={() => {
@@ -548,9 +548,9 @@ function StudentsPageContent() {
                 parentPhoneNo: '',
               });
             }}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2 transition-colors"
+            className="flex-1 sm:flex-initial bg-green-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
           >
-            <Plus size={20} /> Tambah Siswa
+            <Plus size={20} /> <span className="hidden sm:inline">Tambah Siswa</span>
           </button>
         </div>
       </div>
@@ -585,12 +585,12 @@ function StudentsPageContent() {
 
       {/* Form */}
       {showForm && (
-        <div className="bg-white rounded-lg shadow-lg p-6 border-l-4 border-green-500">
-          <h2 className="text-xl font-semibold mb-4">
+        <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 border-l-4 border-green-500">
+          <h2 className="text-lg sm:text-xl font-semibold mb-4">
             {editingId ? '✏️ Edit Siswa' : '➕ Tambah Siswa'}
           </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-bold text-gray-900 mb-2">
                   Nomor Siswa <span className="text-red-500">*</span>
@@ -692,10 +692,10 @@ function StudentsPageContent() {
               />
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <button
                 type="submit"
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
               >
                 {editingId ? 'Perbarui' : 'Tambahkan'}
               </button>
@@ -706,7 +706,7 @@ function StudentsPageContent() {
                   setEditingId(null);
                   setErrorMessage('');
                 }}
-                className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
+                className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
               >
                 Batal
               </button>
@@ -732,8 +732,8 @@ function StudentsPageContent() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+      {/* Table - Desktop View */}
+      <div className="hidden md:block bg-white rounded-lg shadow-lg overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50 border-b">
             <tr>
@@ -787,6 +787,71 @@ function StudentsPageContent() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Cards - Mobile View */}
+      <div className="md:hidden space-y-4">
+        {isLoading ? (
+          <div className="text-center py-8 text-gray-500">
+            Memuat data siswa...
+          </div>
+        ) : displayedStudents.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            Tidak ada data siswa ditemukan
+          </div>
+        ) : (
+          displayedStudents.map((student) => (
+            <div key={student.id} className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
+              {/* Student Basic Info */}
+              <div className="mb-4 flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="inline-block px-3 py-1 bg-blue-100 text-blue-700 text-sm font-bold rounded">
+                      #{student.nourut || '-'}
+                    </span>
+                  </div>
+                  <p className="font-bold text-lg text-gray-900">{student.name}</p>
+                  <p className="text-sm text-gray-600 mt-1">NISN: {student.studentNo}</p>
+                </div>
+              </div>
+
+              {/* Contact Info */}
+              <div className="mb-4 pb-4 border-b border-gray-200 space-y-2">
+                {student.email && (
+                  <p className="text-sm text-gray-600">
+                    <span className="font-semibold text-gray-900">Email:</span> {student.email}
+                  </p>
+                )}
+                {student.phone && (
+                  <p className="text-sm text-gray-600">
+                    <span className="font-semibold text-gray-900">Telepon:</span> {student.phone}
+                  </p>
+                )}
+                {student.address && (
+                  <p className="text-sm text-gray-600">
+                    <span className="font-semibold text-gray-900">Alamat:</span> {student.address}
+                  </p>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleEdit(student)}
+                  className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  <Edit size={16} /> Edit
+                </button>
+                <button
+                  onClick={() => handleDelete(student.id)}
+                  className="flex-1 px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  <Trash2 size={16} /> Hapus
+                </button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {/* Pagination */}

@@ -735,10 +735,18 @@ function RaportArabDetailContent() {
           align-items: flex-start;
           width: 100%;
           margin: 0;
+          margin-top: 120px;
+        }
+
+        @media (max-width: 640px) {
+          .a4-wrapper {
+            padding: 20px 10px 10px 10px;
+            margin-top: 150px;
+          }
         }
 
         .a4-page {
-          width: 215mm;
+          width: 210mm;
           background: white;
           box-shadow: 0 2px 8px rgba(0,0,0,0.15);
           padding: 6px 6px;
@@ -750,6 +758,16 @@ function RaportArabDetailContent() {
           overflow: visible;
           display: flex;
           flex-direction: column;
+        }
+
+        @media (max-width: 640px) {
+          .a4-page {
+            width: 100%;
+            max-width: 100%;
+            padding: 4px 4px;
+            font-size: 11px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+          }
         }
 
         .watermark-bg {
@@ -790,6 +808,34 @@ function RaportArabDetailContent() {
           align-items: center;
           z-index: 200;
           width: 100%;
+          overflow-x: auto;
+          overflow-y: hidden;
+          flex-wrap: nowrap;
+          scroll-behavior: smooth;
+        }
+
+        .toolbar::-webkit-scrollbar {
+          height: 4px;
+        }
+
+        .toolbar::-webkit-scrollbar-track {
+          background: #f0f0f0;
+        }
+
+        .toolbar::-webkit-scrollbar-thumb {
+          background: #ccc;
+          border-radius: 2px;
+        }
+
+        .toolbar::-webkit-scrollbar-thumb:hover {
+          background: #999;
+        }
+
+        @media (max-width: 640px) {
+          .toolbar {
+            padding: 8px 12px;
+            gap: 8px;
+          }
         }
 
         /* Hide sidebar on raport detail page */
@@ -806,7 +852,7 @@ function RaportArabDetailContent() {
           }
 
           html, body {
-            width: 215mm !important;
+            width: 210mm !important;
             height: 330mm !important;
             margin: 0 !important;
             padding: 0 !important;
@@ -844,7 +890,7 @@ function RaportArabDetailContent() {
           }
 
           .a4-page {
-            width: 215mm !important;
+            width: 210mm !important;
             height: 330mm !important;
             padding: 8px 8px !important;
             box-shadow: none !important;
@@ -857,7 +903,7 @@ function RaportArabDetailContent() {
           }
 
           @page {
-            size: 215mm 330mm;
+            size: 210mm 330mm;
             margin: 0;
             padding: 0;
           }
@@ -958,14 +1004,15 @@ function RaportArabDetailContent() {
       <div className="toolbar">
         <button
           onClick={() => router.back()}
-          className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-300 rounded"
+          className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 text-gray-700 hover:bg-gray-300 rounded text-xs sm:text-sm"
+          title="Kembali"
         >
-          <ArrowLeft size={20} />
-          Kembali
+          <ArrowLeft size={16} className="flex-shrink-0" />
+          <span className="hidden sm:inline">Kembali</span>
         </button>
-        <div className="h-6 w-px bg-gray-300"></div>
-        <div className="flex flex-col">
-          <span className="text-gray-600 text-sm">Raport Peserta Didik Bahasa Arab - F4 (215 × 330 mm)</span>
+        <div className="hidden sm:block h-6 w-px bg-gray-300"></div>
+        <div className="hidden sm:flex flex-col whitespace-nowrap">
+          <span className="text-gray-600 text-xs">Raport Peserta Didik Bahasa Arab - F4 (210 × 330 mm)</span>
           {assessmentType && (
             <span className="text-emerald-700 text-xs font-semibold">
               Jenis Penilaian: {assessmentTypeLabels[assessmentType] || assessmentType}
@@ -974,67 +1021,80 @@ function RaportArabDetailContent() {
         </div>
         
         {/* Navigation Buttons */}
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1 sm:gap-2 sm:ml-auto">
           <button
             onClick={handlePreviousStudent}
             disabled={currentStudentIndex <= 0}
-            className={`flex items-center gap-2 px-4 py-2 rounded ${
+            className={`flex items-center gap-1 px-2 sm:px-3 py-2 rounded text-xs sm:text-sm ${
               currentStudentIndex <= 0
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 : 'bg-gray-400 text-white hover:bg-gray-500'
             }`}
+            title="Siswa sebelumnya"
           >
-            ← Siswa Sebelumnya
+            <span className="hidden sm:inline">←</span>
+            <span className="hidden sm:inline">Sebelumnya</span>
+            <span className="sm:hidden">←</span>
           </button>
           
           <button
             onClick={handleSeeAllStudents}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+            className="flex items-center gap-1 px-2 sm:px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-xs sm:text-sm"
+            title="Lihat semua siswa"
           >
-            Lihat Semua Siswa
+            <span className="hidden sm:inline">Lihat Semua Siswa</span>
+            <span className="sm:hidden">Semua</span>
           </button>
           
           <button
             onClick={handleNextStudent}
             disabled={currentStudentIndex >= allStudents.length - 1}
-            className={`flex items-center gap-2 px-4 py-2 rounded ${
+            className={`flex items-center gap-1 px-2 sm:px-3 py-2 rounded text-xs sm:text-sm ${
               currentStudentIndex >= allStudents.length - 1
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 : 'bg-gray-400 text-white hover:bg-gray-500'
             }`}
+            title="Siswa berikutnya"
           >
-            Siswa Berikutnya →
+            <span className="sm:hidden">→</span>
+            <span className="hidden sm:inline">Berikutnya</span>
+            <span className="hidden sm:inline">→</span>
           </button>
 
-          <span className="text-gray-700 font-medium px-4 ml-4">
-            Siswa {currentStudentIndex >= 0 ? currentStudentIndex + 1 : 1} / {allStudents.length}
+          <span className="text-gray-700 font-medium px-2 text-xs sm:text-sm whitespace-nowrap">
+            <span className="hidden sm:inline">Siswa {currentStudentIndex >= 0 ? currentStudentIndex + 1 : 1} / </span>
+            <span className="">{allStudents.length}</span>
           </span>
         </div>
 
-        <div className="h-6 w-px bg-gray-300 ml-4"></div>
+        <div className="hidden sm:block h-6 w-px bg-gray-300 sm:ml-4"></div>
         
-        <button
-          onClick={handleViewCoverPreview}
-          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 ml-4"
-          title="Lihat preview sampul raport"
-        >
-          <Eye size={20} />
-          Preview Sampul
-        </button>
-        <button
-          onClick={handleDownloadPDF}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ml-2"
-        >
-          <Download size={20} />
-          Download PDF
-        </button>
-        <button
-          onClick={handlePrint}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ml-2"
-        >
-          <Printer size={20} />
-          Cetak
-        </button>
+        <div className="flex flex-wrap items-center gap-1 sm:gap-2 sm:ml-4">
+          <button
+            onClick={handleViewCoverPreview}
+            className="flex items-center gap-1 px-2 sm:px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-xs sm:text-sm"
+            title="Lihat preview sampul raport"
+          >
+            <Eye size={14} className="flex-shrink-0" />
+            <span className="hidden sm:inline">Preview</span>
+          </button>
+          <button
+            onClick={handleDownloadPDF}
+            className="flex items-center gap-1 px-2 sm:px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs sm:text-sm"
+            title="Download PDF"
+          >
+            <Download size={14} className="flex-shrink-0" />
+            <span className="hidden sm:inline">PDF</span>
+          </button>
+          <button
+            onClick={handlePrint}
+            className="flex items-center gap-1 px-2 sm:px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs sm:text-sm"
+            title="Cetak"
+          >
+            <Printer size={14} className="flex-shrink-0" />
+            <span className="hidden sm:inline">Cetak</span>
+          </button>
+        </div>
       </div>
 
       <div className="a4-wrapper">

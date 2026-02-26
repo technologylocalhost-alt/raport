@@ -1,180 +1,119 @@
-# Docker Deployment Guide
+# 🐳 Docker Deployment Guide
 
-## Overview
-Dockerfile untuk menjalankan aplikasi Raport Next.js dalam Docker dengan **Bun runtime**. Database menggunakan **Supabase PostgreSQL** (managed cloud database).
+Dockerfile untuk menjalankan aplikasi Raport Next.js dalam Docker dengan **Bun runtime** dan **Supabase PostgreSQL**.
 
-**⚡ OPTIMIZED FOR LOW-RESOURCE VPS**: Docker setup ini telah dioptimalkan untuk VPS dengan spesifikasi rendah (1GB RAM, 20GB Storage).
+✨ **Dioptimalkan untuk VPS Low-Resource** (1GB RAM, 20GB Storage)
 
 ## Prerequisites
-- Docker & Docker Compose installed
-- `.env` file dengan konfigurasi yang benar
-- **Supabase Project** dengan PostgreSQL database (gratis tier available)
-- **Minimal VPS Requirements**: 1GB RAM, 20GB Storage (sudah dioptimalkan)
+- Docker & Docker Compose
+- `.env` file dengan konfigurasi Supabase
+- Supabase Project (gratis tier available)
+- VPS: min 1GB RAM, 20GB Storage
 
-## 🚀 Low-Resource VPS Optimization
+## 🚀 VPS Optimization
 
-Setup ini telah dioptimalkan untuk VPS dengan resource terbatas:
+**Resource Limits:**
+- Memory: 512MB | CPU: 0.75 cores | Node Heap: 384MB | Image Size: ~200-250MB
 
-### Resource Limits
-- **Memory Limit**: 512MB (sudah dikonfigurasi di docker-compose.yml)
-- **CPU Limit**: 0.75 CPU cores
-- **Node.js Heap**: 384MB (NODE_OPTIONS sudah diset)
-- **Image Size**: ~200-250MB (Alpine-based)
+**Applied Optimizations:**
+- Alpine-based images (lebih ringan)
+- Multi-stage build yang efisien
+- Memory limits untuk prevent OOM
+- Health check setiap 60 detik
+- Log rotation (max 30MB)
+- Production-only dependencies
 
-### Optimizations Applied
-✅ Alpine-based images (lebih kecil)
-✅ Multi-stage build yang efisien
-✅ Memory limits untuk prevent OOM
-✅ Reduced health check frequency
-✅ Log rotation (max 30MB total)
-✅ Production-only dependencies
-✅ Cache cleanup otomatis
+### Setup Awal VPS (1GB RAM)
 
-### Additional VPS Recommendations
-
-#### 1. Enable Swap (Untuk VPS 1GB RAM)
+**1. Enable Swap**
 ```bash
-# Create 1GB swap file
 sudo fallocate -l 1G /swapfile
 sudo chmod 600 /swapfile
 sudo mkswap /swapfile
 sudo swapon /swapfile
-
-# Make permanent
 echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-
-# Verify
-free -h
+free -h  # Verify
 ```
 
-#### 2. Clean Docker System Regularly
+**2. Monitoring Commands**
 ```bash
-# Remove unused images, containers, volumes
+docker stats raport-app         # Memory usage
+df -h                           # Disk space
+docker system df                # Docker resources
+```
+
+**3. Regular Cleanup**
+```bash
+# Manual cleanup
 docker system prune -a --volumes -f
 
-# Schedule weekly cleanup (crontab)
+# Scheduled (crontab) - setiap minggu
 0 2 * * 0 docker system prune -a --volumes -f
 ```
 
-#### 3. Monitor Resource Usage
+## ⚙️ Setup Database Supabase
+
+### Step 1: Create Supabase Project
+1. Kunjungi [https://supabase.com](https://supabase.com) dan sign up
+2. Buat project baru
+3. Tunggu database provisioning (~2 menit)
+
+### Step 2: Get Connection Strings
+1. Buka **Project Settings** → **Database**
+2. Copy kedua connection URL:
+   - `DATABASE_URL` (port 6543) - dengan pgbouncer pooling
+   - `DIRECT_URL` (port 5432) - untuk migrations
+
+### Step 3: Configure & Migrate
 ```bash
-# Check memory usage
-docker stats raport-app
-
-# Check disk usage
-df -h
-docker system df
-```
-
-#### 4. Build on VPS Tips
-```bash
-# Build with reduced parallelism to avoid OOM
-docker compose build --no-cache
-
-# If build fails with OOM, build locally and push to registry
-# Then pull on VPS instead of building
-```
-
-## Quick Start
-
-### 0. Setup Supabase Database (First Time Only)
-
-#### A. Create Supabase Project
-1. Go to [https://supabase.com](https://supabase.com) and sign up (free tier available)
-2. Create a new project
-3. Wait for database provisioning (~2 minutes)
-
-#### B. Get Database Connection Strings
-1. Go to **Project Settings** → **Database**
-2. Scroll down to **Connection String** section
-3. Copy both URLs:
-   - **Connection Pooling** (for runtime) - Port 6543
-   - **Direct Connection** (for migrations) - Port 5432
-
-#### C. Run Database Migrations
-```bash
-# Copy example env and update with your Supabase credentials
 cp .env.example .env
+nano .env  # Update dengan credentials Supabase
 
-# Edit .env and replace [YOUR-PASSWORD] with your actual password
-nano .env
-
-# Run migrations (use DIRECT_URL for migrations)
+# Run migrations (gunakan DIRECT_URL)
 bun run prisma:migrate:deploy
 
-# Or if using npm
-npm run prisma:migrate:deploy
-```
-
-#### D. (Optional) Seed Database
-```bash
+# Optional: Seed database
 bun run db:seed
 ```
 
-### 1. Prepare Environment
-```bash
-# Ensure .env is configured with Supabase credentials
-cat .env
+**Supabase Free Tier:** 500MB database, 50k monthly active users, auto-backup 7 hari
 
-# Example .env content:
-# DATABASE_URL=postgresql://postgres.xxxxx:[PASSWORD]@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true
-# DIRECT_URL=postgresql://postgres.xxxxx:[PASSWORD]@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres
-# NODE_ENV=production
-# JWT_ACCESS_SECRET=...
-# JWT_REFRESH_SECRET=...
-# NEXTAUTH_SECRET=...
+## 🚀 Quick Start
+
+### Docker Compose (Recommended)
+```bash
+docker compose build           # Build image
+docker compose up -d           # Start container
+docker compose logs -f app     # View logs
+docker compose down            # Stop & remove
 ```
 
-### 2. Build & Run with Docker Compose
+### Docker CLI
 ```bash
-# Build image
-docker compose build
-
-# Start container
-docker compose up -d
-
-# View logs
-docker compose logs -f app
-
-# Stop container
-docker compose down
-```
-
-### 3. Build & Run with Docker CLI
-```bash
-# Build image
 docker build -t raport:latest .
-
-# Run container
-docker run -d \
-  --name raport-app \
-  -p 3000:3000 \
-  --env-file .env \
-  raport:latest
-
-# Check logs
+docker run -d --name raport-app -p 3000:3000 --env-file .env raport:latest
 docker logs -f raport-app
+docker stop raport-app && docker rm raport-app
 ```
 
-## Configuration
+## ⚙️ Configuration
 
-### Environment Variables (in .env)
-```env
-# Required - Supabase Database
-# Get from: https://supabase.com/dashboard/project/_/settings/database
-DATABASE_URL=postgresql://postgres.xxxxx:[YOUR-PASSWORD]@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true
-DIRECT_URL=postgresql://postgres.xxxxx:[YOUR-PASSWORD]@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres
+### Environment Variables (.env)
+```bash
+# Supabase Database
+DATABASE_URL=postgresql://postgres.xxxxx:[PASSWORD]@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+DIRECT_URL=postgresql://postgres.xxxxx:[PASSWORD]@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres
 
 NODE_ENV=production
 
-# JWT - Generate with: openssl rand -base64 32
-JWT_ACCESS_SECRET=<your-secret-key-min-32-chars>
-JWT_REFRESH_SECRET=<your-secret-key-min-32-chars>
+# JWT Secret (generate: openssl rand -base64 32)
+JWT_ACCESS_SECRET=<min-32-chars>
+JWT_REFRESH_SECRET=<min-32-chars>
 JWT_ACCESS_EXPIRY=15m
 JWT_REFRESH_EXPIRY=7d
 
-# NextAuth - Generate with: openssl rand -base64 32
-NEXTAUTH_SECRET=<your-secret-min-32-chars>
+# NextAuth Secret (generate: openssl rand -base64 32)
+NEXTAUTH_SECRET=<min-32-chars>
 NEXTAUTH_URL=http://localhost:3000
 
 # Optional
@@ -182,150 +121,84 @@ APP_PORT=3000
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
-### Supabase Configuration Notes
-- **DATABASE_URL** (Port 6543): Uses connection pooling via pgbouncer - recommended for production
-- **DIRECT_URL** (Port 5432): Direct connection - required for migrations only
-- **Free Tier**: 500MB database, 50,000 monthly active users
-- **Backup**: Automatic daily backups (7 days retention on free tier)
-- **Security**: SSL enabled by default
+### Key Notes
+- **DATABASE_URL**: Connection pooling (port 6543) - untuk production
+- **DIRECT_URL**: Direct connection (port 5432) - khusus untuk migrations
+- Health check: `GET http://localhost:3000/api/health`
 
-## Health Check
-The container includes a health check that verifies the application is running:
-```
-GET http://localhost:3000/api/health
-```
-
-## Image Details
-- **Base**: oven/bun:1-alpine (ultra-lightweight + Bun runtime)
-- **Runtime**: Bun (fast JavaScript runtime)
-- **Size**: ~200-250MB (optimized with Alpine)
-- **Build Time**: ~2-4 minutes (depending on VPS specs)
-- **Runtime Port**: 3000
-- **Memory Usage**: ~256-384MB at runtime
-- **CPU Usage**: Low (efficient with Bun)
-
-## Troubleshooting
+## 🔧 Troubleshooting
 
 ### Database Connection Error
 ```
 Error: connect ECONNREFUSED
 ```
-**Solution**: 
-1. Check if DATABASE_URL is correctly set in `.env`
-2. Verify Supabase project is active (not paused)
-3. Check your password is correct (get from Supabase dashboard)
-4. Ensure you're using the correct connection string format:
-   ```
-   postgresql://postgres.xxxxx:[PASSWORD]@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true
-   ```
+**Solutions:**
+- Verifikasi DATABASE_URL di `.env`
+- Pastikan Supabase project aktif (tidak paused)
+- Cek password sudah benar di Supabase dashboard
+- Format string: `postgresql://postgres.xxxxx:[PASSWORD]@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true`
 
 ### Supabase Project Paused
-**Issue**: Free tier projects pause after 1 week of inactivity
-**Solution**: 
-1. Go to Supabase dashboard
-2. Click "Restore" on your project
-3. Restart Docker container: `docker compose restart app`
+Free tier projects pause setelah 1 minggu tidak aktif
+- Buka Supabase dashboard → klik "Restore"
+- Restart container: `docker compose restart app`
 
-### Build Fails
+### Build Fails - "No space left on device"
+```bash
+docker system prune -a --volumes -f   # Clean Docker system
+df -h                                 # Check disk space
+docker images | grep "<none>" | awk '{print $3}' | xargs docker rmi -f
 ```
-error: Puppeteer download failed
+
+### Out of Memory (OOM)
+```bash
+docker inspect raport-app | grep Memory     # Check limits
+sudo swapon --show                          # Enable swap jika perlu
+docker compose restart app
 ```
-**Solution**: This is expected. Add `PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true` to .env
+
+**If VPS build fails:** Build locally, push to registry, pull di VPS
+```bash
+docker tag raport:latest yourusername/raport:latest
+docker push yourusername/raport:latest
+# On VPS:
+docker pull yourusername/raport:latest
+docker tag yourusername/raport:latest raport:latest
+```
 
 ### Chromium/PDF Generation Error
-```
-ENOENT: no such file or directory, posix_spawn '/tmp/chromium'
-```
-**Solution**: Chromium is installed in the Docker image. Rebuild the image:
 ```bash
 docker compose down
 docker compose build --no-cache
 docker compose up -d
 ```
 
-The Dockerfile now includes:
-- System Chromium for Alpine Linux
-- Required fonts and dependencies
-- Environment variable `PUPPETEER_EXECUTABLE_PATH` pointing to system Chromium
-
 ### Container Exits Immediately
 ```bash
-# Check logs
-docker logs raport-app
-
-# Verify environment variables
-docker inspect raport-app | grep -A 20 Env
+docker logs raport-app         # Check logs
+docker inspect raport-app | grep -A 20 Env  # Check env vars
 ```
 
-### Out of Memory (OOM) on VPS
-```
-Error: JavaScript heap out of memory
-```
-**Solution**:
+### Container Slow/Unresponsive
 ```bash
-# 1. Verify memory limits are applied
-docker inspect raport-app | grep Memory
-
-# 2. Enable swap if not already
-sudo swapon --show
-
-# 3. Reduce memory usage by building locally
-# Build on local machine, push to registry, then pull on VPS
-docker tag raport:latest yourusername/raport:latest
-docker push yourusername/raport:latest
-
-# On VPS:
-docker pull yourusername/raport:latest
-docker tag yourusername/raport:latest raport:latest
+docker stats raport-app        # Check resource usage
+free -h                        # Check if swap being used
+docker compose restart app     # Restart container
 ```
 
-### Build Fails with "No space left on device"
-**Solution**:
-```bash
-# Clean Docker system
-docker system prune -a --volumes -f
-
-# Check disk space
-df -h
-
-# Remove old images
-docker images | grep "<none>" | awk '{print $3}' | xargs docker rmi -f
-```
-
-### Container is Slow/Unresponsive
-**Solution**:
-```bash
-# Check resource usage
-docker stats raport-app
-
-# If using too much memory, restart container
-docker compose restart app
-
-# Check if swap is being used heavily (indicates OOM)
-free -h
-```
-
-## Production Deployment
+## 📦 Production Deployment
 
 ### Using Docker Compose
 ```bash
-# Build and start
-docker compose -f docker-compose.yml up -d
-
-# Update application
-docker compose pull
-docker compose up -d
+docker compose -f docker-compose.yml up -d    # Build & start
+docker compose pull && docker compose up -d   # Update
 ```
 
-### Manual Docker Commands
+### Manual Docker
 ```bash
-# Build production image
 docker build -t your-registry/raport:1.0.0 .
-
-# Push to registry
 docker push your-registry/raport:1.0.0
 
-# Run on server
 docker run -d \
   --name raport-app \
   -p 3000:3000 \
@@ -334,59 +207,55 @@ docker run -d \
   your-registry/raport:1.0.0
 ```
 
-## Useful Commands
+## 📋 Useful Commands
 
 ```bash
-# View running containers
-docker ps
+# Container Management
+docker ps                        # List running containers
+docker compose stop              # Stop container
+docker compose down              # Remove container & networks
 
-# View image size
-docker images raport
+# Image Management
+docker images raport             # View image size
+docker compose build --no-cache  # Rebuild without cache
+docker rmi raport:latest         # Remove image
 
-# Stop container
-docker compose stop
+# Debugging
+docker logs raport-app           # View logs
+docker compose logs -f app       # Follow logs
+docker compose exec app bun shell      # Shell access
+docker stats raport-app          # Real-time stats
 
-# Remove container & image
-docker compose down
-docker rmi raport:latest
-
-# Rebuild without cache
-docker compose build --no-cache
-
-# Execute command in container (with Bun)
-docker compose exec app bun run db:seed
-
-# Check container stats
-docker stats raport-app
-
-# Shell access
-docker compose exec app bun shell
+# Database
+docker compose exec app bun run db:seed  # Seed database
+docker compose config            # Show full config
 ```
 
-## Notes
-- The `.next` and dependencies are cached in separate Docker layers for faster rebuilds
-- Health checks are enabled to automatically restart unhealthy containers
-- Multi-stage build keeps image size minimal
-- Uses Bun runtime for faster startup and execution
-- All environment variables must be set before running
+## 📊 Image Details
 
-### 🔧 Low-Resource VPS Specific Notes
-- **Memory limits** are enforced at container level (512MB max)
-- **NODE_OPTIONS** set to limit heap size to 384MB
-- **Log rotation** configured to prevent disk filling (max 30MB)
-- **Alpine base image** reduces image size by ~50%
-- **Health checks** run every 60s (reduced frequency)
-- **Swap recommended** for 1GB RAM VPS to prevent OOM
-- **Build locally** if VPS build fails due to memory constraints
+| Item | Detail |
+|------|--------|
+| Base | oven/bun:1-alpine |
+| Runtime | Bun (fast JS runtime) |
+| Size | ~200-250MB |
+| Build Time | ~2-4 menit |
+| Port | 3000 |
+| Memory | ~256-384MB at runtime |
+| CPU | Low (efficient) |
 
-## Bun-Specific Features
-- ✅ Faster startup time than Node.js
-- ✅ Better resource utilization
-- ✅ Native TypeScript support
-- ✅ Same API as Node.js
+## ℹ️ Notes
 
-## Support
-For issues, check:
-1. Database connectivity: `docker compose exec app bun run -e "fetch('http://localhost:3000/api/health')"`
-2. Environment variables: `docker compose config`
-3. Logs: `docker compose logs -f app`
+- `.next` dan dependencies di-cache untuk rebuild lebih cepat
+- Health checks enabled untuk auto-restart unhealthy containers
+- Multi-stage build menjaga image size minimal
+- Bun runtime lebih cepat dari Node.js
+- Semua env variables harus diset sebelum run
+
+### 🔧 VPS Tips
+- Memory limits enforced di container level (512MB max)
+- NODE_OPTIONS limit heap size ke 384MB
+- Log rotation prevent disk filling (max 30MB)
+- Alpine image 50% lebih ringan dari Ubuntu
+- Health checks run setiap 60 detik
+- Swap recommended untuk 1GB RAM VPS
+- Build locally jika VPS build gagal karena OOM

@@ -2,61 +2,250 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Users, BookOpen, CheckCircle } from 'lucide-react';
+import { 
+  AlertCircle, BarChart3, BookOpen, CheckCircle, 
+  Clock, Users, TrendingUp, Loader
+} from 'lucide-react';
+
+interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+}
+
+interface ActivityItem {
+  id: string;
+  type: 'grade' | 'attendance' | 'competency';
+  title: string;
+  description: string;
+  timestamp: string;
+  activityType: 'info' | 'warning' | 'success';
+}
 
 interface DashboardStats {
-  studentCount: number;
-  subjectCount: number;
-  attendanceCount: number;
+  className: string;
+  totalStudents: number;
+  totalSubjects: number;
+  presentToday: number;
+  attendanceRate: number;
+  recentActivities: ActivityItem[];
+}
+
+interface StatCard {
+  icon: React.ReactNode;
+  label: string;
+  value: number | string;
+  color: string;
+  subtext?: string;
+}
+
+// Components
+function LoadingSpinner() {
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="text-center">
+        <Loader size={48} className="text-indigo-600 mx-auto mb-4 animate-spin" />
+        <p className="text-gray-600 font-medium">Loading...</p>
+      </div>
+    </div>
+  );
+}
+
+function WelcomeCard({ name, className }: { name: string; className: string }) {
+  return (
+    <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-lg shadow-lg p-6 sm:p-8 text-white">
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-bold">Selamat Datang, {name}! 👋</h1>
+        <p className="text-emerald-100 mt-1 text-xs sm:text-sm font-medium">Kelas: {className}</p>
+        <p className="text-emerald-50 mt-2 text-sm sm:text-base">
+          Kelola siswa, absensi, dan penilaian kelas Anda dengan mudah
+        </p>
+      </div>
+    </div>
+  );
+}
+
+interface StatCardComponentProps {
+  stat: StatCard;
+}
+
+function StatCardComponent({ stat }: StatCardComponentProps) {
+  return (
+    <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 border-t-4" style={{ borderColor: stat.color }}>
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <p className="text-gray-600 text-sm font-medium">{stat.label}</p>
+          <p className="text-3xl sm:text-4xl font-bold text-gray-900 mt-2">{stat.value}</p>
+          {stat.subtext && <p className="text-xs text-gray-500 mt-2">{stat.subtext}</p>}
+        </div>
+        <div 
+          className="p-3 rounded-lg flex-shrink-0"
+          style={{ backgroundColor: stat.color + '20', color: stat.color }}
+        >
+          {stat.icon}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatsSection({ stats }: { stats: DashboardStats }) {
+  const statCards: StatCard[] = [
+    {
+      icon: <Users size={24} />,
+      label: 'Total Siswa',
+      value: stats.totalStudents,
+      color: '#3b82f6',
+      subtext: 'Di kelas Anda',
+    },
+    {
+      icon: <BookOpen size={24} />,
+      label: 'Mata Pelajaran',
+      value: stats.totalSubjects,
+      color: '#8b5cf6',
+      subtext: 'Diajarkan di kelas',
+    },
+    {
+      icon: <CheckCircle size={24} />,
+      label: 'Hadir Hari Ini',
+      value: stats.presentToday,
+      color: '#10b981',
+      subtext: 'Siswa yang hadir',
+    },
+    {
+      icon: <TrendingUp size={24} />,
+      label: 'Rata-rata Absensi',
+      value: `${stats.attendanceRate}%`,
+      color: '#f59e0b',
+      subtext: 'Tingkat kehadiran',
+    },
+  ];
+
+  return (
+    <section>
+      <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6 flex items-center gap-2">
+        <BarChart3 size={24} className="text-emerald-600" />
+        Ringkasan Data
+      </h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        {statCards.map((stat, idx) => (
+          <StatCardComponent key={idx} stat={stat} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ActivityItemComponent({ activity }: { activity: ActivityItem }) {
+  const iconMap = {
+    info: <BarChart3 size={20} className="text-blue-600" />,
+    warning: <AlertCircle size={20} className="text-yellow-600" />,
+    success: <CheckCircle size={20} className="text-green-600" />,
+  };
+
+  const bgColorMap = {
+    info: 'bg-blue-50 border-l-4 border-blue-600',
+    warning: 'bg-yellow-50 border-l-4 border-yellow-600',
+    success: 'bg-green-50 border-l-4 border-green-600',
+  };
+
+  return (
+    <div className={`p-4 rounded-lg ${bgColorMap[activity.activityType]}`}>
+      <div className="flex items-start gap-3">
+        {iconMap[activity.activityType]}
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-gray-900 text-sm">{activity.title}</p>
+          <p className="text-gray-600 text-xs mt-1">{activity.description}</p>
+          <p className="text-gray-500 text-xs mt-1">
+            {(() => {
+              const diff = Date.now() - new Date(activity.timestamp).getTime();
+              const minutes = Math.floor(diff / 60000);
+              const hours = Math.floor(minutes / 60);
+              const days = Math.floor(hours / 24);
+              
+              if (minutes < 1) return 'Baru saja';
+              if (minutes < 60) return `${minutes}m yang lalu`;
+              if (hours < 24) return `${hours}h yang lalu`;
+              return `${days}d yang lalu`;
+            })()}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RecentActivitySection({ activities }: { activities: ActivityItem[] }) {
+  return (
+    <section>
+      <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6 flex items-center gap-2">
+        <Clock size={24} className="text-emerald-600" />
+        Aktivitas Terbaru
+      </h2>
+      <div className="space-y-3">
+        {activities.length > 0 ? (
+          activities.map((activity) => (
+            <ActivityItemComponent key={activity.id} activity={activity} />
+          ))
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            <Clock size={40} className="mx-auto mb-2 opacity-30" />
+            <p>Belum ada aktivitas</p>
+          </div>
+        )}
+      </div>
+    </section>
+  );
 }
 
 export default function WaliKelasDashboard() {
   const router = useRouter();
-  const [stats, setStats] = useState<DashboardStats>({
-    studentCount: 0,
-    subjectCount: 0,
-    attendanceCount: 0,
-  });
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
+    const userData = localStorage.getItem('user');
+    if (!userData) {
+      router.push('/login');
+      return;
     }
+
+    const parsedUser = JSON.parse(userData) as User;
+    if (parsedUser.role !== 'WALI_KELAS') {
+      router.push('/admin/dashboard');
+      return;
+    }
+
+    setUser(parsedUser);
     fetchStats();
-  }, []);
+  }, [router]);
 
   async function fetchStats() {
     try {
+      setIsLoading(true);
       const token = localStorage.getItem('accessToken');
-      const headers = { Authorization: `Bearer ${token}` };
-
-      // Fetch dashboard stats
-      const [studentsRes, subjectsRes] = await Promise.all([
-        fetch('/api/admin/users?limit=1&role=STUDENT', { headers }),
-        fetch('/api/admin/subjects?limit=1', { headers }),
-      ]);
-
-      let studentCount = 0;
-      let subjectCount = 0;
-
-      if (studentsRes.ok) {
-        const data = await studentsRes.json();
-        studentCount = data.meta?.total || 0;
+      if (!token) {
+        router.push('/login');
+        return;
       }
 
-      if (subjectsRes.ok) {
-        const data = await subjectsRes.json();
-        subjectCount = data.meta?.total || 0;
-      }
-
-      setStats({
-        studentCount,
-        subjectCount,
-        attendanceCount: 0,
+      const res = await fetch('/api/wali-kelas/dashboard', {
+        headers: { Authorization: `Bearer ${token}` }
       });
+
+      if (res.status === 401) {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('user');
+        router.push('/login');
+        return;
+      }
+
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data.data);
+      }
     } catch (error) {
       console.error('Error fetching stats:', error);
     } finally {
@@ -64,88 +253,20 @@ export default function WaliKelasDashboard() {
     }
   }
 
-  const statCards = [
-    {
-      title: 'Jumlah Siswa',
-      value: stats.studentCount,
-      icon: Users,
-      color: 'bg-blue-50 border-blue-200 text-blue-600',
-      href: '/wali-kelas/students',
-    },
-    {
-      title: 'Mata Pelajaran',
-      value: stats.subjectCount,
-      icon: BookOpen,
-      color: 'bg-green-50 border-green-200 text-green-600',
-      href: '/wali-kelas/subjects',
-    },
-    {
-      title: 'Absensi',
-      value: 0,
-      icon: CheckCircle,
-      color: 'bg-purple-50 border-purple-200 text-purple-600',
-      href: '/wali-kelas/attendance',
-    },
-  ];
+  if (isLoading || !stats) {
+    return <LoadingSpinner />;
+  }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard Wali Kelas</h1>
-        <p className="text-gray-600 mt-2">
-          Selamat datang, {user?.name || 'Wali Kelas'} 👋
-        </p>
-      </div>
+    <div className="space-y-6 sm:space-y-8">
+      <WelcomeCard 
+        name={user?.name || 'Wali Kelas'} 
+        className={stats.className}
+      />
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {statCards.map((card, idx) => {
-          const Icon = card.icon;
-          return (
-            <div
-              key={idx}
-              onClick={() => router.push(card.href)}
-              className={`p-6 rounded-lg border-l-4 cursor-pointer hover:shadow-lg transition-all ${card.color}`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">
-                    {card.title}
-                  </p>
-                  <p className="text-3xl font-bold text-gray-900">
-                    {isLoading ? '-' : card.value}
-                  </p>
-                </div>
-                <Icon size={40} className="opacity-20" />
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      <StatsSection stats={stats} />
 
-      {/* Welcome Section */}
-      <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-lg p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">
-          📚 Sebagai Wali Kelas
-        </h2>
-        <p className="text-gray-700 mb-4">
-          Kelola master data siswa, mata pelajaran, dan absensi kelas Anda dengan mudah.
-        </p>
-        <ul className="space-y-2 text-gray-700">
-          <li className="flex items-center gap-2">
-            <span className="text-emerald-600">✓</span>
-            Lihat daftar lengkap siswa di kelas Anda
-          </li>
-          <li className="flex items-center gap-2">
-            <span className="text-emerald-600">✓</span>
-            Kelola mata pelajaran yang diajarkan
-          </li>
-          <li className="flex items-center gap-2">
-            <span className="text-emerald-600">✓</span>
-            Pantau absensi siswa secara real-time
-          </li>
-        </ul>
-      </div>
+      <RecentActivitySection activities={stats.recentActivities} />
     </div>
   );
 }
