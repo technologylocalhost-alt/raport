@@ -14,6 +14,8 @@ import {
   BarChart3,
   Library,
   Target,
+  User,
+  ChevronDown,
 } from 'lucide-react';
 
 interface TeacherLayoutProps {
@@ -24,6 +26,8 @@ export default function TeacherLayout({ children }: TeacherLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [userName, setUserName] = useState('Teacher');
   const router = useRouter();
   const pathname = usePathname();
 
@@ -36,6 +40,19 @@ export default function TeacherLayout({ children }: TeacherLayoutProps) {
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Get user name from localStorage
+  useEffect(() => {
+    const user = localStorage.getItem('user');
+    if (user) {
+      try {
+        const parsedUser = JSON.parse(user);
+        setUserName(parsedUser.name || 'Teacher');
+      } catch (e) {
+        console.error('Error parsing user:', e);
+      }
+    }
   }, []);
 
   const menuItems = [
@@ -164,25 +181,6 @@ export default function TeacherLayout({ children }: TeacherLayoutProps) {
             </div>
           ))}
         </nav>
-
-        {/* Logout Button */}
-        <div className="p-2 sm:p-3 border-t border-slate-700 flex-shrink-0">
-          <button
-            onClick={handleLogout}
-            disabled={isLoggingOut}
-            className={`w-full flex items-center gap-2 p-2 sm:p-2.5 rounded-lg transition-all ${
-              isLoggingOut 
-                ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-                : 'text-slate-300 hover:bg-red-600 hover:text-white'
-            }`}
-            title="Logout"
-          >
-            <LogOut size={18} className={`flex-shrink-0 ${isLoggingOut ? 'animate-spin' : ''}`} />
-            <span className="text-xs sm:text-sm">
-              {isLoggingOut ? 'Logging out...' : 'Logout'}
-            </span>
-          </button>
-        </div>
       </aside>
 
       {/* Main Content */}
@@ -203,14 +201,62 @@ export default function TeacherLayout({ children }: TeacherLayoutProps) {
                   .find((item) => item.href === pathname)?.title || 'Dashboard'}
               </h2>
             </div>
-            <span className="text-xs sm:text-sm text-gray-600 whitespace-nowrap flex-shrink-0">
-              {new Date().toLocaleDateString('id-ID', {
-                weekday: 'short',
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-              })}
-            </span>
+            
+            <div className="flex items-center gap-3">
+              <span className="text-xs sm:text-sm text-gray-600 whitespace-nowrap flex-shrink-0 hidden sm:block">
+                {new Date().toLocaleDateString('id-ID', {
+                  weekday: 'short',
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                })}
+              </span>
+              
+              {/* User Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setDropdownOpen(!dropdownOpen)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-semibold text-sm">
+                    {userName.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="text-sm font-medium text-gray-700 hidden md:block">{userName}</span>
+                  <ChevronDown size={16} className="text-gray-500" />
+                </button>
+                
+                {/* Dropdown Menu */}
+                {dropdownOpen && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-10" 
+                      onClick={() => setDropdownOpen(false)}
+                    />
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                      <Link
+                        href="/teacher/profile"
+                        onClick={() => setDropdownOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                      >
+                        <User size={16} />
+                        <span>Profile</span>
+                      </Link>
+                      <button
+                        onClick={() => {
+                          setDropdownOpen(false);
+                          handleLogout();
+                        }}
+                        disabled={isLoggingOut}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                      >
+                        <LogOut size={16} />
+                        <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </header>
 

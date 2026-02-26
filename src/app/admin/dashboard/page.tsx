@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Building2, Users, BarChart3, BookOpen, Calendar, GraduationCap, ArrowRight, FileText } from 'lucide-react';
+import { Building2, Users, BarChart3, BookOpen, Calendar, GraduationCap, ArrowRight, FileText, School, BookMarked } from 'lucide-react';
 
 interface User {
   id: string;
@@ -12,10 +12,29 @@ interface User {
   role: string;
 }
 
+interface Statistics {
+  schools: number;
+  schoolYears: number;
+  levels: number;
+  classes: number;
+  subjects: number;
+  students: number;
+  teachers: number;
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [statistics, setStatistics] = useState<Statistics>({
+    schools: 0,
+    schoolYears: 0,
+    levels: 0,
+    classes: 0,
+    subjects: 0,
+    students: 0,
+    teachers: 0,
+  });
 
   useEffect(() => {
     // Check after component mounts and localStorage is accessible
@@ -45,6 +64,50 @@ export default function AdminDashboard() {
     const timer = setTimeout(checkAuth, 0);
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      fetchStatistics();
+    }
+  }, [user]);
+
+  async function fetchStatistics() {
+    try {
+      const token = localStorage.getItem('accessToken');
+      
+      const [schoolsRes, schoolYearsRes, levelsRes, classesRes, subjectsRes, studentsRes, teachersRes] = await Promise.all([
+        fetch('/api/admin/schools?limit=1000', { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch('/api/admin/school-years?limit=1000', { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch('/api/admin/levels?limit=1000', { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch('/api/admin/classes?limit=1000', { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch('/api/admin/subjects?limit=1000', { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch('/api/admin/students?limit=1000', { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch('/api/admin/users?limit=1000&role=TEACHER', { headers: { 'Authorization': `Bearer ${token}` } }),
+      ]);
+
+      const [schools, schoolYears, levels, classes, subjects, students, teachers] = await Promise.all([
+        schoolsRes.json(),
+        schoolYearsRes.json(),
+        levelsRes.json(),
+        classesRes.json(),
+        subjectsRes.json(),
+        studentsRes.json(),
+        teachersRes.json(),
+      ]);
+
+      setStatistics({
+        schools: schools.pagination?.total || schools.data?.length || 0,
+        schoolYears: schoolYears.pagination?.total || schoolYears.data?.length || 0,
+        levels: levels.pagination?.total || levels.data?.length || 0,
+        classes: classes.pagination?.total || classes.data?.length || 0,
+        subjects: subjects.pagination?.total || subjects.data?.length || 0,
+        students: students.pagination?.total || students.data?.length || 0,
+        teachers: teachers.pagination?.total || teachers.data?.length || 0,
+      });
+    } catch (error) {
+      console.error('Error fetching statistics:', error);
+    }
+  }
 
   async function handleLogout() {
     try {
@@ -86,117 +149,71 @@ export default function AdminDashboard() {
         </p>
       </div>
 
-      {/* Master Data Section */}
+      {/* Statistics Section */}
       <div>
-        <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 mb-3 sm:mb-4">Master Data</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          {/* Data Sekolah */}
-          <Link
-            href="/admin/schools"
-            className="bg-white rounded-lg shadow hover:shadow-lg transition-all group border-l-4 border-blue-500 p-4 sm:p-6"
-          >
-            <div className="flex items-start justify-between mb-2 sm:mb-3">
-              <div className="p-2 sm:p-3 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
-                <Building2 size={20} className="sm:w-6 sm:h-6 text-blue-600" />
-              </div>
-              <ArrowRight size={18} className="text-gray-300 group-hover:text-blue-600 transition-colors flex-shrink-0" />
+        <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 mb-3 sm:mb-4">Statistik</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
+          {/* Total Sekolah */}
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 sm:p-4 border border-blue-200">
+            <div className="flex items-center justify-between mb-2">
+              <Building2 size={18} className="sm:w-6 sm:h-6 text-blue-600" />
+              <span className="text-2xl sm:text-3xl font-bold text-blue-600">{statistics.schools}</span>
             </div>
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900">Data Sekolah</h3>
-            <p className="text-gray-600 text-xs sm:text-sm mt-1">Kelola informasi sekolah</p>
-          </Link>
-
-          {/* Tahun Ajaran */}
-          <Link
-            href="/admin/school-years"
-            className="bg-white rounded-lg shadow hover:shadow-lg transition-all group border-l-4 border-green-500 p-4 sm:p-6"
-          >
-            <div className="flex items-start justify-between mb-2 sm:mb-3">
-              <div className="p-2 sm:p-3 bg-green-100 rounded-lg group-hover:bg-green-200 transition-colors">
-                <Calendar size={20} className="sm:w-6 sm:h-6 text-green-600" />
-              </div>
-              <ArrowRight size={18} className="text-gray-300 group-hover:text-green-600 transition-colors flex-shrink-0" />
-            </div>
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900">Tahun Ajaran</h3>
-            <p className="text-gray-600 text-xs sm:text-sm mt-1">Kelola tahun dan semester</p>
-          </Link>
-
-          {/* Jenjang Pendidikan */}
-          <Link
-            href="/admin/levels"
-            className="bg-white rounded-lg shadow hover:shadow-lg transition-all group border-l-4 border-purple-500 p-4 sm:p-6"
-          >
-            <div className="flex items-start justify-between mb-2 sm:mb-3">
-              <div className="p-2 sm:p-3 bg-purple-100 rounded-lg group-hover:bg-purple-200 transition-colors">
-                <GraduationCap size={20} className="sm:w-6 sm:h-6 text-purple-600" />
-              </div>
-              <ArrowRight size={18} className="text-gray-300 group-hover:text-purple-600 transition-colors flex-shrink-0" />
-            </div>
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900">Jenjang Pendidikan</h3>
-            <p className="text-gray-600 text-xs sm:text-sm mt-1">SD, SMP, SMA, Aliyah</p>
-          </Link>
-
-          {/* Mata Pelajaran */}
-          <Link
-            href="/admin/subjects"
-            className="bg-white rounded-lg shadow hover:shadow-lg transition-all group border-l-4 border-orange-500 p-4 sm:p-6"
-          >
-            <div className="flex items-start justify-between mb-2 sm:mb-3">
-              <div className="p-2 sm:p-3 bg-orange-100 rounded-lg group-hover:bg-orange-200 transition-colors">
-                <BookOpen size={20} className="sm:w-6 sm:h-6 text-orange-600" />
-              </div>
-              <ArrowRight size={18} className="text-gray-300 group-hover:text-orange-600 transition-colors flex-shrink-0" />
-            </div>
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900">Mata Pelajaran</h3>
-            <p className="text-gray-600 text-xs sm:text-sm mt-1">Kelola kurikulum</p>
-          </Link>
-        </div>
-      </div>
-
-      {/* Coming Soon Section */}
-      <div>
-        <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 mb-3 sm:mb-4">Fitur Lainnya</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-          {/* Manajemen Raport */}
-          <Link
-            href="/admin/raports"
-            className="bg-white rounded-lg shadow hover:shadow-lg transition-all group border-l-4 border-indigo-500 p-4 sm:p-6"
-          >
-            <div className="flex items-start justify-between mb-2 sm:mb-3">
-              <div className="p-2 sm:p-3 bg-indigo-100 rounded-lg group-hover:bg-indigo-200 transition-colors">
-                <FileText size={20} className="sm:w-6 sm:h-6 text-indigo-600" />
-              </div>
-              <ArrowRight size={18} className="text-gray-300 group-hover:text-indigo-600 transition-colors flex-shrink-0" />
-            </div>
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900">Manajemen Raport</h3>
-            <p className="text-gray-600 text-xs sm:text-sm mt-1">Lihat dan kelola semua raport</p>
-          </Link>
-
-          {/* Users */}
-          <div className="bg-white rounded-lg shadow border-l-4 border-red-500 p-4 sm:p-6 opacity-60">
-            <div className="flex items-start justify-between mb-2 sm:mb-3">
-              <div className="p-2 sm:p-3 bg-red-100 rounded-lg">
-                <Users size={20} className="sm:w-6 sm:h-6 text-red-600" />
-              </div>
-              <span className="text-xs font-semibold bg-red-100 text-red-700 px-2 py-1 rounded whitespace-nowrap">
-                Coming Soon
-              </span>
-            </div>
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900">Manajemen Pengguna</h3>
-            <p className="text-gray-600 text-xs sm:text-sm mt-1">Kelola admin, guru, dan pengguna</p>
+            <p className="text-xs sm:text-sm text-gray-700">Sekolah</p>
           </div>
 
-          {/* Analytics */}
-          <div className="bg-white rounded-lg shadow border-l-4 border-teal-500 p-4 sm:p-6 opacity-60">
-            <div className="flex items-start justify-between mb-2 sm:mb-3">
-              <div className="p-2 sm:p-3 bg-teal-100 rounded-lg">
-                <BarChart3 size={20} className="sm:w-6 sm:h-6 text-teal-600" />
-              </div>
-              <span className="text-xs font-semibold bg-teal-100 text-teal-700 px-2 py-1 rounded whitespace-nowrap">
-                Coming Soon
-              </span>
+          {/* Total Tahun Ajaran */}
+          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 sm:p-4 border border-green-200">
+            <div className="flex items-center justify-between mb-2">
+              <Calendar size={18} className="sm:w-6 sm:h-6 text-green-600" />
+              <span className="text-2xl sm:text-3xl font-bold text-green-600">{statistics.schoolYears}</span>
             </div>
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900">Analytics & Laporan</h3>
-            <p className="text-gray-600 text-xs sm:text-sm mt-1">Lihat statistik dan laporan</p>
+            <p className="text-xs sm:text-sm text-gray-700">Tahun Ajaran</p>
+          </div>
+
+          {/* Total Jenjang */}
+          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-3 sm:p-4 border border-purple-200">
+            <div className="flex items-center justify-between mb-2">
+              <GraduationCap size={18} className="sm:w-6 sm:h-6 text-purple-600" />
+              <span className="text-2xl sm:text-3xl font-bold text-purple-600">{statistics.levels}</span>
+            </div>
+            <p className="text-xs sm:text-sm text-gray-700">Jenjang</p>
+          </div>
+
+          {/* Total Kelas */}
+          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-3 sm:p-4 border border-orange-200">
+            <div className="flex items-center justify-between mb-2">
+              <School size={18} className="sm:w-6 sm:h-6 text-orange-600" />
+              <span className="text-2xl sm:text-3xl font-bold text-orange-600">{statistics.classes}</span>
+            </div>
+            <p className="text-xs sm:text-sm text-gray-700">Kelas</p>
+          </div>
+
+          {/* Total Mata Pelajaran */}
+          <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-3 sm:p-4 border border-indigo-200">
+            <div className="flex items-center justify-between mb-2">
+              <BookMarked size={18} className="sm:w-6 sm:h-6 text-indigo-600" />
+              <span className="text-2xl sm:text-3xl font-bold text-indigo-600">{statistics.subjects}</span>
+            </div>
+            <p className="text-xs sm:text-sm text-gray-700">Mata Pelajaran</p>
+          </div>
+
+          {/* Total Siswa */}
+          <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-3 sm:p-4 border border-red-200">
+            <div className="flex items-center justify-between mb-2">
+              <Users size={18} className="sm:w-6 sm:h-6 text-red-600" />
+              <span className="text-2xl sm:text-3xl font-bold text-red-600">{statistics.students}</span>
+            </div>
+            <p className="text-xs sm:text-sm text-gray-700">Siswa</p>
+          </div>
+
+          {/* Total Guru */}
+          <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded-lg p-3 sm:p-4 border border-teal-200">
+            <div className="flex items-center justify-between mb-2">
+              <Users size={18} className="sm:w-6 sm:h-6 text-teal-600" />
+              <span className="text-2xl sm:text-3xl font-bold text-teal-600">{statistics.teachers}</span>
+            </div>
+            <p className="text-xs sm:text-sm text-gray-700">Guru</p>
           </div>
         </div>
       </div>

@@ -102,19 +102,20 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { name, studentNo, email, phone, address, birthDate, classId, parentPhoneNo } = body;
+    const { name, studentNo, nourut, email, phone, address, birthDate, classId, parentPhoneNo } = body;
 
     const updatedStudent = await prisma.student.update({
       where: { id },
       data: {
-        ...(name && { name }),
-        ...(studentNo && { studentNo }),
-        ...(email && { email }),
-        ...(phone && { phone }),
-        ...(address && { address }),
-        ...(birthDate && { birthDate: new Date(birthDate) }),
-        ...(classId && { classId }),
-        ...(parentPhoneNo && { parentPhoneNo }),
+        name,
+        studentNo,
+        nourut: nourut || null,
+        email: email || null,
+        phone: phone || null,
+        address: address || null,
+        birthDate: birthDate ? new Date(birthDate) : null,
+        classId,
+        parentPhoneNo: parentPhoneNo || null,
       },
       include: {
         class: {

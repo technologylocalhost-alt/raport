@@ -295,10 +295,10 @@ export default function RaportsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div>
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Manajemen Raport</h1>
-          <p className="text-gray-600 mt-2">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Manajemen Raport</h1>
+          <p className="text-gray-600 mt-2 text-sm sm:text-base">
             Total: {total} raport yang sudah di-input
           </p>
         </div>

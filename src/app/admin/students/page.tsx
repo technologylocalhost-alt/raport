@@ -13,6 +13,7 @@ interface Student {
   id: string;
   name: string;
   studentNo: string;
+  nourut: number | null;
   email: string;
   phone: string;
   address: string;
@@ -49,6 +50,7 @@ export default function StudentsPage() {
   const [formData, setFormData] = useState<{
     name: string;
     studentNo: string;
+    nourut: string;
     email: string;
     phone: string;
     address: string;
@@ -58,6 +60,7 @@ export default function StudentsPage() {
   }>({
     name: '',
     studentNo: '',
+    nourut: '',
     email: '',
     phone: '',
     address: '',
@@ -143,6 +146,7 @@ export default function StudentsPage() {
     setFormData({
       name: '',
       studentNo: '',
+      nourut: '',
       email: '',
       phone: '',
       address: '',
@@ -155,13 +159,21 @@ export default function StudentsPage() {
   };
 
   const handleEditClick = (student: Student) => {
+    // Convert birthDate to YYYY-MM-DD format for input[type="date"]
+    let formattedBirthDate = '';
+    if (student.birthDate) {
+      const date = new Date(student.birthDate);
+      formattedBirthDate = date.toISOString().split('T')[0];
+    }
+
     setFormData({
       name: student.name,
       studentNo: student.studentNo,
+      nourut: student.nourut?.toString() || '',
       email: student.email,
       phone: student.phone,
       address: student.address,
-      birthDate: student.birthDate || '',
+      birthDate: formattedBirthDate,
       classId: student.classId,
       parentPhoneNo: '',
     });
@@ -175,6 +187,12 @@ export default function StudentsPage() {
     try {
       const token = localStorage.getItem('accessToken');
 
+      // Prepare data with nourut as number or null
+      const submitData = {
+        ...formData,
+        nourut: formData.nourut ? parseInt(formData.nourut) : null,
+      };
+
       if (editingId) {
         // Update student
         const response = await fetch(`/api/admin/students/${editingId}`, {
@@ -183,7 +201,7 @@ export default function StudentsPage() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(formData),
+          body: JSON.stringify(submitData),
         });
 
         if (!response.ok) {
@@ -198,7 +216,7 @@ export default function StudentsPage() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(formData),
+          body: JSON.stringify(submitData),
         });
 
         if (!response.ok) {
@@ -338,6 +356,9 @@ export default function StudentsPage() {
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      No Urut
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                       No. Siswa
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
@@ -360,6 +381,9 @@ export default function StudentsPage() {
                 <tbody className="divide-y divide-gray-200">
                   {students.map((student) => (
                     <tr key={student.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                        {student.nourut || '-'}
+                      </td>
                       <td className="px-6 py-4 text-sm font-medium text-gray-900">
                         {student.studentNo}
                       </td>
@@ -460,10 +484,10 @@ export default function StudentsPage() {
 
       {/* Modal Form */}
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-lg max-w-md w-full max-h-96 overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b">
-              <h2 className="text-lg font-bold text-gray-900">
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center p-3 z-50">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b sticky top-0 bg-white">
+              <h2 className="text-lg sm:text-xl font-bold text-gray-900">
                 {editingId ? 'Edit Siswa' : 'Tambah Siswa'}
               </h2>
               <button
@@ -474,7 +498,7 @@ export default function StudentsPage() {
               </button>
             </div>
 
-            <form onSubmit={handleFormSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleFormSubmit} className="p-4 sm:p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Nama Siswa *
@@ -484,7 +508,7 @@ export default function StudentsPage() {
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-gray-900 bg-white font-medium"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-gray-900 bg-white font-medium text-sm sm:text-base"
                 />
               </div>
 
@@ -503,13 +527,29 @@ export default function StudentsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nomor Urut
+                </label>
+                <input
+                  type="number"
+                  value={formData.nourut}
+                  onChange={(e) => setFormData({ ...formData, nourut: e.target.value })}
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-gray-900 bg-gray-100 font-medium disabled:cursor-not-allowed"
+                  placeholder="Masukkan nomor urut"
+                  min="1"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Kelas *
                 </label>
                 <select
                   value={formData.classId}
                   onChange={(e) => setFormData({ ...formData, classId: e.target.value })}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-gray-900 bg-white font-medium"
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-gray-900 bg-gray-100 font-medium disabled:cursor-not-allowed"
                 >
                   <option value="">-- Pilih Kelas --</option>
                   {classes.map((cls) => (
@@ -568,17 +608,17 @@ export default function StudentsPage() {
                 />
               </div>
 
-              <div className="flex gap-3 pt-4">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-4">
                 <button
                   type="button"
                   onClick={() => setShowForm(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium text-sm sm:text-base"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium"
+                  className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium text-sm sm:text-base"
                 >
                   {editingId ? 'Simpan' : 'Tambah'}
                 </button>

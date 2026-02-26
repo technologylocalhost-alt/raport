@@ -85,6 +85,7 @@ export async function GET(request: NextRequest) {
       id: student.id,
       name: student.name,
       studentNo: student.studentNo,
+      nourut: student.nourut,
       email: student.email,
       phone: student.phone,
       address: student.address,
@@ -114,7 +115,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, studentNo, email, phone, address, birthDate, classId, parentPhoneNo } = body;
+    const { name, studentNo, nourut, email, phone, address, birthDate, classId, parentPhoneNo } = body;
 
     if (!name || !studentNo || !classId) {
       return errorResponse('Name, student number, and class are required', 400);
@@ -133,6 +134,7 @@ export async function POST(request: NextRequest) {
       data: {
         name,
         studentNo,
+        nourut: nourut || null,
         email,
         phone,
         address,

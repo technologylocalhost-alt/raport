@@ -349,9 +349,9 @@ export default function AcademicStructurePage() {
   return (
     <div className="space-y-6">
       {/* Header Section */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Struktur Akademik</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Struktur Akademik</h1>
           <p className="text-gray-600 text-sm mt-1">Kelola Tahun Ajaran dan Semester</p>
         </div>
         <button
@@ -366,10 +366,11 @@ export default function AcademicStructurePage() {
             });
             setShowYearForm(true);
           }}
-          className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors shadow-lg hover:shadow-xl font-medium"
+          className="flex items-center justify-center sm:justify-start gap-2 bg-blue-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg hover:bg-blue-700 transition-colors shadow-lg hover:shadow-xl font-medium whitespace-nowrap"
         >
           <Plus size={20} />
-          Tahun Akademik Baru
+          <span className="hidden xs:hidden sm:inline">Tahun Akademik Baru</span>
+          <span className="inline sm:hidden">Tahun Baru</span>
         </button>
       </div>
 

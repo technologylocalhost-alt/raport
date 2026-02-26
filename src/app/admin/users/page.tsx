@@ -225,9 +225,9 @@ export default function UsersPage() {
   return (
     <div className="space-y-6">
       {/* Header Section */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Manajemen Pengguna</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Manajemen Pengguna</h1>
           <p className="text-gray-600 text-sm mt-1">Kelola pengguna sistem Anda</p>
         </div>
         <button
@@ -244,15 +244,16 @@ export default function UsersPage() {
             setShowForm(true);
             setShowPassword(false);
           }}
-          className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors shadow-lg hover:shadow-xl font-medium"
+          className="flex items-center justify-center sm:justify-start gap-2 bg-blue-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg hover:bg-blue-700 transition-colors shadow-lg hover:shadow-xl font-medium whitespace-nowrap"
         >
           <Plus size={20} />
-          Tambah Pengguna
+          <span className="hidden xs:hidden sm:inline">Tambah Pengguna</span>
+          <span className="inline sm:hidden">Tambah</span>
         </button>
       </div>
 
       {/* Search Section */}
-      <div className="bg-white rounded-lg shadow p-4">
+      <div className="bg-white rounded-lg shadow p-3 sm:p-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
           <input
@@ -263,19 +264,19 @@ export default function UsersPage() {
               setSearch(e.target.value);
               setPage(1);
             }}
-            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            className="w-full pl-10 pr-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-gray-900 text-sm sm:text-base"
           />
         </div>
       </div>
 
       {/* Form Section */}
       {showForm && (
-        <div className="bg-white rounded-lg shadow-lg p-6 border-l-4 border-blue-500">
-          <h2 className="text-xl font-bold text-gray-900 mb-6">
+        <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 border-l-4 border-blue-500">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 sm:mb-6">
             {editingId ? '✏️ Edit Pengguna' : '➕ Tambah Pengguna Baru'}
           </h2>
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
               {/* Email */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">

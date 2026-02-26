@@ -366,25 +366,27 @@ export default function SubjectsPage() {
   return (
     <div className="space-y-6">
       {/* Header Section */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Manajemen Mata Pelajaran</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Manajemen Mata Pelajaran</h1>
           <p className="text-gray-600 text-sm mt-1">Kelola kurikulum dan kompetensi</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-row flex-wrap gap-2 sm:gap-3 justify-end">
           <button
             onClick={handleExport}
-            className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors shadow-lg hover:shadow-xl font-medium"
+            className="flex items-center justify-center gap-2 bg-blue-600 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg hover:bg-blue-700 transition-colors shadow-lg hover:shadow-xl font-medium text-sm sm:text-base"
           >
             <Download size={20} />
-            Export Excel
+            <span className="hidden sm:inline">Export Excel</span>
+            <span className="inline sm:hidden">Export</span>
           </button>
           <button
             onClick={() => setShowImportModal(true)}
-            className="flex items-center gap-2 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors shadow-lg hover:shadow-xl font-medium"
+            className="flex items-center justify-center gap-2 bg-green-600 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg hover:bg-green-700 transition-colors shadow-lg hover:shadow-xl font-medium text-sm sm:text-base"
           >
             <Upload size={20} />
-            Import Excel
+            <span className="hidden sm:inline">Import Excel</span>
+            <span className="inline sm:hidden">Import</span>
           </button>
           <button
             onClick={() => {
@@ -558,67 +560,74 @@ export default function SubjectsPage() {
           </div>
         ) : (
           <>
-            <table className="w-full">
-              <thead className="bg-gradient-to-r from-slate-50 to-slate-100 border-b">
-                <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                    Nama Mata Pelajaran
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                    Nama (Arab)
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                    Kode
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                    Jenjang
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                    Jam Kredit
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                    Deskripsi
-                  </th>
-                  <th className="px-6 py-4 text-right text-sm font-semibold text-gray-700">
-                    Aksi
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {subjects.map((subject) => (
-                  <tr key={subject.id} className="hover:bg-orange-50 transition-colors">
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                      {subject.name}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {subject.nameArabic || '-'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{subject.code}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{subject.level.name}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{subject.creditHours || '-'}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600 truncate">
-                      {subject.description}
-                    </td>
-                    <td className="px-6 py-4 text-right space-x-2">
-                      <button
-                        onClick={() => handleEdit(subject)}
-                        className="bg-blue-100 text-blue-700 px-3 py-2 rounded-lg hover:bg-blue-50 transition-all font-medium text-sm inline-flex items-center gap-1"
-                      >
-                        <Edit size={16} />
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(subject.id)}
-                        className="bg-red-100 text-red-700 px-3 py-2 rounded-lg hover:bg-red-50 transition-all font-medium text-sm inline-flex items-center gap-1"
-                      >
-                        <Trash2 size={16} />
-                        Hapus
-                      </button>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gradient-to-r from-slate-50 to-slate-100 border-b sticky top-0">
+                  <tr>
+                    <th className="px-3 sm:px-6 py-2 sm:py-4 text-left text-xs sm:text-sm font-semibold text-gray-700">
+                      Nama Mata Pelajaran
+                    </th>
+                    <th className="hidden lg:table-cell px-3 sm:px-6 py-2 sm:py-4 text-left text-xs sm:text-sm font-semibold text-gray-700">
+                      Nama (Arab)
+                    </th>
+                    <th className="px-3 sm:px-6 py-2 sm:py-4 text-left text-xs sm:text-sm font-semibold text-gray-700">
+                      Kode
+                    </th>
+                    <th className="hidden md:table-cell px-3 sm:px-6 py-2 sm:py-4 text-left text-xs sm:text-sm font-semibold text-gray-700">
+                      Jenjang
+                    </th>
+                    <th className="hidden lg:table-cell px-3 sm:px-6 py-2 sm:py-4 text-left text-xs sm:text-sm font-semibold text-gray-700">
+                      Jam Kredit
+                    </th>
+                    <th className="hidden xl:table-cell px-3 sm:px-6 py-2 sm:py-4 text-left text-xs sm:text-sm font-semibold text-gray-700">
+                      Deskripsi
+                    </th>
+                    <th className="px-3 sm:px-6 py-2 sm:py-4 text-right text-xs sm:text-sm font-semibold text-gray-700">
+                      Aksi
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y">
+                  {subjects.map((subject) => (
+                    <tr key={subject.id} className="hover:bg-orange-50 transition-colors">
+                      <td className="px-3 sm:px-6 py-2 sm:py-4 text-xs sm:text-sm font-medium text-gray-900">
+                        <div className="flex flex-col gap-1">
+                          <span>{subject.name}</span>
+                          <span className="text-xs text-gray-500 lg:hidden">
+                            {subject.nameArabic && `Arab: ${subject.nameArabic}`}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="hidden lg:table-cell px-3 sm:px-6 py-2 sm:py-4 text-xs sm:text-sm text-gray-600">
+                        {subject.nameArabic || '-'}
+                      </td>
+                      <td className="px-3 sm:px-6 py-2 sm:py-4 text-xs sm:text-sm text-gray-600">{subject.code}</td>
+                      <td className="hidden md:table-cell px-3 sm:px-6 py-2 sm:py-4 text-xs sm:text-sm text-gray-600">{subject.level.name}</td>
+                      <td className="hidden lg:table-cell px-3 sm:px-6 py-2 sm:py-4 text-xs sm:text-sm text-gray-600">{subject.creditHours || '-'}</td>
+                      <td className="hidden xl:table-cell px-3 sm:px-6 py-2 sm:py-4 text-xs sm:text-sm text-gray-600 truncate">
+                        {subject.description}
+                      </td>
+                      <td className="px-3 sm:px-6 py-2 sm:py-4 text-right space-x-1 sm:space-x-2">
+                        <button
+                          onClick={() => handleEdit(subject)}
+                          className="bg-blue-100 text-blue-700 px-2 sm:px-3 py-1 sm:py-2 rounded-lg hover:bg-blue-50 transition-all font-medium text-xs sm:text-sm inline-flex items-center gap-1"
+                        >
+                          <Edit size={14} className="sm:w-4 sm:h-4" />
+                          <span className="hidden sm:inline">Edit</span>
+                        </button>
+                        <button
+                          onClick={() => handleDelete(subject.id)}
+                          className="bg-red-100 text-red-700 px-2 sm:px-3 py-1 sm:py-2 rounded-lg hover:bg-red-50 transition-all font-medium text-xs sm:text-sm inline-flex items-center gap-1"
+                        >
+                          <Trash2 size={14} className="sm:w-4 sm:h-4" />
+                          <span className="hidden sm:inline">Hapus</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             {/* Pagination */}
             <div className="px-6 py-4 border-t bg-gray-50 flex items-center justify-between">
