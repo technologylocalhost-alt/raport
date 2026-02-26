@@ -116,7 +116,7 @@ export default function WaliKelasLayout({ children }: WaliKelasLayoutProps) {
         } fixed md:static md:translate-x-0 md:w-64 w-64 h-screen bg-gradient-to-b from-emerald-900 to-emerald-800 text-white transition-transform duration-300 flex flex-col shadow-lg z-50 md:z-auto`}
       >
         {/* Logo */}
-        <div className="p-3 sm:p-4 border-b border-emerald-700 flex items-center justify-between">
+        <div className="p-3 sm:p-4 border-b border-emerald-700 flex items-center justify-between flex-shrink-0">
           <div>
             <h1 className="text-base sm:text-lg font-bold">Raport</h1>
             <p className="text-xs text-emerald-400">Wali Kelas</p>
@@ -130,16 +130,16 @@ export default function WaliKelasLayout({ children }: WaliKelasLayoutProps) {
         </div>
 
         {/* Menu Items */}
-        <nav className="flex-1 overflow-y-auto py-3 sm:py-4 px-2 space-y-2 min-h-0">
+        <nav className="flex-1 overflow-y-auto py-2 sm:py-3 px-2 space-y-1 min-h-0">
           {menuItems.map((section, idx) => (
             <div key={idx}>
               {/* Main Item atau Section Title */}
               {section.items ? (
                 <>
-                  <h3 className="px-2 sm:px-3 py-1.5 text-xs font-semibold text-emerald-400 uppercase tracking-wider">
+                  <h3 className="px-2 sm:px-3 py-1 text-xs font-semibold text-emerald-400 uppercase tracking-wider">
                     {section.title}
                   </h3>
-                  <div className="space-y-1">
+                  <div className="space-y-0.5">
                     {section.items.map((item, itemIdx) => {
                       const Icon = item.icon;
                       const isActive = pathname === item.href;
@@ -182,7 +182,7 @@ export default function WaliKelasLayout({ children }: WaliKelasLayoutProps) {
         </nav>
 
         {/* Logout Button */}
-        <div className="p-2 sm:p-3 border-t border-emerald-700">
+        <div className="p-2 sm:p-3 border-t border-emerald-700 flex-shrink-0">
           <button
             onClick={handleLogout}
             disabled={isLoggingOut}
