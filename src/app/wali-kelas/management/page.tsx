@@ -593,7 +593,7 @@ export default function WaliKelasClassManagementPage() {
                       </td>
                     </tr>
                   ) : (
-                    classSubjects.slice((subjectCurrentPage - 1) * itemsPerPage, subjectCurrentPage * itemsPerPage).map((cs) => (
+                    [...classSubjects].sort((a, b) => a.subject.code.localeCompare(b.subject.code, undefined, { numeric: true, sensitivity: 'base' })).slice((subjectCurrentPage - 1) * itemsPerPage, subjectCurrentPage * itemsPerPage).map((cs) => (
                       <tr key={cs.id} className="border-b hover:bg-gray-50">
                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{cs.subject.code}</td>
                         <td className="px-6 py-4 text-sm text-gray-700">{cs.subject.name}</td>
@@ -625,7 +625,7 @@ export default function WaliKelasClassManagementPage() {
                   Belum ada mata pelajaran
                 </div>
               ) : (
-                classSubjects.slice((subjectCurrentPage - 1) * itemsPerPage, subjectCurrentPage * itemsPerPage).map((cs) => (
+                [...classSubjects].sort((a, b) => a.subject.code.localeCompare(b.subject.code, undefined, { numeric: true, sensitivity: 'base' })).slice((subjectCurrentPage - 1) * itemsPerPage, subjectCurrentPage * itemsPerPage).map((cs) => (
                   <div key={cs.id} className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
                     <div className="mb-3 flex items-start justify-between">
                       <div className="flex-1">
@@ -860,7 +860,7 @@ export default function WaliKelasClassManagementPage() {
                       </td>
                     </tr>
                   ) : (
-                    classTeachers.slice((teacherCurrentPage - 1) * itemsPerPage, teacherCurrentPage * itemsPerPage).map((ct) => (
+                    [...classTeachers].sort((a, b) => a.subject.code.localeCompare(b.subject.code, undefined, { numeric: true, sensitivity: 'base' })).slice((teacherCurrentPage - 1) * itemsPerPage, teacherCurrentPage * itemsPerPage).map((ct) => (
                       <tr key={ct.id} className="border-b hover:bg-gray-50">
                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{ct.teacher.name}</td>
                         <td className="px-6 py-4 text-sm text-gray-700">{ct.teacher.email}</td>
@@ -889,7 +889,7 @@ export default function WaliKelasClassManagementPage() {
                   Belum ada guru
                 </div>
               ) : (
-                classTeachers.slice((teacherCurrentPage - 1) * itemsPerPage, teacherCurrentPage * itemsPerPage).map((ct) => (
+                [...classTeachers].sort((a, b) => a.subject.code.localeCompare(b.subject.code, undefined, { numeric: true, sensitivity: 'base' })).slice((teacherCurrentPage - 1) * itemsPerPage, teacherCurrentPage * itemsPerPage).map((ct) => (
                   <div key={ct.id} className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
                     <div className="mb-3">
                       <p className="font-bold text-lg text-gray-900">{ct.teacher.name}</p>

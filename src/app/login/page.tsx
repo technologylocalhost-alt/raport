@@ -155,10 +155,6 @@ export default function LoginPage() {
             {isLoading ? 'Logging in...' : 'Login'}
           </button>
         </form>
-
-        <p className="text-center text-xs sm:text-sm text-gray-600 mt-6 sm:mt-8">
-          Use demo credentials during development
-        </p>
       </div>
     </div>
   );

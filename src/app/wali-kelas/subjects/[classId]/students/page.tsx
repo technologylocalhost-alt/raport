@@ -8,6 +8,7 @@ interface Student {
   id: string;
   name: string;
   studentNo: string;
+  nourut?: number;
   email?: string;
   phone?: string;
   classId?: string;
@@ -542,7 +543,16 @@ export default function WaliKelasStudentsPage() {
                         <div className="flex gap-8">
                           <div className="flex-1">
                             {/* Student Info Column */}
-                            <p className="font-semibold text-gray-900">{student.name}</p>
+                            <div className="flex items-center gap-2">
+                              {student.nourut && (
+                                <span className="inline-block bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded min-w-fit">
+                                  #{student.nourut}
+                                </span>
+                              )}
+                              <div className="flex-1">
+                                <p className="font-semibold text-gray-900">{student.name}</p>
+                              </div>
+                            </div>
                             <p className="text-sm text-gray-600 mt-1">{student.studentNo}</p>
                           </div>
                           <div className="flex-1">
@@ -755,7 +765,14 @@ export default function WaliKelasStudentsPage() {
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">{editingGradeId ? 'Edit Nilai' : 'Input Nilai'}</h2>
-                  <p className="text-sm text-gray-600">{selectedStudent.name}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    {selectedStudent.nourut && (
+                      <span className="inline-block bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded">
+                        #{selectedStudent.nourut}
+                      </span>
+                    )}
+                    <p className="text-sm text-gray-600">{selectedStudent.name}</p>
+                  </div>
                 </div>
                 <button
                   onClick={() => {

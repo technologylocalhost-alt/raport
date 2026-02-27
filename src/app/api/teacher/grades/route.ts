@@ -199,6 +199,7 @@ export async function GET(request: NextRequest) {
         studentName: g.student.name,
         studentNo: g.student.studentNo || '-',
         studentNisn: g.student.studentNo || '-',
+        studentNourut: g.student.nourut,
         className: g.student.class?.name || '-',
         competencyId: g.competencyId,
         competencyName: g.competency.name,

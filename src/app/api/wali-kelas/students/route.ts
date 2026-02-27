@@ -80,6 +80,7 @@ export async function GET(req: NextRequest) {
         id: s.id,
         name: s.name,
         nisn: s.studentNo,
+        nourut: s.nourut,
         className: s.class.name,
         levelName: s.class.level.name,
         email: s.email,

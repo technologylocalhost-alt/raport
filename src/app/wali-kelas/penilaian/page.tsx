@@ -9,6 +9,7 @@ interface Grade {
   id: string;
   studentName: string;
   studentNo: string;
+  studentNourut?: number;
   className: string;
   competencyName: string;
   subjectName: string;
@@ -21,9 +22,10 @@ interface Grade {
 interface GradesSummary {
   studentName: string;
   studentNo: string;
+  studentNourut?: number;
   className: string;
   subject: string;
-  [key: string]: string | number; // For dynamic assessment type columns
+  [key: string]: string | number | undefined; // For dynamic assessment type columns
 }
 
 export default function PenilaianPage() {
@@ -39,7 +41,7 @@ export default function PenilaianPage() {
   const [selectedStudent, setSelectedStudent] = useState<string>('');
   const [selectedAssessmentType, setSelectedAssessmentType] = useState<string>('');
   const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
-  const [classStudents, setClassStudents] = useState<Array<{name: string, no: string}>>([]);
+  const [classStudents, setClassStudents] = useState<Array<{name: string, no: string, nourut?: number}>>([]);
   const [isLoadingStudents, setIsLoadingStudents] = useState(false);
   const [classNameToIdMap, setClassNameToIdMap] = useState<{[key: string]: string}>({});
   const [classSubjects, setClassSubjects] = useState<Array<{id: string, name: string, code: string}>>([]);
@@ -158,6 +160,7 @@ export default function PenilaianPage() {
         const students = (data.data || []).map((s: any) => ({
           name: s.name,
           no: s.nisn,
+          nourut: s.nourut,
         }));
         console.log(`[fetchStudentsForClass] Fetched ${students.length} students`);
         setClassStudents(students.sort((a: any, b: any) => a.name.localeCompare(b.name)));
@@ -282,6 +285,7 @@ export default function PenilaianPage() {
               id: grade.id,
               studentName: grade.studentName || 'N/A',
               studentNo: grade.studentNo || 'N/A',
+              studentNourut: grade.studentNourut,
               className: classNameMap[classId] || 'N/A',
               competencyName: grade.competencyName || 'N/A',
               subjectName: grade.subjectName || 'N/A',
@@ -343,6 +347,7 @@ export default function PenilaianPage() {
       summaryMap[student.no] = {
         studentName: student.name,
         studentNo: student.no,
+        studentNourut: student.nourut,
         className: selectedClass,
         subject: '', // Will combine all subjects
       };
@@ -369,6 +374,7 @@ export default function PenilaianPage() {
         summaryMap[key] = {
           studentName: grade.studentName,
           studentNo: grade.studentNo,
+          studentNourut: grade.studentNourut,
           className: grade.className,
           subject: '', // Will combine all subjects
         };
@@ -392,6 +398,12 @@ export default function PenilaianPage() {
     });
 
     const result = Object.values(summaryMap).sort((a, b) => {
+      // Sort by nomor urut first, null values at the end
+      if (a.studentNourut && b.studentNourut) {
+        return a.studentNourut - b.studentNourut;
+      }
+      if (a.studentNourut) return -1;
+      if (b.studentNourut) return 1;
       return a.studentNo.localeCompare(b.studentNo);
     });
 
@@ -416,7 +428,7 @@ export default function PenilaianPage() {
     const allKeys = new Set<string>();
     gradesSummary.forEach((s) => {
       Object.keys(s).forEach((k) => {
-        if (!['studentName', 'studentNo', 'className', 'subject', 'average'].includes(k)) {
+        if (!['studentName', 'studentNo', 'studentNourut', 'className', 'subject', 'average'].includes(k)) {
           allKeys.add(k);
         }
       });
@@ -432,7 +444,7 @@ export default function PenilaianPage() {
         const val = row[col];
         return typeof val === 'string' ? parseFloat(val) : val;
       })
-      .filter((val) => !isNaN(val));
+      .filter((val): val is number => typeof val === 'number' && !isNaN(val));
     
     if (values.length === 0) return 0;
     return values.reduce((a, b) => a + b, 0) / values.length;
@@ -445,7 +457,7 @@ export default function PenilaianPage() {
         const val = row[columnKey];
         return typeof val === 'string' ? parseFloat(val) : val;
       })
-      .filter((val) => !isNaN(val));
+      .filter((val): val is number => typeof val === 'number' && !isNaN(val));
     
     if (values.length === 0) return 0;
     return values.reduce((a, b) => a + b, 0) / values.length;
@@ -632,8 +644,10 @@ export default function PenilaianPage() {
               Tidak ada siswa di kelas ini
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th className="sticky left-0 z-10 px-4 py-3 text-center font-semibold text-gray-700 text-sm bg-gray-50">NO</th>
@@ -646,7 +660,7 @@ export default function PenilaianPage() {
                       new Set(
                         gradesSummary.flatMap((s) =>
                           Object.keys(s).filter(
-                            (k) => !['studentName', 'studentNo', 'className', 'subject'].includes(k)
+                            (k) => !['studentName', 'studentNo', 'studentNourut', 'className', 'subject'].includes(k)
                           )
                         )
                       )
@@ -671,8 +685,17 @@ export default function PenilaianPage() {
                         key={row.studentNo}
                         className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
                       >
-                        <td className="sticky left-0 z-10 px-4 py-3 text-center font-medium text-gray-900 text-sm bg-white hover:bg-gray-50">{idx + 1}</td>
-                        <td className="sticky left-16 z-10 px-4 py-3 text-gray-900 font-medium text-sm bg-white hover:bg-gray-50">{row.studentNo}</td>
+                        <td className="sticky left-0 z-10 px-4 py-3 text-center font-medium text-gray-900 text-sm bg-white hover:bg-gray-50">{row.studentNourut || '-'}</td>
+                        <td className="sticky left-16 z-10 px-4 py-3 text-gray-900 font-medium text-sm bg-white hover:bg-gray-50">
+                          <div className="flex items-center gap-2">
+                            <span>{row.studentNo}</span>
+                            {row.studentNourut && (
+                              <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-semibold">
+                                #{row.studentNourut}
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="sticky left-32 z-10 px-4 py-3 text-gray-900 text-sm bg-white hover:bg-gray-50">{row.studentName}</td>
                         <td className="sticky left-56 z-10 px-4 py-3 text-gray-600 text-sm bg-white hover:bg-gray-50">{row.className}</td>
                         <td className="sticky left-80 z-10 px-4 py-3 text-center bg-white hover:bg-gray-50">
@@ -692,7 +715,7 @@ export default function PenilaianPage() {
                       new Set(
                         gradesSummary.flatMap((s) =>
                           Object.keys(s).filter(
-                            (k) => !['studentName', 'studentNo', 'className', 'subject'].includes(k)
+                            (k) => !['studentName', 'studentNo', 'studentNourut', 'className', 'subject'].includes(k)
                           )
                         )
                       )
@@ -723,7 +746,7 @@ export default function PenilaianPage() {
                       new Set(
                         gradesSummary.flatMap((s) =>
                           Object.keys(s).filter(
-                            (k) => !['studentName', 'studentNo', 'className', 'subject'].includes(k)
+                            (k) => !['studentName', 'studentNo', 'studentNourut', 'className', 'subject'].includes(k)
                           )
                         )
                       )
@@ -753,7 +776,7 @@ export default function PenilaianPage() {
                             return typeof val === 'string' ? parseFloat(val) : val;
                           })
                         )
-                        .filter((val) => !isNaN(val));
+                        .filter((val): val is number => typeof val === 'number' && !isNaN(val));
 
                       const subjectAverage = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
 
@@ -774,7 +797,7 @@ export default function PenilaianPage() {
                         new Set(
                           gradesSummary.flatMap((s) =>
                             Object.keys(s).filter(
-                              (k) => !['studentName', 'studentNo', 'className', 'subject'].includes(k)
+                              (k) => !['studentName', 'studentNo', 'studentNourut', 'className', 'subject'].includes(k)
                             )
                           )
                         )
@@ -787,7 +810,77 @@ export default function PenilaianPage() {
                 </tr>
               </tbody>
             </table>
-            </div>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="block md:hidden space-y-4 p-4">
+                {gradesSummary.map((row, idx) => {
+                  const studentGrades = filteredGrades.filter((g) => g.studentNo === row.studentNo);
+                  const allApproved = studentGrades.length > 0 && studentGrades.every((g) => g.isApproved);
+                  
+                  return (
+                    <div key={row.studentNo} className="bg-white rounded-lg shadow-md p-4 border-l-4 border-emerald-600">
+                      {/* Student Header */}
+                      <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-semibold text-gray-500">Urutan: #{row.studentNourut || '-'}</span>
+                            {row.studentNourut && (
+                              <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-semibold">
+                                Nomor Urut: {row.studentNourut}
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="font-semibold text-gray-900">{row.studentName}</h3>
+                          <p className="text-xs text-gray-600">STAMBUK: {row.studentNo}</p>
+                          <p className="text-xs text-gray-600">Kelas: {row.className}</p>
+                        </div>
+                        <div className="text-right">
+                          {studentGrades.length === 0 ? (
+                            <span className="text-xs font-semibold text-gray-500">Belum ada nilai</span>
+                          ) : allApproved ? (
+                            <div className="flex items-center justify-end gap-1">
+                              <CheckCircle2 size={16} className="text-green-600" />
+                              <span className="text-xs font-semibold text-green-600">Disetujui</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs font-semibold text-amber-600">Menunggu</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Grades Grid */}
+                      <div className="grid grid-cols-2 gap-2">
+                        {Array.from(
+                          new Set(
+                            gradesSummary.flatMap((s) =>
+                              Object.keys(s).filter(
+                                (k) => !['studentName', 'studentNo', 'studentNourut', 'className', 'subject'].includes(k)
+                              )
+                            )
+                          )
+                        )
+                          .sort()
+                          .map((key) => (
+                            <div key={key} className="bg-gray-50 rounded p-2">
+                              <p className="text-xs text-gray-600 truncate">{key}</p>
+                              <p className="text-sm font-semibold text-emerald-600">{row[key] || '—'}</p>
+                            </div>
+                          ))}
+                      </div>
+
+                      {/* Average */}
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-semibold text-gray-700">Rata-rata</span>
+                          <span className="text-lg font-bold text-blue-600">{getStudentAverage(row).toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
       )}
