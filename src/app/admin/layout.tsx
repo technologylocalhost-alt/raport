@@ -17,6 +17,7 @@ import {
   Clock,
   User,
   ChevronDown,
+  TrendingUp,
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -82,9 +83,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     {
       title: 'Penilaian',
       items: [
-        { title: 'Penilian', icon: Users, href: '/admin/raports' },
+        { title: 'Penilaian', icon: Users, href: '/admin/raports' },
         { title: 'Siswa', icon: BarChart3, href: '/admin/students' },
         { title: 'Raport', icon: BookOpen, href: '/admin/raport-sampul' },
+        { title: 'Naik Kelas', icon: TrendingUp, href: '/admin/naik-kelas' },
       ],
     },
     {

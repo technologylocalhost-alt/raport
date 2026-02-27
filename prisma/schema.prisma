@@ -58,6 +58,9 @@ model Level {
   schoolId      String
   name          String
   code          String
+  order         Int            @default(0)
+  levelCount    Int            @default(0)
+  description   String?        @default("")
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   classes       Class[]

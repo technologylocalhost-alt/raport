@@ -8,6 +8,8 @@ interface Level {
   id: string;
   name: string;
   code: string;
+  order: number;
+  levelCount: number;
   description?: string;
   school: {
     id: string;
@@ -46,6 +48,8 @@ export default function LevelsPage() {
     schoolId: '',
     name: '',
     code: '',
+    order: 0,
+    levelCount: 0,
     description: '',
   });
 
@@ -128,19 +132,34 @@ export default function LevelsPage() {
           schoolId: '',
           name: '',
           code: '',
+          order: 0,
+          levelCount: 0,
           description: '',
         });
         fetchLevels();
       } else {
-        const errorData = await response.json();
         let errorMsg = 'Gagal menyimpan jenjang';
-        if (errorData.error) {
-          errorMsg = errorData.error;
-        } else if (errorData.details && Array.isArray(errorData.details)) {
-          errorMsg = errorData.details.map((d: any) => d.message || d).join(', ');
+        try {
+          const contentType = response.headers.get('content-type');
+          const errorData = contentType?.includes('application/json') 
+            ? await response.json() 
+            : { error: await response.text() };
+          
+          if (errorData.error) {
+            errorMsg = errorData.error;
+          } else if (errorData.details && Array.isArray(errorData.details)) {
+            errorMsg = errorData.details.map((d: any) => d.message || JSON.stringify(d)).join(', ');
+          }
+          console.error('API Error Response:', { status: response.status, data: errorData });
+        } catch (parseError) {
+          console.error('Failed to parse error response:', { 
+            status: response.status, 
+            statusText: response.statusText,
+            parseError 
+          });
+          errorMsg = `Gagal menyimpan jenjang (Status: ${response.status} ${response.statusText})`;
         }
         alert(`❌ ${errorMsg}`);
-        console.error('Save error:', errorData);
       }
     } catch (error) {
       console.error('Failed to save level:', error);
@@ -173,6 +192,8 @@ export default function LevelsPage() {
       schoolId: level.school.id,
       name: level.name,
       code: level.code,
+      order: level.order ?? 0,
+      levelCount: level.levelCount ?? 0,
       description: level.description || '',
     });
     setEditingId(level.id);
@@ -196,6 +217,8 @@ export default function LevelsPage() {
               schoolId: '',
               name: '',
               code: '',
+              order: 0,
+              levelCount: 0,
               description: '',
             });
             setShowForm(true);
@@ -282,6 +305,38 @@ export default function LevelsPage() {
                   />
                 </div>
               </div>
+
+              {/* Row 2b: Order & Level Count */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Urutan Level <span className="text-gray-400 font-normal">(untuk sistem naik kelas)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="Mis: 1 untuk kelas paling awal, 2 berikutnya, dst."
+                    value={formData.order}
+                    onChange={(e) => setFormData({ ...formData, order: parseInt(e.target.value) || 0 })}
+                    className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-lg text-gray-900 text-base placeholder:text-gray-500 placeholder:font-normal focus:ring-2 focus:ring-purple-500 focus:border-purple-500 hover:border-gray-300 focus:outline-none transition-all"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Contoh: Kelas 1 = 1, Kelas 2 = 2, Kelas 3 = 3</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Jumlah Tingkat <span className="text-gray-400 font-normal">(dalam jenjang ini)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="Mis: 6 untuk MI, 3 untuk MTS/MA"
+                    value={formData.levelCount}
+                    onChange={(e) => setFormData({ ...formData, levelCount: parseInt(e.target.value) || 0 })}
+                    className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-lg text-gray-900 text-base placeholder:text-gray-500 placeholder:font-normal focus:ring-2 focus:ring-purple-500 focus:border-purple-500 hover:border-gray-300 focus:outline-none transition-all"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Berapa banyak tingkat dalam jenjang ini</p>
+                </div>
+              </div>
               
               {/* Row 3: Description */}
               <div>
@@ -341,6 +396,12 @@ export default function LevelsPage() {
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
                       Kode
                     </th>
+                    <th className="px-6 py-4 text-center text-sm font-semibold text-gray-700">
+                      Urutan
+                    </th>
+                    <th className="px-6 py-4 text-center text-sm font-semibold text-gray-700">
+                      Jumlah Tingkat
+                    </th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
                       Sekolah
                     </th>
@@ -359,6 +420,16 @@ export default function LevelsPage() {
                       {level.name}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">{level.code}</td>
+                    <td className="px-6 py-4 text-sm text-center">
+                      <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-purple-100 text-purple-700 font-bold text-sm">
+                        {level.order ?? 0}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-center">
+                      <span className="inline-flex items-center justify-center px-3 py-1 rounded-full bg-blue-100 text-blue-700 font-semibold text-sm">
+                        {level.levelCount ?? 0}
+                      </span>
+                    </td>
                     <td className="px-6 py-4 text-sm text-gray-600">{level.school.name}</td>
                     <td className="px-6 py-4 text-sm text-gray-600 truncate">
                       {level.description}
