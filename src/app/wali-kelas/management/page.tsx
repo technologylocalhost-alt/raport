@@ -180,7 +180,11 @@ export default function WaliKelasClassManagementPage() {
       const response = await fetch(`/api/admin/users?limit=100`, { headers });
       const data = await response.json();
       if (response.ok) {
-        setTeachers(data.data || []);
+        // Filter out admin users only, show all other users
+        const filteredTeachers = (data.data || []).filter(
+          (user: any) => user.role && user.role !== 'ADMIN'
+        );
+        setTeachers(filteredTeachers);
       }
     } catch (error) {
       console.error('Error fetching teachers:', error);
@@ -248,6 +252,8 @@ export default function WaliKelasClassManagementPage() {
         setSuccessMessage('Guru berhasil ditambahkan');
         setShowTeacherForm(false);
         setTeacherFormData({ teacherId: '', subjectId: '' });
+        setTeacherSearchText('');
+        setSubjectSearchTeacherText('');
         fetchClassTeachers();
       } else {
         const error = await response.json();

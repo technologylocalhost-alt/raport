@@ -108,12 +108,31 @@ export default function WaliKelasStudentsPage() {
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalStudents, setTotalStudents] = useState(0);
   const itemsPerPage = 10;
 
   useEffect(() => {
     fetchClassStudents();
     fetchClassInfo();
   }, [classId, currentPage]);
+
+  // Auto-select first student when page loads and student changes
+  useEffect(() => {
+    if (students.length > 0 && selectedStudent && !students.find(s => s.id === selectedStudent.id)) {
+      // Current selected student is not on this page, select first student instead
+      const firstStudent = students[0];
+      setSelectedStudent(firstStudent);
+      setEditingGradeId(null);
+      setGradeFormData({
+        competencyId: '',
+        score: '',
+        assessmentType: 'UTS_1',
+        notes: '',
+      });
+      setGradeError('');
+      fetchCompetencies(firstStudent.id);
+    }
+  }, [students]);
 
   // Auto-load grades for all students
   useEffect(() => {
@@ -203,6 +222,7 @@ export default function WaliKelasStudentsPage() {
         setStudents(data.data);
         // Get total pages from pagination info
         const total = data.pagination?.total || 0;
+        setTotalStudents(total);
         setTotalPages(Math.ceil(total / itemsPerPage));
       } else {
         setStudents([]);
@@ -468,6 +488,50 @@ export default function WaliKelasStudentsPage() {
     }
   };
 
+  const getCurrentStudentIndex = (): number => {
+    if (!selectedStudent) return -1;
+    return students.findIndex((s) => s.id === selectedStudent.id);
+  };
+
+  const handleNavigateStudent = async (direction: 'next' | 'prev') => {
+    const currentIndex = getCurrentStudentIndex();
+    if (currentIndex === -1) return;
+
+    let nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
+    
+    // Check if we need to load next/previous page
+    if (nextIndex < 0 && currentPage > 1) {
+      // Go to previous page
+      const prevPage = currentPage - 1;
+      setCurrentPage(prevPage);
+      // The useEffect will handle fetching the students for the new page
+      // We'll set the selected student after students are loaded
+      return;
+    }
+    
+    if (nextIndex >= students.length && currentPage < totalPages) {
+      // Go to next page
+      const nextPage = currentPage + 1;
+      setCurrentPage(nextPage);
+      // The useEffect will handle fetching the students for the new page
+      return;
+    }
+
+    if (nextIndex < 0 || nextIndex >= students.length) return;
+
+    const nextStudent = students[nextIndex];
+    setSelectedStudent(nextStudent);
+    setEditingGradeId(null);
+    setGradeFormData({
+      competencyId: '',
+      score: '',
+      assessmentType: 'UTS_1',
+      notes: '',
+    });
+    setGradeError('');
+    await fetchCompetencies(nextStudent.id);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -695,7 +759,7 @@ export default function WaliKelasStudentsPage() {
           <div className="flex justify-between items-center mt-6 bg-white p-4 rounded-lg shadow">
             <div className="text-sm font-medium text-gray-600">
               Halaman <span className="font-bold text-gray-900">{currentPage}</span> dari <span className="font-bold text-gray-900">{totalPages}</span> • 
-              <span className="ml-2 text-gray-700 font-semibold">{students.length} siswa ditampilkan</span>
+              <span className="ml-2 text-gray-700 font-semibold">{totalStudents} siswa total</span>
             </div>
             {totalPages > 1 && (
               <div className="flex gap-2 items-center">
@@ -763,7 +827,7 @@ export default function WaliKelasStudentsPage() {
             <div className="bg-white rounded-lg shadow-lg p-6 sticky top-4">
               {/* Header */}
               <div className="flex justify-between items-start mb-4">
-                <div>
+                <div className="flex-1">
                   <h2 className="text-lg font-semibold text-gray-900">{editingGradeId ? 'Edit Nilai' : 'Input Nilai'}</h2>
                   <div className="flex items-center gap-2 mt-1">
                     {selectedStudent.nourut && (
@@ -771,8 +835,11 @@ export default function WaliKelasStudentsPage() {
                         #{selectedStudent.nourut}
                       </span>
                     )}
-                    <p className="text-sm text-gray-600">{selectedStudent.name}</p>
+                    <p className="text-sm text-gray-600 truncate">{selectedStudent.name}</p>
                   </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    {selectedStudent.nourut || getCurrentStudentIndex() + 1} dari {totalStudents} siswa
+                  </p>
                 </div>
                 <button
                   onClick={() => {
@@ -785,9 +852,31 @@ export default function WaliKelasStudentsPage() {
                       notes: '',
                     });
                   }}
-                  className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="p-1 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
                 >
                   <X size={20} className="text-gray-600" />
+                </button>
+              </div>
+
+              {/* Navigation Buttons */}
+              <div className="flex gap-2 mb-4 pb-4 border-b">
+                <button
+                  onClick={() => handleNavigateStudent('prev')}
+                  disabled={getCurrentStudentIndex() === 0 && currentPage === 1}
+                  className="flex-1 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed text-gray-700 px-3 py-2 rounded-lg transition-colors font-medium text-sm flex items-center justify-center gap-2"
+                  title="Siswa Sebelumnya"
+                >
+                  <ChevronLeft size={16} />
+                  <span className="hidden sm:inline">Sebelumnya</span>
+                </button>
+                <button
+                  onClick={() => handleNavigateStudent('next')}
+                  disabled={getCurrentStudentIndex() === students.length - 1 && currentPage === totalPages}
+                  className="flex-1 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed text-gray-700 px-3 py-2 rounded-lg transition-colors font-medium text-sm flex items-center justify-center gap-2"
+                  title="Siswa Selanjutnya"
+                >
+                  <span className="hidden sm:inline">Selanjutnya</span>
+                  <ChevronRight size={16} />
                 </button>
               </div>
 
