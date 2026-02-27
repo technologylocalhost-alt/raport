@@ -2,12 +2,14 @@
 
 import { Fragment, useState, useEffect } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Users, PenTool, X, AlertCircle, CheckCircle, ChevronDown, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Users, PenTool, X, AlertCircle, CheckCircle, ChevronDown, Edit2, Trash2, ChevronLeft, ChevronRight, Upload, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface Student {
   id: string;
   name: string;
   studentNo: string;
+  nourut?: number;
   email?: string;
   phone?: string;
   classId?: string;
@@ -42,6 +44,17 @@ interface CompetenciesResponse {
   success: boolean;
   competencies?: Competency[];
   message?: string;
+}
+
+interface ImportGradeRow {
+  studentNo?: string;
+  studentName?: string;
+  competencyName?: string;
+  score?: number | string;
+  assessmentType?: string;
+  notes?: string;
+  rowIndex: number;
+  errors?: string[];
 }
 
 export default function TeacherStudentsPage() {
@@ -103,22 +116,52 @@ export default function TeacherStudentsPage() {
   const [approvedGrades, setApprovedGrades] = useState<{ [key: string]: Set<string> }>({}); // Map of studentId -> Set of gradeIds
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
   const [loadingGrades, setLoadingGrades] = useState<{ [key: string]: boolean }>({});
-
+  
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalStudents, setTotalStudents] = useState(0);
   const itemsPerPage = 10;
+
+  // Import Excel states
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importedRows, setImportedRows] = useState<ImportGradeRow[]>([]);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState('');
+  const [importSuccess, setImportSuccess] = useState('');
+  const [importSubmitting, setImportSubmitting] = useState(false);
 
   useEffect(() => {
     fetchClassStudents();
     fetchClassInfo();
   }, [classId, currentPage]);
 
-  // Fetch grades for all students when they are loaded
+  // Auto-select first student when page loads and student changes
+  useEffect(() => {
+    if (students.length > 0 && selectedStudent && !students.find(s => s.id === selectedStudent.id)) {
+      // Current selected student is not on this page, select first student instead
+      const firstStudent = students[0];
+      setSelectedStudent(firstStudent);
+      setEditingGradeId(null);
+      setGradeFormData({
+        competencyId: '',
+        score: '',
+        assessmentType: 'UTS_1',
+        notes: '',
+      });
+      setGradeError('');
+      fetchCompetencies(firstStudent.id);
+    }
+  }, [students]);
+
+  // Auto-load grades for all students
   useEffect(() => {
     if (students.length > 0) {
       students.forEach((student) => {
-        fetchStudentGrades(student.id);
+        if (!grades[student.id]) {
+          fetchStudentGrades(student.id);
+        }
       });
     }
   }, [students]);
@@ -170,6 +213,7 @@ export default function TeacherStudentsPage() {
         return;
       }
       
+      const skip = (currentPage - 1) * itemsPerPage;
       const response = await fetch(`/api/admin/classes/${classId}/students?page=${currentPage}&limit=${itemsPerPage}`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -199,6 +243,7 @@ export default function TeacherStudentsPage() {
         setStudents(data.data);
         // Get total pages from pagination info
         const total = data.pagination?.total || 0;
+        setTotalStudents(total);
         setTotalPages(Math.ceil(total / itemsPerPage));
       } else {
         setStudents([]);
@@ -291,11 +336,6 @@ export default function TeacherStudentsPage() {
     }
   }
 
-  const isGradeApproved = (grade: Grade, studentId: string): boolean => {
-    const key = `${grade.competencyId}-${grade.assessmentType}`;
-    return Boolean(approvedGrades[studentId]?.has(key));
-  };
-
   const handleOpenGradeModal = async (student: Student) => {
     setSelectedStudent(student);
     setEditingGradeId(null);
@@ -340,6 +380,8 @@ export default function TeacherStudentsPage() {
         assessmentType: gradeFormData.assessmentType,
         notes: gradeFormData.notes,
       };
+
+      console.log('Submitting grade payload:', payload);
 
       let response;
       if (editingGradeId) {
@@ -401,7 +443,7 @@ export default function TeacherStudentsPage() {
             .join(', ');
           setGradeError(`${errorResponse.error}: ${fieldErrorMessages}`);
         } else {
-          setGradeError(errorResponse.error || errorResponse.message || `Gagal menyimpan nilai (Status: ${response.status})`);
+          setGradeError(errorResponse.error || `Gagal menyimpan nilai (Status: ${response.status})`);
         }
       }
     } catch (error) {
@@ -413,12 +455,6 @@ export default function TeacherStudentsPage() {
   };
 
   const handleEditGrade = (grade: Grade, student: Student) => {
-    // Check if grade is approved
-    if (isGradeApproved(grade, student.id)) {
-      setGradeError('Tidak dapat mengedit nilai yang sudah disetujui oleh Wali Kelas');
-      return;
-    }
-
     setSelectedStudent(student);
     setEditingGradeId(grade.id);
     setGradeFormData({
@@ -433,13 +469,7 @@ export default function TeacherStudentsPage() {
     }
   };
 
-  const handleDeleteGrade = async (gradeId: string, studentId: string, grade: Grade) => {
-    // Check if grade is approved
-    if (isGradeApproved(grade, studentId)) {
-      setGradeError('Tidak dapat menghapus nilai yang sudah disetujui oleh Wali Kelas');
-      return;
-    }
-
+  const handleDeleteGrade = async (gradeId: string, studentId: string) => {
     if (!confirm('Hapus nilai ini?')) return;
 
     try {
@@ -463,6 +493,11 @@ export default function TeacherStudentsPage() {
     }
   };
 
+  const isGradeApproved = (grade: Grade, studentId: string): boolean => {
+    const key = `${grade.competencyId}-${grade.assessmentType}`;
+    return Boolean(approvedGrades[studentId]?.has(key));
+  };
+
   const toggleStudentGrades = (studentId: string) => {
     if (expandedStudentId === studentId) {
       setExpandedStudentId(null);
@@ -471,6 +506,196 @@ export default function TeacherStudentsPage() {
       if (!grades[studentId]) {
         fetchStudentGrades(studentId);
       }
+    }
+  };
+
+  const getCurrentStudentIndex = (): number => {
+    if (!selectedStudent) return -1;
+    return students.findIndex((s) => s.id === selectedStudent.id);
+  };
+
+  const handleNavigateStudent = async (direction: 'next' | 'prev') => {
+    const currentIndex = getCurrentStudentIndex();
+    if (currentIndex === -1) return;
+
+    let nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
+    
+    // Check if we need to load next/previous page
+    if (nextIndex < 0 && currentPage > 1) {
+      // Go to previous page
+      const prevPage = currentPage - 1;
+      setCurrentPage(prevPage);
+      // The useEffect will handle fetching the students for the new page
+      // We'll set the selected student after students are loaded
+      return;
+    }
+    
+    if (nextIndex >= students.length && currentPage < totalPages) {
+      // Go to next page
+      const nextPage = currentPage + 1;
+      setCurrentPage(nextPage);
+      // The useEffect will handle fetching the students for the new page
+      return;
+    }
+
+    if (nextIndex < 0 || nextIndex >= students.length) return;
+
+    const nextStudent = students[nextIndex];
+    setSelectedStudent(nextStudent);
+    setEditingGradeId(null);
+    setGradeFormData({
+      competencyId: '',
+      score: '',
+      assessmentType: 'UTS_1',
+      notes: '',
+    });
+    setGradeError('');
+    await fetchCompetencies(nextStudent.id);
+  };
+
+  const downloadTemplate = () => {
+    const ws = XLSX.utils.json_to_sheet([
+      {
+        'Nomor Siswa': '387',
+        'Nama Siswa': 'Faaiq Husain',
+        'Nama Kompetensi': 'Membaca Al-Qur\'an',
+        'Nilai (1-10)': 8.5,
+        'Jenis Penilaian': 'UTS_1',
+        'Catatan': 'Bagus',
+      },
+      {
+        'Nomor Siswa': '412',
+        'Nama Siswa': 'Rayyan Aryatama Karim',
+        'Nama Kompetensi': 'Menulis Arab',
+        'Nilai (1-10)': 7.0,
+        'Jenis Penilaian': 'UTS_1',
+        'Catatan': '',
+      },
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Template Nilai');
+    XLSX.writeFile(wb, `Template_Nilai_${subjectName || 'Mata_Pelajaran'}.xlsx`);
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportFile(file);
+    setImportError('');
+    setImportedRows([]);
+
+    try {
+      setImportLoading(true);
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+      if (jsonData.length === 0) {
+        setImportError('File kosong atau tidak memiliki data');
+        return;
+      }
+
+      // Parse and validate data
+      const parsedRows: ImportGradeRow[] = jsonData.map((row, idx) => {
+        const errors: string[] = [];
+        const score = row['Nilai (1-10)'] ? parseFloat(String(row['Nilai (1-10)'])) : undefined;
+
+        if (!row['Nomor Siswa']) errors.push('Nomor Siswa kosong');
+        if (!row['Nama Siswa']) errors.push('Nama Siswa kosong');
+        if (!row['Nama Kompetensi']) errors.push('Nama Kompetensi kosong');
+        if (!score || isNaN(score) || score < 1 || score > 10) errors.push('Nilai harus 1-10');
+        if (!row['Jenis Penilaian']) errors.push('Jenis Penilaian kosong');
+        if (!Object.keys(assessmentTypeLabels).includes(row['Jenis Penilaian'])) {
+          errors.push(`Jenis Penilaian tidak valid: ${row['Jenis Penilaian']}`);
+        }
+
+        return {
+          studentNo: String(row['Nomor Siswa']).trim(),
+          studentName: String(row['Nama Siswa']).trim(),
+          competencyName: String(row['Nama Kompetensi']).trim(),
+          score: score,
+          assessmentType: String(row['Jenis Penilaian']).trim(),
+          notes: row['Catatan'] ? String(row['Catatan']).trim() : '',
+          rowIndex: idx + 2, // +2 because spreadsheet is 1-indexed and includes header
+          errors: errors.length > 0 ? errors : undefined,
+        };
+      });
+
+      setImportedRows(parsedRows);
+    } catch (error) {
+      console.error('Error parsing file:', error);
+      setImportError('Error membaca file. Pastikan file adalah Excel (.xlsx)');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleSubmitImport = async () => {
+    if (importedRows.length === 0) {
+      setImportError('Tidak ada data untuk diimport');
+      return;
+    }
+
+    // Check for rows with errors
+    const rowsWithErrors = importedRows.filter((row) => row.errors && row.errors.length > 0);
+    if (rowsWithErrors.length > 0) {
+      setImportError(`Ada ${rowsWithErrors.length} baris dengan error. Silakan perbaiki sebelum submit.`);
+      return;
+    }
+
+    try {
+      setImportSubmitting(true);
+      setImportError('');
+      const token = localStorage.getItem('accessToken');
+
+      if (!token) {
+        setImportError('Token tidak ditemukan');
+        return;
+      }
+
+      // Create grade objects for submission
+      const gradesToSubmit = importedRows.map((row) => ({
+        studentNo: row.studentNo,
+        competencyName: row.competencyName,
+        score: row.score,
+        assessmentType: row.assessmentType,
+        notes: row.notes,
+      }));
+
+      // Send to API
+      const response = await fetch(`/api/teacher/grades/import?subjectId=${subjectId}&classId=${classId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(gradesToSubmit),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setImportSuccess(`${data.successCount || importedRows.length} nilai berhasil diimport`);
+        setShowImportModal(false);
+        setImportFile(null);
+        setImportedRows([]);
+        setImportError('');
+        // Refresh data
+        fetchClassStudents();
+        // Reload grades for all students
+        students.forEach((student) => {
+          fetchStudentGrades(student.id);
+        });
+      } else {
+        setImportError(data.error || 'Gagal mengimport nilai');
+      }
+    } catch (error) {
+      console.error('Error submitting import:', error);
+      setImportError('Terjadi kesalahan saat mengimport nilai');
+    } finally {
+      setImportSubmitting(false);
     }
   };
 
@@ -503,7 +728,7 @@ export default function TeacherStudentsPage() {
         </div>
       )}
 
-      {/* Success Alert */}
+      {/* Success Alerts */}
       {gradeSuccess && (
         <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
           <CheckCircle size={20} />
@@ -513,6 +738,40 @@ export default function TeacherStudentsPage() {
           </button>
         </div>
       )}
+
+      {importSuccess && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
+          <CheckCircle size={20} />
+          {importSuccess}
+          <button onClick={() => setImportSuccess('')} className="ml-auto">
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
+      {/* Action Buttons */}
+      <div className="flex gap-2 flex-wrap">
+        <button
+          onClick={() => {
+            setShowImportModal(true);
+            setImportError('');
+            setImportSuccess('');
+            setImportFile(null);
+            setImportedRows([]);
+          }}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 font-medium"
+        >
+          <Upload size={20} />
+          Import Nilai (Excel)
+        </button>
+        <button
+          onClick={downloadTemplate}
+          className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2 font-medium"
+        >
+          <Download size={20} />
+          Download Template
+        </button>
+      </div>
 
       {/* Main Content - Two Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -530,8 +789,8 @@ export default function TeacherStudentsPage() {
           ) : (
             <div className="space-y-3">
               {students.map((student) => (
-                <div key={student.id} className="bg-white rounded-lg shadow border">
-                  {/* Student Row */}
+                <div key={student.id} className="bg-white rounded-lg shadow border overflow-hidden">
+                  {/* Student Header */}
                   <div
                     onClick={() => handleOpenGradeModal(student)}
                     className={`p-4 flex items-center justify-between cursor-pointer transition-all ${
@@ -549,7 +808,16 @@ export default function TeacherStudentsPage() {
                         <div className="flex gap-8">
                           <div className="flex-1">
                             {/* Student Info Column */}
-                            <p className="font-semibold text-gray-900">{student.name}</p>
+                            <div className="flex items-center gap-2">
+                              {student.nourut && (
+                                <span className="inline-block bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded min-w-fit">
+                                  #{student.nourut}
+                                </span>
+                              )}
+                              <div className="flex-1">
+                                <p className="font-semibold text-gray-900">{student.name}</p>
+                              </div>
+                            </div>
                             <p className="text-sm text-gray-600 mt-1">{student.studentNo}</p>
                           </div>
                           <div className="flex-1">
@@ -598,7 +866,7 @@ export default function TeacherStudentsPage() {
                     </button>
                   </div>
 
-                  {/* Grades List */}
+                  {/* Grades List Detail */}
                   {expandedStudentId === student.id && (
                     <div className="border-t bg-gray-50 p-4">
                       {loadingGrades[student.id] ? (
@@ -612,63 +880,69 @@ export default function TeacherStudentsPage() {
                                 <th className="px-4 py-2 text-center font-semibold text-gray-700">Jenis Penilaian</th>
                                 <th className="px-4 py-2 text-center font-semibold text-gray-700">Nilai</th>
                                 <th className="px-4 py-2 text-left font-semibold text-gray-700">Catatan</th>
+                                <th className="px-4 py-2 text-center font-semibold text-gray-700">Status</th>
                                 <th className="px-4 py-2 text-center font-semibold text-gray-700">Aksi</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {grades[student.id].map((grade) => (
-                                <tr key={grade.id} className={`border-b border-gray-200 transition-colors ${isGradeApproved(grade, student.id) ? 'bg-yellow-50' : 'hover:bg-white'}`}>
-                                  <td className="px-4 py-3 font-medium text-gray-900">
-                                    <div className="flex items-center gap-2">
-                                      <span>{grade.competencyName}</span>
-                                      {isGradeApproved(grade, student.id) && (
-                                        <span className="inline-block bg-yellow-200 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">
-                                          ✓ Approved
+                              {grades[student.id].map((grade) => {
+                                const isApproved = isGradeApproved(grade, student.id);
+                                return (
+                                  <tr key={grade.id} className={`border-b border-gray-200 transition-colors ${isApproved ? 'bg-blue-50 hover:bg-blue-50' : 'hover:bg-white'}`}>
+                                    <td className="px-4 py-3 font-medium text-gray-900">{grade.competencyName}</td>
+                                    <td className="px-4 py-3 text-center">
+                                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                                        {getAssessmentTypeLabel(grade.assessmentType)}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-center">
+                                      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-emerald-100 text-emerald-800">
+                                        {grade.score}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-gray-600 text-xs max-w-xs truncate" title={grade.notes}>
+                                      {grade.notes || '-'}
+                                    </td>
+                                    <td className="px-4 py-3 text-center">
+                                      {isApproved ? (
+                                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                                          ✓ Disetujui
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
+                                          Pending
                                         </span>
                                       )}
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-3 text-center">
-                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
-                                      {getAssessmentTypeLabel(grade.assessmentType)}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-3 text-center">
-                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-emerald-100 text-emerald-800">
-                                      {grade.score}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-3 text-gray-600 text-xs max-w-xs truncate" title={grade.notes}>
-                                    {grade.notes || '-'}
-                                  </td>
-                                  <td className="px-4 py-3 text-center space-x-1">
-                                    <button
-                                      onClick={() => handleEditGrade(grade, student)}
-                                      disabled={isGradeApproved(grade, student.id)}
-                                      className={`inline-flex items-center gap-1 px-2 py-1 rounded transition-colors ${
-                                        isGradeApproved(grade, student.id)
-                                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'
-                                          : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                                      }`}
-                                      title={isGradeApproved(grade, student.id) ? 'Nilai sudah disetujui, tidak dapat diedit' : 'Edit nilai'}
-                                    >
-                                      <Edit2 size={16} />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteGrade(grade.id, student.id, grade)}
-                                      disabled={isGradeApproved(grade, student.id)}
-                                      className={`inline-flex items-center gap-1 px-2 py-1 rounded transition-colors ${
-                                        isGradeApproved(grade, student.id)
-                                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'
-                                          : 'bg-red-100 text-red-700 hover:bg-red-200'
-                                      }`}
-                                      title={isGradeApproved(grade, student.id) ? 'Nilai sudah disetujui, tidak dapat dihapus' : 'Hapus nilai'}
-                                    >
-                                      <Trash2 size={16} />
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
+                                    </td>
+                                    <td className="px-4 py-3 text-center space-x-1">
+                                      <button
+                                        onClick={() => handleEditGrade(grade, student)}
+                                        disabled={isApproved}
+                                        className={`inline-flex items-center gap-1 px-2 py-1 rounded transition-colors ${
+                                          isApproved 
+                                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                                            : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                        }`}
+                                        title={isApproved ? 'Nilai sudah disetujui, tidak bisa diedit' : 'Edit'}
+                                      >
+                                        <Edit2 size={16} />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteGrade(grade.id, student.id)}
+                                        disabled={isApproved}
+                                        className={`inline-flex items-center gap-1 px-2 py-1 rounded transition-colors ${
+                                          isApproved 
+                                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                                            : 'bg-red-100 text-red-700 hover:bg-red-200'
+                                        }`}
+                                        title={isApproved ? 'Nilai sudah disetujui, tidak bisa dihapus' : 'Hapus'}
+                                      >
+                                        <Trash2 size={16} />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
@@ -686,7 +960,7 @@ export default function TeacherStudentsPage() {
           <div className="flex justify-between items-center mt-6 bg-white p-4 rounded-lg shadow">
             <div className="text-sm font-medium text-gray-600">
               Halaman <span className="font-bold text-gray-900">{currentPage}</span> dari <span className="font-bold text-gray-900">{totalPages}</span> • 
-              <span className="ml-2 text-gray-700 font-semibold">{students.length} siswa ditampilkan</span>
+              <span className="ml-2 text-gray-700 font-semibold">{totalStudents} siswa total</span>
             </div>
             {totalPages > 1 && (
               <div className="flex gap-2 items-center">
@@ -754,9 +1028,19 @@ export default function TeacherStudentsPage() {
             <div className="bg-white rounded-lg shadow-lg p-6 sticky top-4">
               {/* Header */}
               <div className="flex justify-between items-start mb-4">
-                <div>
+                <div className="flex-1">
                   <h2 className="text-lg font-semibold text-gray-900">{editingGradeId ? 'Edit Nilai' : 'Input Nilai'}</h2>
-                  <p className="text-sm text-gray-600">{selectedStudent.name}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    {selectedStudent.nourut && (
+                      <span className="inline-block bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded">
+                        #{selectedStudent.nourut}
+                      </span>
+                    )}
+                    <p className="text-sm text-gray-600 truncate">{selectedStudent.name}</p>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    {selectedStudent.nourut || getCurrentStudentIndex() + 1} dari {totalStudents} siswa
+                  </p>
                 </div>
                 <button
                   onClick={() => {
@@ -769,9 +1053,31 @@ export default function TeacherStudentsPage() {
                       notes: '',
                     });
                   }}
-                  className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="p-1 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
                 >
                   <X size={20} className="text-gray-600" />
+                </button>
+              </div>
+
+              {/* Navigation Buttons */}
+              <div className="flex gap-2 mb-4 pb-4 border-b">
+                <button
+                  onClick={() => handleNavigateStudent('prev')}
+                  disabled={getCurrentStudentIndex() === 0 && currentPage === 1}
+                  className="flex-1 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed text-gray-700 px-3 py-2 rounded-lg transition-colors font-medium text-sm flex items-center justify-center gap-2"
+                  title="Siswa Sebelumnya"
+                >
+                  <ChevronLeft size={16} />
+                  <span className="hidden sm:inline">Sebelumnya</span>
+                </button>
+                <button
+                  onClick={() => handleNavigateStudent('next')}
+                  disabled={getCurrentStudentIndex() === students.length - 1 && currentPage === totalPages}
+                  className="flex-1 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed text-gray-700 px-3 py-2 rounded-lg transition-colors font-medium text-sm flex items-center justify-center gap-2"
+                  title="Siswa Selanjutnya"
+                >
+                  <span className="hidden sm:inline">Selanjutnya</span>
+                  <ChevronRight size={16} />
                 </button>
               </div>
 
@@ -903,6 +1209,177 @@ export default function TeacherStudentsPage() {
           </div>
         )}
       </div>
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl max-h-[90vh] overflow-y-auto w-full">
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-white border-b p-6 flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gray-900">Import Nilai dari Excel</h2>
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportFile(null);
+                  setImportedRows([]);
+                  setImportError('');
+                }}
+                className="p-1 hover:bg-gray-100 rounded-lg"
+              >
+                <X size={24} className="text-gray-600" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6">
+              {/* Error Alert */}
+              {importError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
+                  <AlertCircle size={20} />
+                  {importError}
+                </div>
+              )}
+
+              {/* File Upload */}
+              {importedRows.length === 0 ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Upload File Excel (.xlsx)
+                    </label>
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls"
+                      onChange={handleImportFile}
+                      disabled={importLoading}
+                      className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-800 font-medium mb-2">📋 Format Excel:</p>
+                    <ul className="text-sm text-blue-800 space-y-1">
+                      <li>• Kolom 1: <strong>Nomor Stambuk</strong> (contoh: 387)</li>
+                      <li>• Kolom 2: <strong>Nama Siswa</strong> (contoh: Fulan)</li>
+                      <li>• Kolom 3: <strong>Nama Kompetensi</strong></li>
+                      <li>• Kolom 4: <strong>Nilai (1-10)</strong> (contoh: 8.5)</li>
+                      <li>• Kolom 5: <strong>Jenis Penilaian</strong> (UTS_1, UAS_1, UTS_2, UAS_2, FINAL_EXAM_1, FINAL_EXAM_2)</li>
+                      <li>• Kolom 6: <strong>Catatan</strong> (opsional)</li>
+                    </ul>
+                  </div>
+
+                  {importLoading && (
+                    <div className="text-center py-8">
+                      <p className="text-gray-500">Membaca file...</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                    <p className="text-emerald-800 font-medium">
+                      ✓ {importedRows.filter((r) => !r.errors || r.errors.length === 0).length} dari {importedRows.length} baris valid
+                    </p>
+                  </div>
+
+                  {/* Preview Table */}
+                  <div className="overflow-x-auto border rounded-lg">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-100 border-b">
+                        <tr>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">Baris</th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">Nomor Siswa</th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">Nama Siswa</th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">Kompetensi</th>
+                          <th className="px-4 py-2 text-center font-semibold text-gray-700">Nilai</th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">Jenis Penilaian</th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importedRows.map((row) => (
+                          <tr
+                            key={row.rowIndex}
+                            className={row.errors && row.errors.length > 0 ? 'bg-red-50 border-b' : 'border-b hover:bg-gray-50'}
+                          >
+                            <td className="px-4 py-2 text-gray-700 font-medium">{row.rowIndex}</td>
+                            <td className="px-4 py-2 text-gray-700">{row.studentNo}</td>
+                            <td className="px-4 py-2 text-gray-700">{row.studentName}</td>
+                            <td className="px-4 py-2 text-gray-700 text-xs">{row.competencyName}</td>
+                            <td className="px-4 py-2 text-center">
+                              {row.score ? (
+                                <span className="inline-block bg-emerald-100 text-emerald-800 font-semibold px-2 py-1 rounded">
+                                  {row.score}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2 text-gray-700 text-xs">{row.assessmentType}</td>
+                            <td className="px-4 py-2">
+                              {row.errors && row.errors.length > 0 ? (
+                                <div className="text-xs text-red-700 space-y-1">
+                                  {row.errors.map((err, idx) => (
+                                    <div key={idx} className="bg-red-100 px-2 py-1 rounded">
+                                      {err}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="inline-block bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-semibold">
+                                  ✓ Valid
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="sticky bottom-0 bg-white border-t p-6 flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportFile(null);
+                  setImportedRows([]);
+                  setImportError('');
+                }}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors font-medium"
+              >
+                Batal
+              </button>
+              {importedRows.length > 0 && (
+                <>
+                  <button
+                    onClick={() => {
+                      setImportedRows([]);
+                      setImportFile(null);
+                    }}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                  >
+                    Pilih File Lain
+                  </button>
+                  <button
+                    onClick={handleSubmitImport}
+                    disabled={
+                      importSubmitting ||
+                      importedRows.some((r) => r.errors && r.errors.length > 0)
+                    }
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {importSubmitting ? 'Uploading...' : 'Upload Nilai'}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
