@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Library, AlertCircle, X, Search } from 'lucide-react';
+import { Library, AlertCircle, X, Search, RotateCw } from 'lucide-react';
 
 interface Subject {
   id: string;
@@ -11,6 +11,7 @@ interface Subject {
   description?: string;
   creditHours?: number;
   classes: Array<{ id: string; name: string }>;
+  assessmentTypes?: string[];
 }
 
 interface Class {
@@ -35,11 +36,21 @@ interface ClassSubject {
 export default function WaliKelasSubjectsPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedClass, setSelectedClass] = useState<string>('');
   const [searchText, setSearchText] = useState('');
   const itemsPerPage = 10;
+
+  const assessmentTypeLabels: { [key: string]: string } = {
+    UTS_1: 'UTS 1',
+    UAS_1: 'UAS 1',
+    UTS_2: 'UTS 2',
+    UAS_2: 'UAS 2',
+    FINAL_EXAM_1: 'Final Exam 1',
+    FINAL_EXAM_2: 'Final Exam 2',
+  };
 
   useEffect(() => {
     const user = localStorage.getItem('user');
@@ -68,7 +79,25 @@ export default function WaliKelasSubjectsPage() {
 
       const fetchedSubjects: Subject[] = (subjectsData.data || []);
       console.log('Final unique subjects:', fetchedSubjects);
-      setSubjects(fetchedSubjects);
+      
+      // Fetch assessment status for all subjects in one request
+      let statusMap: Record<string, string[]> = {};
+      try {
+        const statusResponse = await fetch(`/api/wali-kelas/assessment-status`, { headers });
+        if (statusResponse.ok) {
+          const statusData = await statusResponse.json();
+          statusMap = statusData.data || {};
+        }
+      } catch (error) {
+        console.error('Failed to fetch assessment status:', error);
+      }
+
+      const subjectsWithAssessments: Subject[] = fetchedSubjects.map((subject) => ({
+        ...subject,
+        assessmentTypes: statusMap[subject.id] || [],
+      }));
+      
+      setSubjects(subjectsWithAssessments);
       setErrorMessage('');
     } catch (error) {
       console.error('Error:', error);
@@ -109,14 +138,37 @@ export default function WaliKelasSubjectsPage() {
     setCurrentPage(1);
   }, [selectedClass, searchText]);
 
+  const handleRefresh = async () => {
+    const user = localStorage.getItem('user');
+    if (user) {
+      const parsedUser = JSON.parse(user);
+      setIsRefreshing(true);
+      try {
+        await fetchAllSubjects(parsedUser.id);
+      } finally {
+        setIsRefreshing(false);
+      }
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-          <Library size={32} className="text-emerald-600" />
-          Mata Pelajaran
-        </h1>
-        <p className="text-gray-600 mt-1">Daftar semua mata pelajaran yang Anda ajarkan</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <Library size={32} className="text-emerald-600" />
+            Mata Pelajaran
+          </h1>
+          <p className="text-gray-600 mt-1">Daftar semua mata pelajaran yang Anda ajarkan</p>
+        </div>
+        <button
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className="p-2 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Refresh penilaian terbaru"
+        >
+          <RotateCw size={24} className={isRefreshing ? 'animate-spin' : ''} />
+        </button>
       </div>
 
       {errorMessage && (
@@ -218,7 +270,7 @@ export default function WaliKelasSubjectsPage() {
           ) : (
             <>
               {/* Desktop Table View */}
-              <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden border">
+              <div className="hidden md:block bg-white rounded-lg shadow overflow-x-auto border">
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
@@ -226,6 +278,12 @@ export default function WaliKelasSubjectsPage() {
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Nama</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-emerald-700 bg-emerald-50">Nama Arab</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Diajarkan di Kelas</th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-blue-700 bg-blue-50">UTS 1</th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-blue-700 bg-blue-50">UAS 1</th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-blue-700 bg-blue-50">UTS 2</th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-blue-700 bg-blue-50">UAS 2</th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-blue-700 bg-blue-50">Final 1</th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-blue-700 bg-blue-50">Final 2</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -249,6 +307,22 @@ export default function WaliKelasSubjectsPage() {
                             ))}
                           </div>
                         </td>
+                        {['UTS_1', 'UAS_1', 'UTS_2', 'UAS_2', 'FINAL_EXAM_1', 'FINAL_EXAM_2'].map((type) => {
+                          const isDone = subject.assessmentTypes && subject.assessmentTypes.includes(type);
+                          return (
+                            <td key={type} className="px-4 py-4 text-center bg-blue-50">
+                              <div className={`flex justify-center items-center w-5 h-5 rounded border-2 mx-auto ${
+                                isDone 
+                                  ? 'bg-emerald-500 border-emerald-500' 
+                                  : 'border-gray-300 bg-white'
+                              }`}>
+                                {isDone && (
+                                  <span className="text-white text-xs font-bold">✓</span>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })}
                       </tr>
                     ))}
                   </tbody>
@@ -271,7 +345,7 @@ export default function WaliKelasSubjectsPage() {
                       <p className="text-sm font-medium text-gray-600">Nama Arab</p>
                       <p className="text-base font-semibold text-emerald-700">{subject.nameArabic || '-'}</p>
                     </div>
-                    <div>
+                    <div className="mb-3 pb-3 border-b border-gray-200">
                       <p className="text-sm font-medium text-gray-600 mb-2">Diajarkan di Kelas</p>
                       <div className="flex flex-wrap gap-2">
                         {subject.classes.map((classItem) => (
@@ -283,6 +357,37 @@ export default function WaliKelasSubjectsPage() {
                             {classItem.name}
                           </a>
                         ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 mb-3">Penilaian yang Dilakukan</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { key: 'UTS_1', label: 'UTS 1' },
+                          { key: 'UAS_1', label: 'UAS 1' },
+                          { key: 'UTS_2', label: 'UTS 2' },
+                          { key: 'UAS_2', label: 'UAS 2' },
+                          { key: 'FINAL_EXAM_1', label: 'Final 1' },
+                          { key: 'FINAL_EXAM_2', label: 'Final 2' },
+                        ].map(({ key, label }) => {
+                          const isDone = subject.assessmentTypes && subject.assessmentTypes.includes(key);
+                          return (
+                            <div key={key} className="flex flex-col items-center p-2 rounded text-center">
+                              <div className={`flex justify-center items-center w-5 h-5 rounded border-2 mb-1 ${
+                                isDone 
+                                  ? 'bg-emerald-500 border-emerald-500' 
+                                  : 'border-gray-300 bg-white'
+                              }`}>
+                                {isDone && (
+                                  <span className="text-white text-xs font-bold">✓</span>
+                                )}
+                              </div>
+                              <span className={`text-xs ${isDone ? 'text-emerald-700 font-semibold' : 'text-gray-600'}`}>
+                                {label}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>

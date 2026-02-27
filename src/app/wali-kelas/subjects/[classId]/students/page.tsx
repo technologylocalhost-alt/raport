@@ -2,7 +2,8 @@
 
 import { Fragment, useState, useEffect } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Users, PenTool, X, AlertCircle, CheckCircle, ChevronDown, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Users, PenTool, X, AlertCircle, CheckCircle, ChevronDown, Edit2, Trash2, ChevronLeft, ChevronRight, Upload, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface Student {
   id: string;
@@ -43,6 +44,17 @@ interface CompetenciesResponse {
   success: boolean;
   competencies?: Competency[];
   message?: string;
+}
+
+interface ImportGradeRow {
+  studentNo?: string;
+  studentName?: string;
+  competencyName?: string;
+  score?: number | string;
+  assessmentType?: string;
+  notes?: string;
+  rowIndex: number;
+  errors?: string[];
 }
 
 export default function WaliKelasStudentsPage() {
@@ -110,6 +122,15 @@ export default function WaliKelasStudentsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalStudents, setTotalStudents] = useState(0);
   const itemsPerPage = 10;
+
+  // Import Excel states
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importedRows, setImportedRows] = useState<ImportGradeRow[]>([]);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState('');
+  const [importSuccess, setImportSuccess] = useState('');
+  const [importSubmitting, setImportSubmitting] = useState(false);
 
   useEffect(() => {
     fetchClassStudents();
@@ -532,6 +553,152 @@ export default function WaliKelasStudentsPage() {
     await fetchCompetencies(nextStudent.id);
   };
 
+  const downloadTemplate = () => {
+    const ws = XLSX.utils.json_to_sheet([
+      {
+        'Nomor Siswa': '387',
+        'Nama Siswa': 'Faaiq Husain',
+        'Nama Kompetensi': 'Membaca Al-Qur\'an',
+        'Nilai (1-10)': 8.5,
+        'Jenis Penilaian': 'UTS_1',
+        'Catatan': 'Bagus',
+      },
+      {
+        'Nomor Siswa': '412',
+        'Nama Siswa': 'Rayyan Aryatama Karim',
+        'Nama Kompetensi': 'Menulis Arab',
+        'Nilai (1-10)': 7.0,
+        'Jenis Penilaian': 'UTS_1',
+        'Catatan': '',
+      },
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Template Nilai');
+    XLSX.writeFile(wb, `Template_Nilai_${subjectName || 'Mata_Pelajaran'}.xlsx`);
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportFile(file);
+    setImportError('');
+    setImportedRows([]);
+
+    try {
+      setImportLoading(true);
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+      if (jsonData.length === 0) {
+        setImportError('File kosong atau tidak memiliki data');
+        return;
+      }
+
+      // Parse and validate data
+      const parsedRows: ImportGradeRow[] = jsonData.map((row, idx) => {
+        const errors: string[] = [];
+        const score = row['Nilai (1-10)'] ? parseFloat(String(row['Nilai (1-10)'])) : undefined;
+
+        if (!row['Nomor Siswa']) errors.push('Nomor Siswa kosong');
+        if (!row['Nama Siswa']) errors.push('Nama Siswa kosong');
+        if (!row['Nama Kompetensi']) errors.push('Nama Kompetensi kosong');
+        if (!score || isNaN(score) || score < 1 || score > 10) errors.push('Nilai harus 1-10');
+        if (!row['Jenis Penilaian']) errors.push('Jenis Penilaian kosong');
+        if (!Object.keys(assessmentTypeLabels).includes(row['Jenis Penilaian'])) {
+          errors.push(`Jenis Penilaian tidak valid: ${row['Jenis Penilaian']}`);
+        }
+
+        return {
+          studentNo: String(row['Nomor Siswa']).trim(),
+          studentName: String(row['Nama Siswa']).trim(),
+          competencyName: String(row['Nama Kompetensi']).trim(),
+          score: score,
+          assessmentType: String(row['Jenis Penilaian']).trim(),
+          notes: row['Catatan'] ? String(row['Catatan']).trim() : '',
+          rowIndex: idx + 2, // +2 because spreadsheet is 1-indexed and includes header
+          errors: errors.length > 0 ? errors : undefined,
+        };
+      });
+
+      setImportedRows(parsedRows);
+    } catch (error) {
+      console.error('Error parsing file:', error);
+      setImportError('Error membaca file. Pastikan file adalah Excel (.xlsx)');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleSubmitImport = async () => {
+    if (importedRows.length === 0) {
+      setImportError('Tidak ada data untuk diimport');
+      return;
+    }
+
+    // Check for rows with errors
+    const rowsWithErrors = importedRows.filter((row) => row.errors && row.errors.length > 0);
+    if (rowsWithErrors.length > 0) {
+      setImportError(`Ada ${rowsWithErrors.length} baris dengan error. Silakan perbaiki sebelum submit.`);
+      return;
+    }
+
+    try {
+      setImportSubmitting(true);
+      setImportError('');
+      const token = localStorage.getItem('accessToken');
+
+      if (!token) {
+        setImportError('Token tidak ditemukan');
+        return;
+      }
+
+      // Create grade objects for submission
+      const gradesToSubmit = importedRows.map((row) => ({
+        studentNo: row.studentNo,
+        competencyName: row.competencyName,
+        score: row.score,
+        assessmentType: row.assessmentType,
+        notes: row.notes,
+      }));
+
+      // Send to API
+      const response = await fetch(`/api/teacher/grades/import?subjectId=${subjectId}&classId=${classId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(gradesToSubmit),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setImportSuccess(`${data.successCount || importedRows.length} nilai berhasil diimport`);
+        setShowImportModal(false);
+        setImportFile(null);
+        setImportedRows([]);
+        setImportError('');
+        // Refresh data
+        fetchClassStudents();
+        // Reload grades for all students
+        students.forEach((student) => {
+          fetchStudentGrades(student.id);
+        });
+      } else {
+        setImportError(data.error || 'Gagal mengimport nilai');
+      }
+    } catch (error) {
+      console.error('Error submitting import:', error);
+      setImportError('Terjadi kesalahan saat mengimport nilai');
+    } finally {
+      setImportSubmitting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -561,7 +728,7 @@ export default function WaliKelasStudentsPage() {
         </div>
       )}
 
-      {/* Success Alert */}
+      {/* Success Alerts */}
       {gradeSuccess && (
         <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
           <CheckCircle size={20} />
@@ -571,6 +738,40 @@ export default function WaliKelasStudentsPage() {
           </button>
         </div>
       )}
+
+      {importSuccess && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
+          <CheckCircle size={20} />
+          {importSuccess}
+          <button onClick={() => setImportSuccess('')} className="ml-auto">
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
+      {/* Action Buttons */}
+      <div className="flex gap-2 flex-wrap">
+        <button
+          onClick={() => {
+            setShowImportModal(true);
+            setImportError('');
+            setImportSuccess('');
+            setImportFile(null);
+            setImportedRows([]);
+          }}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 font-medium"
+        >
+          <Upload size={20} />
+          Import Nilai (Excel)
+        </button>
+        <button
+          onClick={downloadTemplate}
+          className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2 font-medium"
+        >
+          <Download size={20} />
+          Download Template
+        </button>
+      </div>
 
       {/* Main Content - Two Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1008,6 +1209,177 @@ export default function WaliKelasStudentsPage() {
           </div>
         )}
       </div>
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl max-h-[90vh] overflow-y-auto w-full">
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-white border-b p-6 flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gray-900">Import Nilai dari Excel</h2>
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportFile(null);
+                  setImportedRows([]);
+                  setImportError('');
+                }}
+                className="p-1 hover:bg-gray-100 rounded-lg"
+              >
+                <X size={24} className="text-gray-600" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6">
+              {/* Error Alert */}
+              {importError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
+                  <AlertCircle size={20} />
+                  {importError}
+                </div>
+              )}
+
+              {/* File Upload */}
+              {importedRows.length === 0 ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Upload File Excel (.xlsx)
+                    </label>
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls"
+                      onChange={handleImportFile}
+                      disabled={importLoading}
+                      className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-800 font-medium mb-2">📋 Format Excel:</p>
+                    <ul className="text-sm text-blue-800 space-y-1">
+                      <li>• Kolom 1: <strong>Nomor Stambuk</strong> (contoh: 387)</li>
+                      <li>• Kolom 2: <strong>Nama Siswa</strong> (contoh: Fulan)</li>
+                      <li>• Kolom 3: <strong>Nama Kompetensi</strong></li>
+                      <li>• Kolom 4: <strong>Nilai (1-10)</strong> (contoh: 8.5)</li>
+                      <li>• Kolom 5: <strong>Jenis Penilaian</strong> (UTS_1, UAS_1, UTS_2, UAS_2, FINAL_EXAM_1, FINAL_EXAM_2)</li>
+                      <li>• Kolom 6: <strong>Catatan</strong> (opsional)</li>
+                    </ul>
+                  </div>
+
+                  {importLoading && (
+                    <div className="text-center py-8">
+                      <p className="text-gray-500">Membaca file...</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                    <p className="text-emerald-800 font-medium">
+                      ✓ {importedRows.filter((r) => !r.errors || r.errors.length === 0).length} dari {importedRows.length} baris valid
+                    </p>
+                  </div>
+
+                  {/* Preview Table */}
+                  <div className="overflow-x-auto border rounded-lg">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-100 border-b">
+                        <tr>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">Baris</th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">Nomor Siswa</th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">Nama Siswa</th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">Kompetensi</th>
+                          <th className="px-4 py-2 text-center font-semibold text-gray-700">Nilai</th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">Jenis Penilaian</th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importedRows.map((row) => (
+                          <tr
+                            key={row.rowIndex}
+                            className={row.errors && row.errors.length > 0 ? 'bg-red-50 border-b' : 'border-b hover:bg-gray-50'}
+                          >
+                            <td className="px-4 py-2 text-gray-700 font-medium">{row.rowIndex}</td>
+                            <td className="px-4 py-2 text-gray-700">{row.studentNo}</td>
+                            <td className="px-4 py-2 text-gray-700">{row.studentName}</td>
+                            <td className="px-4 py-2 text-gray-700 text-xs">{row.competencyName}</td>
+                            <td className="px-4 py-2 text-center">
+                              {row.score ? (
+                                <span className="inline-block bg-emerald-100 text-emerald-800 font-semibold px-2 py-1 rounded">
+                                  {row.score}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2 text-gray-700 text-xs">{row.assessmentType}</td>
+                            <td className="px-4 py-2">
+                              {row.errors && row.errors.length > 0 ? (
+                                <div className="text-xs text-red-700 space-y-1">
+                                  {row.errors.map((err, idx) => (
+                                    <div key={idx} className="bg-red-100 px-2 py-1 rounded">
+                                      {err}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="inline-block bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-semibold">
+                                  ✓ Valid
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="sticky bottom-0 bg-white border-t p-6 flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportFile(null);
+                  setImportedRows([]);
+                  setImportError('');
+                }}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors font-medium"
+              >
+                Batal
+              </button>
+              {importedRows.length > 0 && (
+                <>
+                  <button
+                    onClick={() => {
+                      setImportedRows([]);
+                      setImportFile(null);
+                    }}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                  >
+                    Pilih File Lain
+                  </button>
+                  <button
+                    onClick={handleSubmitImport}
+                    disabled={
+                      importSubmitting ||
+                      importedRows.some((r) => r.errors && r.errors.length > 0)
+                    }
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {importSubmitting ? 'Uploading...' : 'Upload Nilai'}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
