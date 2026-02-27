@@ -50,7 +50,7 @@ export async function PUT(
       );
     }
 
-    if (!competency.subject) {
+    if (competency.teacherId !== decoded.userId) {
       return NextResponse.json(
         { success: false, message: 'Anda tidak authorized untuk kompetensi ini' },
         { status: 403 }
@@ -134,7 +134,7 @@ export async function DELETE(
       );
     }
 
-    if (!competency.subject) {
+    if (competency.teacherId !== decoded.userId) {
       return NextResponse.json(
         { success: false, message: 'Anda tidak authorized untuk kompetensi ini' },
         { status: 403 }

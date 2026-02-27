@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
       const competencies = await prisma.competency.findMany({
         where: {
           subjectId: subjectId,
+          teacherId: decoded.userId,
         },
         select: {
           id: true,
@@ -79,12 +80,13 @@ export async function GET(request: NextRequest) {
 
     const subjectIds = teacherSubjects.map((ct) => ct.subjectId);
 
-    // Get competencies for these subjects
+    // Get competencies for these subjects, filtered by this teacher only
     const competencies = await prisma.competency.findMany({
       where: {
         subjectId: {
           in: subjectIds,
         },
+        teacherId: decoded.userId,
       },
       select: {
         id: true,

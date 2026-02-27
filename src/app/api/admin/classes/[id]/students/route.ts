@@ -40,6 +40,7 @@ const studentSchema = z.object({
   address: z.string().optional(),
   birthDate: z.string().optional(),
   parentPhoneNo: z.string().optional(),
+  gender: z.enum(['MALE', 'FEMALE']).optional().default('MALE'),
 });
 
 /**
@@ -142,6 +143,7 @@ export async function GET(
           nourut: true,
           email: true,
           phone: true,
+          gender: true,
           address: true,
           birthDate: true,
           parentPhoneNo: true,
@@ -185,6 +187,7 @@ export async function GET(
       birthDate: student.birthDate,
       parentPhoneNo: student.parentPhoneNo,
       classId: student.classId,
+      gender: student.gender,
       raportNo: student.nilaiApproves[0]?.nomorRaport || null,
     }));
 
@@ -238,7 +241,7 @@ export async function POST(
       return errorResponse('Invalid input', 400);
     }
 
-    const { studentNo, name, nourut, email, phone, address, birthDate, parentPhoneNo } = validation.data;
+    const { studentNo, name, nourut, email, phone, address, birthDate, parentPhoneNo, gender } = validation.data;
 
     // Check if student with this studentNo already exists in this class
     const existingStudent = await prisma.student.findUnique({
@@ -262,6 +265,7 @@ export async function POST(
           address: address || null,
           birthDate: birthDate ? new Date(birthDate) : null,
           parentPhoneNo: parentPhoneNo || null,
+          gender: gender || 'MALE',
         },
         select: {
           id: true,
@@ -270,6 +274,7 @@ export async function POST(
           nourut: true,
           email: true,
           phone: true,
+          gender: true,
           address: true,
           birthDate: true,
           parentPhoneNo: true,
@@ -291,6 +296,7 @@ export async function POST(
         address: address || null,
         birthDate: birthDate ? new Date(birthDate) : null,
         parentPhoneNo: parentPhoneNo || null,
+        gender: gender || 'MALE',
       },
       select: {
         id: true,
@@ -299,6 +305,7 @@ export async function POST(
         nourut: true,
         email: true,
         phone: true,
+        gender: true,
         address: true,
         birthDate: true,
         parentPhoneNo: true,

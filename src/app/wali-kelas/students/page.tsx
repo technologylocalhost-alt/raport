@@ -24,6 +24,7 @@ interface Student {
   nourut?: number;
   email?: string;
   phone?: string;
+  gender?: string;
   address?: string;
   birthDate?: string;
   parentPhoneNo?: string;
@@ -36,6 +37,7 @@ interface FormData {
   nourut: string;
   email: string;
   phone: string;
+  gender: string;
   address: string;
   birthDate: string;
   parentPhoneNo: string;
@@ -77,6 +79,7 @@ function StudentsPageContent() {
     nourut: '',
     email: '',
     phone: '',
+    gender: 'MALE',
     address: '',
     birthDate: '',
     parentPhoneNo: '',
@@ -226,6 +229,7 @@ function StudentsPageContent() {
           nourut: '',
           email: '',
           phone: '',
+          gender: 'MALE',
           address: '',
           birthDate: '',
           parentPhoneNo: '',
@@ -250,6 +254,7 @@ function StudentsPageContent() {
       nourut: student.nourut?.toString() || '',
       email: student.email || '',
       phone: student.phone || '',
+      gender: student.gender || 'MALE',
       address: student.address || '',
       birthDate: student.birthDate || '',
       parentPhoneNo: student.parentPhoneNo || '',
@@ -543,6 +548,7 @@ function StudentsPageContent() {
                 nourut: '',
                 email: '',
                 phone: '',
+                gender: 'MALE',
                 address: '',
                 birthDate: '',
                 parentPhoneNo: '',
@@ -628,6 +634,19 @@ function StudentsPageContent() {
                   onChange={(e) => setFormData({ ...formData, nourut: e.target.value })}
                   className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 placeholder-gray-500 rounded-lg focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">
+                  Jenis Kelamin
+                </label>
+                <select
+                  value={formData.gender}
+                  onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                  className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200"
+                >
+                  <option value="MALE">Laki-laki</option>
+                  <option value="FEMALE">Perempuan</option>
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-bold text-gray-900 mb-2">
@@ -740,6 +759,7 @@ function StudentsPageContent() {
               <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">No. Urut</th>
               <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Nomor Siswa</th>
               <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Nama Siswa</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Jenis Kelamin</th>
               <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Email</th>
               <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Telepon</th>
               <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700">Aksi</th>
@@ -748,13 +768,13 @@ function StudentsPageContent() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                   Memuat data siswa...
                 </td>
               </tr>
             ) : displayedStudents.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                   Tidak ada data siswa ditemukan
                 </td>
               </tr>
@@ -764,6 +784,15 @@ function StudentsPageContent() {
                   <td className="px-6 py-4 text-sm font-medium text-gray-900 text-center font-bold text-blue-600">{student.nourut || '-'}</td>
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">{student.studentNo}</td>
                   <td className="px-6 py-4 text-sm text-gray-700">{student.name}</td>
+                  <td className="px-6 py-4 text-sm text-gray-700">
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                      student.gender === 'FEMALE'
+                        ? 'bg-pink-100 text-pink-700'
+                        : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {student.gender === 'FEMALE' ? 'Perempuan' : 'Laki-laki'}
+                    </span>
+                  </td>
                   <td className="px-6 py-4 text-sm text-gray-700">{student.email || '-'}</td>
                   <td className="px-6 py-4 text-sm text-gray-700">{student.phone || '-'}</td>
                   <td className="px-6 py-4 text-center space-x-2">
@@ -808,6 +837,13 @@ function StudentsPageContent() {
                   <div className="flex items-center gap-2 mb-1">
                     <span className="inline-block px-3 py-1 bg-blue-100 text-blue-700 text-sm font-bold rounded">
                       #{student.nourut || '-'}
+                    </span>
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                      student.gender === 'FEMALE'
+                        ? 'bg-pink-100 text-pink-700'
+                        : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {student.gender === 'FEMALE' ? 'Perempuan' : 'Laki-laki'}
                     </span>
                   </div>
                   <p className="font-bold text-lg text-gray-900">{student.name}</p>

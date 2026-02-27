@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
         name,
         code: code || '',
         subjectId,
+        teacherId: decoded.userId,
         type,
       },
       include: {

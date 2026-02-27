@@ -21,6 +21,7 @@ model User {
   grades             Grade[]
   nilaiApproves      NilaiApprove[] @relation("UserNilaiApprove")
   refreshTokens      RefreshToken[]
+  competencies       Competency[]   @relation("TeacherCompetencies")
   school             School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
   @@index([schoolId])
@@ -206,6 +207,7 @@ model ClassSubject {
 model Competency {
   id            String         @id @default(cuid())
   subjectId     String
+  teacherId     String?
   code          String
   name          String
   description   String         @default("")
@@ -214,11 +216,13 @@ model Competency {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   subject       Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  teacher       User?          @relation("TeacherCompetencies", fields: [teacherId], references: [id])
   grades        Grade[]
   nilaiApproves NilaiApprove[] @relation("CompetencyNilaiApprove")
 
-  @@unique([subjectId, code])
+  @@unique([subjectId, teacherId, code])
   @@index([subjectId])
+  @@index([teacherId])
 }
 
 model Grade {

@@ -44,10 +44,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get competencies for the specific subject
+    // Get competencies for the specific subject, only by this teacher
     const competencies = await prisma.competency.findMany({
       where: {
         subjectId: subjectId,
+        teacherId: decoded.userId,
       },
       select: {
         id: true,
