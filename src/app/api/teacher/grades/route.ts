@@ -41,7 +41,7 @@ async function getUser(req: NextRequest) {
     where: { id: payload.userId },
   });
 
-  if (user && (user.role === 'TEACHER' || user.role === 'WALI_KELAS')) {
+  if (user && (user.role === 'TEACHER' || user.role === 'WALI_KELAS' || user.role === 'ADMIN')) {
     return user;
   }
   return null;
@@ -74,8 +74,10 @@ export async function GET(request: NextRequest) {
     // Build where clause
     const whereClause: any = {};
 
-    // Teachers can only see their own grades; wali-kelas can see grades for their classes
-    if (user.role === 'TEACHER') {
+    // Teachers can only see their own grades; wali-kelas can see grades for their classes; admin can see all
+    if (user.role === 'ADMIN') {
+      // Admin sees all grades, no restriction — just apply filters below
+    } else if (user.role === 'TEACHER') {
       // For teacher, filter by their own grades
       // Also verify they're teaching in the requested class if classId is provided
       whereClause.teacher = {
@@ -147,8 +149,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Apply studentId filter for both TEACHER and WALI_KELAS
-    if (studentId && (user.role === 'TEACHER' || user.role === 'WALI_KELAS')) {
+    // Apply studentId filter for all roles
+    if (studentId) {
       whereClause.studentId = studentId;
     }
 

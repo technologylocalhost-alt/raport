@@ -54,8 +54,7 @@ export default function RaportsPage() {
   const [filterClass, setFilterClass] = useState('');
   const [selectedClassName, setSelectedClassName] = useState('');
   const [filterSubject, setFilterSubject] = useState('');
-  const [filterStudent, setFilterStudent] = useState('');
-  const [classes, setClasses] = useState<Array<{ id: string; name: string }>>([]);
+  const [filterStudent, setFilterStudent] = useState('');  const [filterAssessmentType, setFilterAssessmentType] = useState('');  const [classes, setClasses] = useState<Array<{ id: string; name: string }>>([]);
   const [subjects, setSubjects] = useState<Array<{ id: string; name: string }>>([]);
   const [students, setStudents] = useState<Array<{ id: string; name: string; no: string }>>([]);
   const [isClient, setIsClient] = useState(false);
@@ -128,7 +127,7 @@ export default function RaportsPage() {
       setPage(1);
       fetchRaports();
     }
-  }, [filterClass, filterSubject, filterStudent, search, page]);
+  }, [filterClass, filterSubject, filterStudent, filterAssessmentType, search, page]);
 
   useEffect(() => {
     // Transform data to pivot table format when raports change
@@ -256,6 +255,7 @@ export default function RaportsPage() {
         ...(search && { search }),
         ...(filterSubject && { subject: filterSubject }),
         ...(filterStudent && { student: filterStudent }),
+        ...(filterAssessmentType && { assessmentType: filterAssessmentType }),
       });
       const response = await fetch(`/api/admin/raports?${queryParams}`, {
         headers: {
@@ -311,7 +311,7 @@ export default function RaportsPage() {
           <h2 className="text-lg font-semibold text-gray-900">Filter Data</h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           {/* Kelas */}
           <div>
             <label className="block text-sm font-semibold text-gray-900 mb-2">
@@ -326,6 +326,7 @@ export default function RaportsPage() {
                 setSelectedClassName(selectedClass?.name || '');
                 setFilterSubject('');
                 setFilterStudent('');
+                setFilterAssessmentType('');
                 setSearch('');
                 setPage(1);
               }}
@@ -381,6 +382,29 @@ export default function RaportsPage() {
                   {std.name} ({std.no})
                 </option>
               ))}
+            </select>
+          </div>
+
+          {/* Jenis Penilaian */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-900 mb-2">
+              Jenis Penilaian
+            </label>
+            <select
+              value={filterAssessmentType}
+              onChange={(e) => {
+                setFilterAssessmentType(e.target.value);
+                setPage(1);
+              }}
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-gray-900 bg-white"
+            >
+              <option value="">-- Semua --</option>
+              <option value="UTS_1">UTS 1</option>
+              <option value="UAS_1">UAS 1</option>
+              <option value="UTS_2">UTS 2</option>
+              <option value="UAS_2">UAS 2</option>
+              <option value="FINAL_EXAM_1">Ujian Akhir Gel 1</option>
+              <option value="FINAL_EXAM_2">Ujian Akhir Gel 2</option>
             </select>
           </div>
 
