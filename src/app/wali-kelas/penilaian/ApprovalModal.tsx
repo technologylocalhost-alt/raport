@@ -16,6 +16,7 @@ interface SubjectApproval {
   gradesSample?: any[];
   isFullyApproved?: boolean;
   approvedData?: any;
+  assessmentTypes?: string[];
 }
 
 interface ApprovalModalProps {
@@ -129,10 +130,16 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
             console.error('[ApprovalModal] Failed to fetch approval data for subject:', subject.subjectId, err);
           }
           
+          // Extract unique assessment types from gradesSample
+          const assessmentTypes = subject.gradesSample
+            ? Array.from(new Set(subject.gradesSample.map((g: any) => g.assessmentType)))
+            : [];
+          
           return {
             ...subject,
             isFullyApproved,
             approvedData,
+            assessmentTypes,
           };
         })
       );
@@ -145,6 +152,20 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
       setIsLoading(false);
     }
   }
+
+  // Translate assessment type to Indonesian
+  const translateAssessmentType = (type: string): string => {
+    const translations: { [key: string]: string } = {
+      UTS_1: 'Ujian Tengah Semester 1 (UTS 1)',
+      UAS_1: 'Ujian Akhir Semester 1 (UAS 1)',
+      UTS_2: 'Ujian Tengah Semester 2 (UTS 2)',
+      UAS_2: 'Ujian Akhir Semester 2 (UAS 2)',
+      FINAL_EXAM_1: 'Ujian Akhir Siswa Akhir Gel 1',
+      FINAL_EXAM_2: 'Ujian Akhir Siswa Gel 2',
+      DAILY: 'Penilaian Harian',
+    };
+    return translations[type] || type;
+  };
 
   async function handleApprove(subject: SubjectApproval) {
     try {
@@ -294,6 +315,15 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
                               Guru: {subject.teachers.join(', ')}
                             </p>
                           )}
+                          {subject.assessmentTypes && subject.assessmentTypes.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-1">
+                              {subject.assessmentTypes.map((type) => (
+                                <span key={type} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                                  {translateAssessmentType(type)}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <button
                           onClick={() => subject.isFullyApproved ? null : setSelectedSubject(subject)}
@@ -378,33 +408,18 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
                       <p className="text-gray-900 font-semibold">{selectedSubject.gradesCount}</p>
                     </div>
                   </div>
-                </div>
-
-                {/* Nomor Raport Preview */}
-                <div className="border border-emerald-200 rounded-lg p-4 bg-emerald-50">
-                  <p className="text-sm font-semibold text-gray-900 mb-2">
-                    📋 Nomor Raport Auto-Generated
-                  </p>
-                  <p className="text-xs text-gray-600 mb-3">
-                    Format: JenisPenilaian-Semester-TahunAjaran-JenisKelamin-NomorUrut
-                  </p>
-                  <div className="space-y-1 text-xs font-mono bg-white rounded p-3">
-                    {selectedSubject.gradesSample && selectedSubject.gradesSample.length > 0 && (
-                      <>
-                        <p className="text-gray-700">
-                          <span className="text-emerald-700 font-semibold">Contoh:</span>
-                        </p>
-                        {selectedSubject.gradesSample.slice(0, 3).map((grade: any, idx: number) => (
-                          <p key={idx} className="text-gray-600">
-                            • {grade.studentName}: UTS-1-2025/2026-{grade.gender === 'MALE' ? 'PA' : 'PI'}-{String(idx + 1).padStart(4, '0')}
-                          </p>
+                  {selectedSubject.assessmentTypes && selectedSubject.assessmentTypes.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-blue-200">
+                      <p className="text-gray-600 font-medium text-sm mb-2">Jenis Penilaian</p>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedSubject.assessmentTypes.map((type) => (
+                          <span key={type} className="px-3 py-1 bg-blue-200 text-blue-800 rounded-full text-sm font-medium">
+                            {translateAssessmentType(type)}
+                          </span>
                         ))}
-                        {selectedSubject.gradesSample.length > 3 && (
-                          <p className="text-gray-500 italic">... dan {selectedSubject.gradesCount - 3} penilaian lainnya</p>
-                        )}
-                      </>
-                    )}
-                  </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Optional Fields */}
@@ -430,6 +445,20 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
                           <div key={idx} className="bg-white rounded p-3 text-xs">
                             <div className="font-semibold text-gray-900 mb-2">
                               {idx + 1}. {approval.student?.name || approval.studentName || 'N/A'} ({approval.student?.studentNo || 'N/A'})
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-gray-700 mb-2">
+                              {approval.jumlahNilai && (
+                                <div>
+                                  <span className="font-medium">Jumlah Nilai:</span>
+                                  <p className="font-semibold text-emerald-600">{approval.jumlahNilai.toFixed(2)}</p>
+                                </div>
+                              )}
+                              {approval.mulahazoh && (
+                                <div>
+                                  <span className="font-medium">Mulahazoh:</span>
+                                  <p className="font-semibold text-gray-900">{approval.mulahazoh}</p>
+                                </div>
+                              )}
                             </div>
                             <div className="grid grid-cols-3 gap-2 text-gray-700">
                               {approval.suluk && (

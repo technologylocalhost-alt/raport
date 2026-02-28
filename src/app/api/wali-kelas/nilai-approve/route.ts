@@ -161,6 +161,8 @@ export async function GET(request: NextRequest) {
       nazofah: grade.nazofah,
       averageStudent: grade.averageStudent,
       averageSubject: grade.averageSubject,
+      jumlahNilai: grade.jumlahNilai,
+      mulahazoh: grade.mulahazoh,
       createdAt: grade.createdAt,
       updatedAt: grade.updatedAt,
     }));

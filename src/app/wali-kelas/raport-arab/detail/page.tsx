@@ -54,6 +54,11 @@ interface ReportData {
   semester: string;
   schoolYear: string;
   school: School;
+  mulahazoh?: string;
+  nomorRaport?: string;
+  suluk?: string;
+  muazobah?: string;
+  nazofah?: string;
 }
 
 function RaportArabDetailContent() {
@@ -572,6 +577,44 @@ function RaportArabDetailContent() {
         subjectScoresCount: subjectScores.length,
       });
 
+      // Get mulahazoh, nomorRaport, suluk, muazobah, nazofah from first approved grade (should be consistent across all subjects for same student)
+      let mulahazoh = '';
+      let nomorRaport = '';
+      let suluk = '';
+      let muazobah = '';
+      let nazofah = '';
+      if (approvedGrades.length > 0) {
+        const firstGrade = approvedGrades[0];
+        console.log('[Raport] First approved grade:', firstGrade);
+        console.log('[Raport] First grade mulahazoh:', firstGrade.mulahazoh);
+        console.log('[Raport] First grade nomorRaport:', firstGrade.nomorRaport);
+        console.log('[Raport] First grade suluk:', firstGrade.suluk);
+        console.log('[Raport] First grade muazobah:', firstGrade.muazobah);
+        console.log('[Raport] First grade nazofah:', firstGrade.nazofah);
+        
+        if (firstGrade.mulahazoh) {
+          mulahazoh = firstGrade.mulahazoh;
+        }
+        if (firstGrade.nomorRaport) {
+          nomorRaport = firstGrade.nomorRaport;
+        }
+        if (firstGrade.suluk) {
+          suluk = firstGrade.suluk;
+        }
+        if (firstGrade.muazobah) {
+          muazobah = firstGrade.muazobah;
+        }
+        if (firstGrade.nazofah) {
+          nazofah = firstGrade.nazofah;
+        }
+      }
+      
+      console.log('[Raport] Final mulahazoh:', mulahazoh);
+      console.log('[Raport] Final nomorRaport:', nomorRaport);
+      console.log('[Raport] Final suluk:', suluk);
+      console.log('[Raport] Final muazobah:', muazobah);
+      console.log('[Raport] Final nazofah:', nazofah);
+
       setReportData({
         student,
         subjectScores,
@@ -586,6 +629,11 @@ function RaportArabDetailContent() {
           email: school.email || '',
           principal: school.principal || '',
         },
+        mulahazoh,
+        nomorRaport,
+        suluk,
+        muazobah,
+        nazofah,
       });
       setIsLoading(false);
     } catch (err) {
@@ -1195,18 +1243,18 @@ function RaportArabDetailContent() {
             <tbody>
               <tr>
               <th>السلوك</th>
-              <td className="center">٨</td>
-              <td className="center">ثمان</td>
+              <td className="center">{reportData.suluk ? toArabicNumerals(reportData.suluk) : '-'}</td>
+              <td className="center">{reportData.suluk ? scoreToArabicText(parseFloat(reportData.suluk)) : '-'}</td>
               </tr>
               <tr>
               <th>المواظبة</th>
-              <td className="center">٨</td>
-              <td className="center">ثمان</td>
+              <td className="center">{reportData.muazobah ? toArabicNumerals(reportData.muazobah) : '-'}</td>
+              <td className="center">{reportData.muazobah ? scoreToArabicText(parseFloat(reportData.muazobah)) : '-'}</td>
               </tr>
               <tr>
               <th>النظافة</th>
-              <td className="center">٨</td>
-              <td className="center">ثمان</td>
+              <td className="center">{reportData.nazofah ? toArabicNumerals(reportData.nazofah) : '-'}</td>
+              <td className="center">{reportData.nazofah ? scoreToArabicText(parseFloat(reportData.nazofah)) : '-'}</td>
               </tr>
             </tbody>
             </table>
@@ -1252,11 +1300,11 @@ function RaportArabDetailContent() {
               الملاحظة
               </div>
               <div style={{ fontSize: '14px', marginBottom: '12px', fontWeight: 'bold' }}>
-              ضعيف جدًا
+              {reportData.mulahazoh || 'ضعيف جدًا'}
               </div>
-              <div style={{ fontSize: '10px', marginTop: '40px', paddingTop: '8px', borderTop: '1px solid #ccc' }}>
-              SERIAL: UAS-SMT-2-24/25-PA-31
-              </div>
+                <div style={{ fontSize: '10px', marginTop: '40px', paddingTop: '8px', borderTop: '1px solid #ccc', fontWeight: 'bold' }}>
+                SERIAL: {reportData.nomorRaport || '-'}
+                </div>
               </td>
               </tr>
             </tbody>

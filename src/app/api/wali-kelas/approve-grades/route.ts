@@ -142,6 +142,16 @@ export async function POST(request: NextRequest) {
       return mapping[type] || type;
     };
 
+    // Helper function to get Mulahazoh based on average
+    const getMulahazoh = (average: number): string => {
+      if (average < 3.5) return 'ضعيف جدّا';
+      if (average < 5.5) return 'ضعيف';
+      if (average < 6.5) return 'مقبول';
+      if (average < 8.0) return 'جيّد';
+      if (average < 9.0) return 'جيّد جدّا';
+      return 'ممتاز';
+    };
+
     // Build nomorRaport mapping: key = `${assessmentType}-${studentId}`, value = nomorRaport
     const nomorRaportMap: { [key: string]: string } = {};
 
@@ -174,10 +184,10 @@ export async function POST(request: NextRequest) {
 
         const assessmentCode = getAssessmentTypeCode(assessmentType);
         const nomorUrut = String(genderCounters[counterKey]).padStart(4, '0');
-        const tahunAjaran = `${schoolYear?.year}/${schoolYear?.year ? schoolYear.year + 1 : ''}`.trim();
-        const semesterNum = semester?.number || 1;
+        const yearNum = parseInt(schoolYear?.year || '0');
+        const tahunAjaranFormatted = `${String(yearNum).slice(-2)}/${String(yearNum + 1).slice(-2)}`;
 
-        const nomorRaport = `${assessmentCode}-${semesterNum}-${tahunAjaran}-${genderCode}-${nomorUrut}`;
+        const nomorRaport = `${assessmentCode}-${tahunAjaranFormatted}-${genderCode}-${nomorUrut}`;
         nomorRaportMap[`${assessmentType}-${student.id}`] = nomorRaport;
       }
     }
@@ -217,6 +227,7 @@ export async function POST(request: NextRequest) {
           });
 
           let averageStudent = 0;
+          let jumlahNilai = 0;
           if (studentAllGrades.length > 0) {
             const numericScores = studentAllGrades
               .map((g) => {
@@ -227,6 +238,7 @@ export async function POST(request: NextRequest) {
             
             if (numericScores.length > 0) {
               averageStudent = numericScores.reduce((a, b) => a + b, 0) / numericScores.length;
+              jumlahNilai = numericScores.reduce((a, b) => a + b, 0);
             }
           }
 
@@ -245,6 +257,10 @@ export async function POST(request: NextRequest) {
             }
           }
 
+          // Round average to 1 decimal place
+          const roundedAverage = Math.round(averageStudent * 10) / 10;
+          const mulahazoh = getMulahazoh(roundedAverage);
+
           const approval = await prisma.nilaiApprove.create({
             data: {
               studentId: grade.studentId,
@@ -262,6 +278,8 @@ export async function POST(request: NextRequest) {
               nazofah: validatedData.nazofah || '',
               averageStudent: averageStudent > 0 ? averageStudent : null,
               averageSubject: averageSubject > 0 ? averageSubject : null,
+              jumlahNilai: jumlahNilai > 0 ? jumlahNilai : null,
+              mulahazoh: mulahazoh || null,
             },
           });
 
