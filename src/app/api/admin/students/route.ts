@@ -42,6 +42,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '10');
     const search = searchParams.get('search') || '';
     const classId = searchParams.get('classId') || '';
+    const semesterId = searchParams.get('semesterId') || '';
 
     const skip = (page - 1) * limit;
 
@@ -57,6 +58,12 @@ export async function GET(request: NextRequest) {
 
     if (classId) {
       where.classId = classId;
+    }
+
+    if (semesterId) {
+      where.class = {
+        semesterId: semesterId,
+      };
     }
 
     const [students, total] = await Promise.all([

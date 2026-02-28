@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
     const semesterId = searchParams.get('semesterId');
     const waliKelasId = searchParams.get('waliKelasId');
     const search = searchParams.get('search') || '';
+    const includeInactive = searchParams.get('includeInactive') === 'true';
 
     // Validation: Check pagination parameters
     if (page < 1) {
@@ -72,6 +73,11 @@ export async function GET(request: NextRequest) {
 
     // Build where clause with validation
     const where: any = {};
+    
+    // By default, only show active classes unless explicitly requested otherwise
+    if (!includeInactive) {
+      where.isActive = true;
+    }
     
     if (levelId && levelId.trim() !== '') {
       where.levelId = levelId;

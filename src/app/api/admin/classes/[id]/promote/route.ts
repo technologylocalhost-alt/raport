@@ -301,6 +301,12 @@ export async function POST(
       createdStudents.push(newStudent);
     }
 
+    // 4. Deaktifkan kelas sumber setelah promosi berhasil
+    await prisma.class.update({
+      where: { id: sourceClassId },
+      data: { isActive: false, updatedAt: new Date() },
+    });
+
     return successResponse(
       {
         promoted: createdStudents.length,
@@ -314,13 +320,14 @@ export async function POST(
           id: sourceClass.id,
           name: sourceClass.name,
           level: sourceClass.level.name,
+          status: 'Kelas telah dinonaktifkan',
         },
         promotiondDetails: {
-          message: 'Data siswa di kelas lama tetap dipertahankan untuk keakuratan history',
+          message: 'Data siswa di kelas lama tetap dipertahankan untuk keakuratan history. Kelas sumber telah dinonaktifkan.',
           orderingMethod: 'Berdasarkan ranking nilai dari tertinggi ke terendah',
         },
       },
-      `Berhasil memproses naik kelas: ${createdStudents.length} siswa duplikat ke ${targetClass.name} (${targetClass.level.name}) dengan nomor urut baru berdasarkan ranking nilai. Data siswa di kelas ${sourceClass.name} tetap dipertahankan.`
+      `Berhasil memproses naik kelas: ${createdStudents.length} siswa duplikat ke ${targetClass.name} (${targetClass.level.name}). Kelas lama "${sourceClass.name}" telah dinonaktifkan.`
     );
   } catch (error) {
     if (error instanceof z.ZodError) {

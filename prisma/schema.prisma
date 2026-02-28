@@ -115,6 +115,7 @@ model Class {
   name         String
   capacity     Int            @default(40)
   waliKelasId  String?
+  isActive     Boolean        @default(true)
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   level        Level          @relation(fields: [levelId], references: [id], onDelete: Cascade)

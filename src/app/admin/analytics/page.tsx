@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Users, GraduationCap, BookOpen, TrendingUp, Filter } from 'lucide-react';
+import { Users, GraduationCap, BookOpen, TrendingUp, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface Stats {
   totalUsers: number;
@@ -26,6 +26,38 @@ interface Class {
   name: string;
 }
 
+interface Semester {
+  id: string;
+  number: number;
+}
+
+interface GradePerClass {
+  classId: string;
+  className: string;
+  levelName: string;
+  totalStudents: number;
+  averageScore: number;
+  students: Array<{
+    id: string;
+    name: string;
+    studentNo: string;
+    averageScore: number;
+  }>;
+}
+
+interface SubjectGrade {
+  subjectId: string;
+  subjectName: string;
+  averageScore: number;
+}
+
+interface SubjectGradesPerClass {
+  classId: string;
+  className: string;
+  levelName: string;
+  subjects: SubjectGrade[];
+}
+
 export default function AnalyticsPage() {
   const router = useRouter();
   const [stats, setStats] = useState<Stats | null>(null);
@@ -37,6 +69,16 @@ export default function AnalyticsPage() {
   const [filterSchoolYear, setFilterSchoolYear] = useState('');
   const [filterLevel, setFilterLevel] = useState('');
   const [filterClass, setFilterClass] = useState('');
+  const [filterSemester, setFilterSemester] = useState('');
+  const [semesters, setSemesters] = useState<Semester[]>([]);
+  
+  const [gradesPerClass, setGradesPerClass] = useState<GradePerClass[]>([]);
+  const [isLoadingGrades, setIsLoadingGrades] = useState(false);
+  const [expandedStudentClasses, setExpandedStudentClasses] = useState<Set<string>>(new Set());
+  
+  const [gradesPerSubject, setGradesPerSubject] = useState<SubjectGradesPerClass[]>([]);
+  const [isLoadingSubjectGrades, setIsLoadingSubjectGrades] = useState(false);
+  const [expandedSubjectClasses, setExpandedSubjectClasses] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const user = localStorage.getItem('user');
@@ -47,28 +89,103 @@ export default function AnalyticsPage() {
 
     fetchFilterOptions();
     fetchStats();
-  }, [router, filterSchoolYear, filterLevel, filterClass]);
+    fetchGradesPerClass();
+    fetchGradesPerSubject();
+  }, [router, filterSchoolYear, filterLevel, filterClass, filterSemester]);
 
   async function fetchFilterOptions() {
     try {
       const token = localStorage.getItem('accessToken');
       const headers = { 'Authorization': `Bearer ${token}` };
 
-      const [yearsRes, levelsRes, classesRes] = await Promise.all([
+      const [yearsRes, levelsRes, classesRes, semestersRes] = await Promise.all([
         fetch('/api/admin/school-years?limit=100', { headers }),
         fetch('/api/admin/levels?limit=100', { headers }),
         fetch('/api/admin/classes?limit=100', { headers }),
+        fetch('/api/admin/semesters?limit=100', { headers }),
       ]);
 
       const yearsData = await yearsRes.json();
       const levelsData = await levelsRes.json();
       const classesData = await classesRes.json();
+      const semestersData = await semestersRes.json();
 
       setSchoolYears(yearsData.data || []);
       setLevels(levelsData.data || []);
       setClasses(classesData.data || []);
+      setSemesters(semestersData.data || []);
     } catch (error) {
       console.error('Error fetching filter options:', error);
+    }
+  }
+
+  const toggleStudentClassExpand = (classId: string) => {
+    const newExpanded = new Set(expandedStudentClasses);
+    if (newExpanded.has(classId)) {
+      newExpanded.delete(classId);
+    } else {
+      newExpanded.add(classId);
+    }
+    setExpandedStudentClasses(newExpanded);
+  };
+
+  const toggleSubjectClassExpand = (classId: string) => {
+    const newExpanded = new Set(expandedSubjectClasses);
+    if (newExpanded.has(classId)) {
+      newExpanded.delete(classId);
+    } else {
+      newExpanded.add(classId);
+    }
+    setExpandedSubjectClasses(newExpanded);
+  };
+
+  async function fetchGradesPerSubject() {
+    try {
+      setIsLoadingSubjectGrades(true);
+      const token = localStorage.getItem('accessToken');
+      const headers = { 'Authorization': `Bearer ${token}` };
+
+      const params = new URLSearchParams();
+      params.append('limit', '1000');
+      if (filterSchoolYear) params.append('schoolYearId', filterSchoolYear);
+      if (filterLevel) params.append('levelId', filterLevel);
+      if (filterSemester) params.append('semesterId', filterSemester);
+
+      const res = await fetch(`/api/admin/grades/per-subject?${params}`, { headers });
+      const data = await res.json();
+      
+      if (data.success) {
+        setGradesPerSubject(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching grades per subject:', error);
+    } finally {
+      setIsLoadingSubjectGrades(false);
+    }
+  }
+
+  async function fetchGradesPerClass() {
+    try {
+      setIsLoadingGrades(true);
+      const token = localStorage.getItem('accessToken');
+      const headers = { 'Authorization': `Bearer ${token}` };
+
+      const params = new URLSearchParams();
+      params.append('limit', '1000');
+      if (filterSchoolYear) params.append('schoolYearId', filterSchoolYear);
+      if (filterLevel) params.append('levelId', filterLevel);
+      if (filterSemester) params.append('semesterId', filterSemester);
+
+      const res = await fetch(`/api/admin/grades/per-class?${params}`, { headers });
+      const data = await res.json();
+      
+      if (data.success) {
+        setGradesPerClass(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching grades per class:', error);
+    } finally {
+      setIsLoadingGrades(false);
     }
   }
 
@@ -87,6 +204,7 @@ export default function AnalyticsPage() {
       if (filterSchoolYear) params.append('schoolYearId', filterSchoolYear);
       if (filterLevel) params.append('levelId', filterLevel);
       if (filterClass) params.append('classId', filterClass);
+      if (filterSemester) params.append('semesterId', filterSemester);
 
       // Fetch statistics with filters
       const [usersRes, studentsRes, subjectsRes, classesRes] = await Promise.all([
@@ -195,16 +313,36 @@ export default function AnalyticsPage() {
               ))}
             </select>
           </div>
+
+          {/* Filter Semester */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Semester
+            </label>
+            <select
+              value={filterSemester}
+              onChange={(e) => setFilterSemester(e.target.value)}
+              className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium text-sm sm:text-base text-gray-900 bg-white"
+            >
+              <option value="">-- Semua Semester --</option>
+              {semesters.map((sem) => (
+                <option key={sem.id} value={sem.id}>
+                  Semester {sem.number}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Reset Button */}
-        {(filterSchoolYear || filterLevel || filterClass) && (
+        {(filterSchoolYear || filterLevel || filterClass || filterSemester) && (
           <div className="pt-2">
             <button
               onClick={() => {
                 setFilterSchoolYear('');
                 setFilterLevel('');
                 setFilterClass('');
+                setFilterSemester('');
               }}
               className="text-sm font-medium text-blue-600 hover:text-blue-700 underline"
             >
@@ -399,39 +537,152 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Detailed Statistics */}
-      <div className="bg-white p-4 sm:p-6 rounded-lg shadow-sm border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-900 mb-6">Statistik Detail</h2>
+      {/* Nilai Siswa Per Kelas Section */}
+      <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-6">Nilai Siswa Per Kelas</h2>
         
-        {stats && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
-              <p className="text-xs sm:text-sm text-blue-700 font-medium mb-2">Rata-rata Siswa per Kelas</p>
-              <p className="text-2xl sm:text-3xl font-bold text-blue-600">
-                {stats.totalClasses > 0 ? Math.round(stats.totalStudents / stats.totalClasses) : 0}
-              </p>
-            </div>
+        {isLoadingGrades ? (
+          <div className="py-10 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+            <p className="text-gray-600 text-sm">Memuat data nilai...</p>
+          </div>
+        ) : gradesPerClass.length === 0 ? (
+          <div className="py-10 text-center text-gray-500">
+            <p>Tidak ada data nilai untuk filter yang dipilih</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {gradesPerClass.map((classData) => (
+              <div key={classData.classId} className="border border-gray-200 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => toggleStudentClassExpand(classData.classId)}
+                  className="w-full px-4 py-4 hover:bg-gray-50 flex items-center justify-between transition-colors"
+                >
+                  <div className="flex-1 text-left">
+                    <h3 className="text-base font-semibold text-gray-900">{classData.className}</h3>
+                    <p className="text-xs text-gray-500">{classData.levelName} • {classData.totalStudents} Siswa</p>
+                  </div>
+                  <div className="flex items-center gap-6">
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-blue-600">{classData.averageScore.toFixed(2)}</p>
+                      <p className="text-xs text-gray-500">Rata-rata Nilai</p>
+                    </div>
+                    {expandedStudentClasses.has(classData.classId) ? (
+                      <ChevronUp className="text-gray-600" size={20} />
+                    ) : (
+                      <ChevronDown className="text-gray-600" size={20} />
+                    )}
+                  </div>
+                </button>
 
-            <div className="p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg">
-              <p className="text-xs sm:text-sm text-green-700 font-medium mb-2">Rata-rata Mata Pelajaran per Kelas</p>
-              <p className="text-2xl sm:text-3xl font-bold text-green-600">
-                {stats.totalClasses > 0 ? Math.round(stats.totalSubjects / stats.totalClasses) : 0}
-              </p>
-            </div>
+                {/* Student List - Collapsible */}
+                {expandedStudentClasses.has(classData.classId) && (
+                  <div className="border-t border-gray-200 px-4 py-4">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-200 bg-gray-50">
+                            <th className="px-3 py-2 text-left font-medium text-gray-700">No</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-700">Nama Siswa</th>
+                            <th className="px-3 py-2 text-center font-medium text-gray-700">No. Siswa</th>
+                            <th className="px-3 py-2 text-right font-medium text-gray-700">Nilai</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {classData.students.map((student, idx) => (
+                            <tr key={student.id} className="border-b border-gray-100 hover:bg-gray-50">
+                              <td className="px-3 py-2 text-gray-600">{idx + 1}</td>
+                              <td className="px-3 py-2 text-gray-900 font-medium">{student.name}</td>
+                              <td className="px-3 py-2 text-center text-gray-600">{student.studentNo}</td>
+                              <td className="px-3 py-2 text-right">
+                                <span className={`inline-block px-2 py-1 rounded font-semibold text-xs ${
+                                  student.averageScore >= 80 ? 'bg-green-100 text-green-700' :
+                                  student.averageScore >= 70 ? 'bg-blue-100 text-blue-700' :
+                                  student.averageScore >= 60 ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-red-100 text-red-700'
+                                }`}>
+                                  {student.averageScore.toFixed(2)}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
-            <div className="p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg">
-              <p className="text-xs sm:text-sm text-purple-700 font-medium mb-2">Total Entitas Sistem</p>
-              <p className="text-2xl sm:text-3xl font-bold text-purple-600">
-                {stats.totalUsers + stats.totalStudents + stats.totalSubjects + stats.totalClasses}
-              </p>
-            </div>
+      {/* Nilai Rata-rata Mata Pelajaran Per Kelas Section */}
+      <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-6">Nilai Rata-rata Mata Pelajaran Per Kelas</h2>
+        
+        {isLoadingSubjectGrades ? (
+          <div className="py-10 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+            <p className="text-gray-600 text-sm">Memuat data nilai mata pelajaran...</p>
+          </div>
+        ) : gradesPerSubject.length === 0 ? (
+          <div className="py-10 text-center text-gray-500">
+            <p>Tidak ada data nilai mata pelajaran untuk filter yang dipilih</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {gradesPerSubject.map((classData) => (
+              <div key={classData.classId} className="border border-gray-200 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => toggleSubjectClassExpand(classData.classId)}
+                  className="w-full px-4 py-4 hover:bg-gray-50 flex items-center justify-between transition-colors"
+                >
+                  <div className="flex-1 text-left">
+                    <h3 className="text-base font-semibold text-gray-900">{classData.className}</h3>
+                    <p className="text-xs text-gray-500">{classData.levelName}</p>
+                  </div>
+                  {expandedSubjectClasses.has(classData.classId) ? (
+                    <ChevronUp className="text-gray-600" size={20} />
+                  ) : (
+                    <ChevronDown className="text-gray-600" size={20} />
+                  )}
+                </button>
 
-            <div className="p-4 bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg">
-              <p className="text-xs sm:text-sm text-orange-700 font-medium mb-2">Data Completion</p>
-              <p className="text-2xl sm:text-3xl font-bold text-orange-600">
-                {stats.totalStudents > 0 && stats.totalClasses > 0 ? '✓ 100%' : '⚠ Incomplete'}
-              </p>
-            </div>
+                {/* Subject Grades Table - Collapsible */}
+                {expandedSubjectClasses.has(classData.classId) && (
+                  <div className="border-t border-gray-200 px-4 py-4">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-200 bg-gray-50">
+                            <th className="px-3 py-2 text-left font-medium text-gray-700">Mata Pelajaran</th>
+                            <th className="px-3 py-2 text-right font-medium text-gray-700">Nilai Rata-rata</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {classData.subjects.map((subject, idx) => (
+                            <tr key={subject.subjectId} className="border-b border-gray-100 hover:bg-gray-50">
+                              <td className="px-3 py-2 text-gray-900 font-medium">{subject.subjectName}</td>
+                              <td className="px-3 py-2 text-right">
+                                <span className={`inline-block px-3 py-1 rounded font-semibold text-xs ${
+                                  subject.averageScore >= 80 ? 'bg-green-100 text-green-700' :
+                                  subject.averageScore >= 70 ? 'bg-blue-100 text-blue-700' :
+                                  subject.averageScore >= 60 ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-red-100 text-red-700'
+                                }`}>
+                                  {subject.averageScore.toFixed(2)}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>

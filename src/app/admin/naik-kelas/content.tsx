@@ -33,6 +33,7 @@ interface ClassItem {
   schoolYear: { id: string; year: string };
   semester: { id: string; number: number };
   waliKelas?: { id: string; name: string } | null;
+  isActive?: boolean;
   _count?: { students: number };
 }
 
@@ -339,11 +340,13 @@ export function NaikKelasContent() {
   }
 
   // ── Derived ──
-  const filteredClasses = classes.filter(
-    (c) =>
-      c.name.toLowerCase().includes(classSearch.toLowerCase()) ||
-      c.level.name.toLowerCase().includes(classSearch.toLowerCase())
-  );
+  const filteredClasses = classes
+    .filter((c) => c.isActive !== false) // Filter hanya kelas aktif
+    .filter(
+      (c) =>
+        c.name.toLowerCase().includes(classSearch.toLowerCase()) ||
+        c.level.name.toLowerCase().includes(classSearch.toLowerCase())
+    );
 
   const selectedSource = classes.find((c) => c.id === selectedSourceClassId);
   const selectedTarget = targetClasses.find((c) => c.id === selectedTargetClassId);
