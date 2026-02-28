@@ -17,6 +17,7 @@ import {
   Clock,
   User,
   ChevronDown,
+  TrendingUp,
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -56,6 +57,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     }
   }, []);
 
+  // Full-width pages (no sidebar/header) for print/preview pages
+  const isFullWidthPage = pathname.includes('/reports/detail') ||
+                          pathname.includes('/raport-arab/cover-preview') ||
+                          pathname.includes('/raport-arab/detail') ||
+                          pathname.includes('/raport-arab/bulk-review') ||
+                          pathname.includes('/raport-arab/bulk-download');
+
   const menuItems = [
     {
       title: 'Dashboard',
@@ -75,8 +83,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     {
       title: 'Penilaian',
       items: [
-        { title: 'Penilian', icon: Users, href: '/admin/raports' },
+        { title: 'Penilaian', icon: Users, href: '/admin/raports' },
         { title: 'Siswa', icon: BarChart3, href: '/admin/students' },
+        { title: 'Raport', icon: BookOpen, href: '/admin/raport-sampul' },
+        { title: 'Naik Kelas', icon: TrendingUp, href: '/admin/naik-kelas' },
       ],
     },
     {
@@ -135,15 +145,23 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden">
+      {/* Full-width pages render without sidebar/header */}
+      {isFullWidthPage && (
+        <div className="flex-1 overflow-auto w-full">
+          {children}
+        </div>
+      )}
+
       {/* Mobile overlay backdrop */}
-      {sidebarOpen && isMobile && (
+      {!isFullWidthPage && sidebarOpen && isMobile && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar - hidden on full-width pages */}
+      {!isFullWidthPage && (
       <aside
         className={`${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
@@ -215,8 +233,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           ))}
         </nav>
       </aside>
+      )}
 
-      {/* Main Content */}
+      {/* Main Content - hidden on full-width pages */}
+      {!isFullWidthPage && (
       <div className="flex-1 flex flex-col overflow-hidden w-full">
         {/* Top Bar */}
         <header className="bg-white shadow-sm border-b border-gray-200 px-3 sm:px-6 py-3 sm:py-4">
@@ -300,6 +320,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           </div>
         </main>
       </div>
+      )}
     </div>
   );
 }

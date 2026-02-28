@@ -46,12 +46,12 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
     const levelId = searchParams.get('levelId');
+    const semesterId = searchParams.get('semesterId');
     const search = searchParams.get('search') || '';
 
     const skip = (page - 1) * limit;
 
-    const where = {
-      ...(levelId && { levelId }),
+    let where: any = {
       ...(search && {
         OR: [
           { name: { contains: search, mode: 'insensitive' as const } },
@@ -59,6 +59,20 @@ export async function GET(request: NextRequest) {
         ],
       }),
     };
+
+    // If semesterId is provided, get levels that have classes in that semester
+    if (semesterId) {
+      const levelsInSemester = await prisma.class.findMany({
+        where: { semesterId },
+        distinct: ['levelId'],
+        select: { levelId: true },
+      });
+      
+      const levelIds = levelsInSemester.map(c => c.levelId);
+      where.levelId = { in: levelIds };
+    } else if (levelId) {
+      where.levelId = levelId;
+    }
 
     const [subjects, total] = await Promise.all([
       prisma.subject.findMany({

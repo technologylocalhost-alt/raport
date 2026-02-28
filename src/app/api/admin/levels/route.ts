@@ -31,6 +31,9 @@ const levelSchema = z.object({
   schoolId: z.string().min(1, 'School ID is required'),
   name: z.string().min(1, 'Level name is required'),
   code: z.string().min(1, 'Level code is required'),
+  order: z.number().int().min(0).optional().default(0),
+  levelCount: z.number().int().min(0).optional().default(0),
+  description: z.string().optional().default(''),
 });
 
 /**
@@ -64,7 +67,7 @@ export async function GET(request: NextRequest) {
         },
         skip,
         take: limit,
-        orderBy: { createdAt: 'asc' },
+        orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
       }),
       prisma.level.count({ where }),
     ]);

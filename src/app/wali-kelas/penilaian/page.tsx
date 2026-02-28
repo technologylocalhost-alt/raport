@@ -447,7 +447,22 @@ export default function PenilaianPage() {
       .filter((val): val is number => typeof val === 'number' && !isNaN(val));
     
     if (values.length === 0) return 0;
-    return values.reduce((a, b) => a + b, 0) / values.length;
+    const average = values.reduce((a, b) => a + b, 0) / values.length;
+    return Math.round(average * 10) / 10;
+  };
+
+  // Calculate sum of all grades for each student
+  const getStudentGradeSum = (row: GradesSummary): number => {
+    const columns = getAllColumns();
+    const sum = columns.reduce((total, col) => {
+      const val = row[col];
+      const num = typeof val === 'string' ? parseFloat(val) : val;
+      if (typeof num === 'number' && !isNaN(num)) {
+        return total + num;
+      }
+      return total;
+    }, 0);
+    return sum;
   };
 
   // Calculate average for each column (subject)
@@ -461,6 +476,16 @@ export default function PenilaianPage() {
     
     if (values.length === 0) return 0;
     return values.reduce((a, b) => a + b, 0) / values.length;
+  };
+
+  // Get Mulahazoh (description) based on average score
+  const getMulahazoh = (average: number): string => {
+    if (average < 3.5) return 'ضعيف جدّا';
+    if (average < 5.5) return 'ضعيف';
+    if (average < 6.5) return 'مقبول';
+    if (average < 8.0) return 'جيّد';
+    if (average < 9.0) return 'جيّد جدّا';
+    return 'ممتاز';
   };
 
   if (isLoading) {
@@ -671,7 +696,9 @@ export default function PenilaianPage() {
                           {type}
                         </th>
                       ))}
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700 text-sm bg-purple-50">JUMLAH NILAI</th>
                     <th className="px-4 py-3 text-center font-semibold text-gray-700 text-sm bg-blue-50">RATA-RATA SISWA</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700 text-sm bg-green-50">MULAHAZOH</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -729,8 +756,14 @@ export default function PenilaianPage() {
                           {row[type] || '—'}
                         </td>
                       ))}
+                    <td className="px-4 py-3 text-center font-semibold text-purple-600 text-sm bg-purple-50">
+                      {getStudentGradeSum(row).toFixed(2)}
+                    </td>
                     <td className="px-4 py-3 text-center font-semibold text-blue-600 text-sm bg-blue-50">
                       {getStudentAverage(row).toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 text-center font-semibold text-gray-900 text-sm bg-green-50">
+                      {getMulahazoh(getStudentAverage(row))}
                     </td>
                     </tr>
                   );
@@ -869,11 +902,19 @@ export default function PenilaianPage() {
                           ))}
                       </div>
 
-                      {/* Average */}
-                      <div className="mt-4 pt-4 border-t border-gray-200">
+                      {/* Jumlah Nilai dan Rata-rata */}
+                      <div className="mt-4 pt-4 border-t border-gray-200 space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-semibold text-gray-700">Jumlah Nilai</span>
+                          <span className="text-lg font-bold text-purple-600">{getStudentGradeSum(row).toFixed(2)}</span>
+                        </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm font-semibold text-gray-700">Rata-rata</span>
                           <span className="text-lg font-bold text-blue-600">{getStudentAverage(row).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-semibold text-gray-700">Mulahazoh</span>
+                          <span className="text-lg font-bold text-gray-900">{getMulahazoh(getStudentAverage(row))}</span>
                         </div>
                       </div>
                     </div>

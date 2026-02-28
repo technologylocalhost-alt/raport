@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
     const filterClassName = searchParams.get('class') || '';
     const filterSubject = searchParams.get('subject') || '';
     const filterStudent = searchParams.get('student') || '';
+    const filterAssessmentType = searchParams.get('assessmentType') || '';
 
     const skip = (page - 1) * limit;
 
@@ -125,6 +126,10 @@ export async function GET(request: NextRequest) {
           mode: 'insensitive',
         },
       };
+    }
+
+    if (filterAssessmentType) {
+      where.assessmentType = filterAssessmentType;
     }
 
     // Fetch total count

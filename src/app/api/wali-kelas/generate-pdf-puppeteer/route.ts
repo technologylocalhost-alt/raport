@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
   let browser = null;
   try {
     const data = await request.json();
-    const { student, subjectScores, semester, schoolYear } = data;
+    const { student, subjectScores, semester, schoolYear, suluk, muazobah, nazofah, mulahazoh, nomorRaport } = data;
 
     if (!student || !subjectScores) {
       return NextResponse.json(
@@ -467,7 +467,7 @@ export async function POST(request: NextRequest) {
 
                 <!-- Serial Number -->
                 <div class="cover-serial-section">
-                    <div class="cover-serial-box">UAS-SMT-2-24/25-PA-1</div>
+                    <div class="cover-serial-box">${nomorRaport || '-'}</div>
                 </div>
             </div>
         </div>
@@ -531,18 +531,18 @@ export async function POST(request: NextRequest) {
                     <tbody>
                         <tr>
                             <th>السلوك</th>
-                            <td class="center">٨</td>
-                            <td class="center">ثمان</td>
+                            <td class="center">${suluk ? toArabicNumerals(suluk) : '-'}</td>
+                            <td class="center">${suluk ? scoreToArabicText(parseFloat(suluk)) : '-'}</td>
                         </tr>
                         <tr>
                             <th>المواظبة</th>
-                            <td class="center">٨</td>
-                            <td class="center">ثمان</td>
+                            <td class="center">${muazobah ? toArabicNumerals(muazobah) : '-'}</td>
+                            <td class="center">${muazobah ? scoreToArabicText(parseFloat(muazobah)) : '-'}</td>
                         </tr>
                         <tr>
                             <th>النظافة</th>
-                            <td class="center">٨</td>
-                            <td class="center">ثمان</td>
+                            <td class="center">${nazofah ? toArabicNumerals(nazofah) : '-'}</td>
+                            <td class="center">${nazofah ? scoreToArabicText(parseFloat(nazofah)) : '-'}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -579,10 +579,10 @@ export async function POST(request: NextRequest) {
                                     الملاحظة
                                 </div>
                                 <div style="font-size: 14px; margin-bottom: 12px; font-weight: bold;">
-                                    ضعيف جدًا
+                                    ${mulahazoh || '-'}
                                 </div>
                                 <div style="font-size: 10px; margin-top: 40px; padding-top: 8px; border-top: 1px solid #ccc;">
-                                    SERIAL: UAS-SMT-2-24/25-PA-31
+                                    ${nomorRaport || '-'}
                                 </div>
                             </td>
                         </tr>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, Users, X, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, Users, X, AlertCircle, CheckCircle, TrendingUp } from 'lucide-react';
 
 interface Level {
   id: string;
@@ -658,6 +658,13 @@ export default function ClassesPage() {
                   </td>
                   <td className="px-6 py-4 text-sm text-center">
                     <div className="flex justify-center gap-2">
+                      <a
+                        href={`/admin/naik-kelas?classId=${classData.id}`}
+                        className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors inline-flex"
+                        title="Naik Kelas"
+                      >
+                        <TrendingUp size={18} />
+                      </a>
                       <button
                         onClick={() => handleEdit(classData)}
                         className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"

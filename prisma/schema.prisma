@@ -58,6 +58,9 @@ model Level {
   schoolId      String
   name          String
   code          String
+  order         Int            @default(0)
+  levelCount    Int            @default(0)
+  description   String?        @default("")
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   classes       Class[]
@@ -112,6 +115,7 @@ model Class {
   name         String
   capacity     Int            @default(40)
   waliKelasId  String?
+  isActive     Boolean        @default(true)
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   level        Level          @relation(fields: [levelId], references: [id], onDelete: Cascade)
@@ -266,6 +270,8 @@ model NilaiApprove {
   nazofah        String?
   averageStudent Float?
   averageSubject Float?
+  jumlahNilai    Float?
+  mulahazoh      String?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   competency     Competency     @relation("CompetencyNilaiApprove", fields: [competencyId], references: [id], onDelete: Cascade)

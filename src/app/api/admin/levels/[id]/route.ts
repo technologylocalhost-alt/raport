@@ -30,6 +30,9 @@ async function verifyAdmin(req: NextRequest) {
 const levelSchema = z.object({
   name: z.string().min(1, 'Level name is required').optional(),
   code: z.string().min(1, 'Level code is required').optional(),
+  order: z.number().int().min(0).optional(),
+  levelCount: z.number().int().min(0).optional(),
+  description: z.string().optional(),
 });
 
 /**
