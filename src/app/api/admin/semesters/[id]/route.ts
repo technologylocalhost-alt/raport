@@ -29,6 +29,8 @@ async function verifyAdmin(req: NextRequest) {
 
 const semesterUpdateSchema = z.object({
   number: z.number().min(1, 'Nomor semester harus 1 atau 2').max(2).optional(),
+  semesterLabel: z.string().optional().nullable(),
+  semesterLabelArabic: z.string().optional().nullable(),
   startDate: z.string().min(1, 'Tanggal mulai harus diisi').optional(),
   endDate: z.string().min(1, 'Tanggal selesai harus diisi').optional(),
   isActive: z.boolean().optional(),
@@ -124,6 +126,9 @@ export async function PUT(
 
     const updateData: any = {};
     if (validatedData.number !== undefined) updateData.number = validatedData.number;
+    if (validatedData.semesterLabelArabic !== undefined) {
+      updateData.semesterLabelArabic = validatedData.semesterLabelArabic || null;
+    }
     if (validatedData.startDate) updateData.startDate = new Date(validatedData.startDate);
     if (validatedData.endDate) updateData.endDate = new Date(validatedData.endDate);
     if (validatedData.isActive !== undefined) updateData.isActive = validatedData.isActive;

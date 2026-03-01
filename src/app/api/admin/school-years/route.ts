@@ -30,6 +30,8 @@ async function verifyAdmin(req: NextRequest) {
 const schoolYearSchema = z.object({
   schoolId: z.string().min(1, 'School ID is required'),
   year: z.string().regex(/^\d{4}\/\d{4}$/, 'Year format must be YYYY/YYYY'),
+  tahunAkademik: z.string().optional().nullable(),
+  tahunAkademikArabic: z.string().optional().nullable(),
   startDate: z.string().datetime(),
   endDate: z.string().datetime(),
   isActive: z.boolean().optional(),
@@ -58,7 +60,13 @@ export async function GET(request: NextRequest) {
             select: { id: true, name: true },
           },
           semesters: {
-            select: { id: true, number: true, isActive: true },
+            select: { 
+              id: true, 
+              number: true, 
+              semesterLabel: true,
+              semesterLabelArabic: true,
+              isActive: true 
+            },
           },
         },
         skip,
@@ -97,6 +105,8 @@ export async function POST(request: NextRequest) {
       data: {
         schoolId: validatedData.schoolId,
         year: validatedData.year,
+        tahunAkademik: validatedData.tahunAkademik || null,
+        tahunAkademikArabic: validatedData.tahunAkademikArabic || null,
         startDate: new Date(validatedData.startDate),
         endDate: new Date(validatedData.endDate),
         isActive: validatedData.isActive || false,

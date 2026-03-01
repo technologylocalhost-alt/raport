@@ -29,6 +29,8 @@ async function verifyAdmin(req: NextRequest) {
 
 const schoolYearSchema = z.object({
   year: z.string().regex(/^\d{4}\/\d{4}$/, 'Year format must be YYYY/YYYY').optional(),
+  tahunAkademik: z.string().optional().nullable(),
+  tahunAkademikArabic: z.string().optional().nullable(),
   startDate: z.string().datetime().optional(),
   endDate: z.string().datetime().optional(),
   isActive: z.boolean().optional(),
@@ -58,6 +60,8 @@ export async function GET(
             id: true,
             number: true,
             schoolYearId: true,
+            semesterLabel: true,
+            semesterLabelArabic: true,
             startDate: true,
             endDate: true,
             isActive: true,
@@ -120,14 +124,19 @@ export async function PUT(
       });
     }
 
+    // Build update data object, only include fields that have values
+    const updateData: any = {};
+    if (validatedData.year !== undefined) updateData.year = validatedData.year;
+    if (validatedData.tahunAkademikArabic !== undefined) {
+      updateData.tahunAkademikArabic = validatedData.tahunAkademikArabic || null;
+    }
+    if (validatedData.startDate !== undefined) updateData.startDate = new Date(validatedData.startDate);
+    if (validatedData.endDate !== undefined) updateData.endDate = new Date(validatedData.endDate);
+    if (validatedData.isActive !== undefined) updateData.isActive = validatedData.isActive;
+
     const schoolYear = await prisma.schoolYear.update({
       where: { id },
-      data: {
-        year: validatedData.year,
-        startDate: validatedData.startDate ? new Date(validatedData.startDate) : undefined,
-        endDate: validatedData.endDate ? new Date(validatedData.endDate) : undefined,
-        isActive: validatedData.isActive,
-      },
+      data: updateData,
       include: {
         school: true,
         semesters: true,

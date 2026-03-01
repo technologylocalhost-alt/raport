@@ -14,6 +14,23 @@ interface Student {
 interface ClassData {
   id: string;
   name: string;
+  semesterId?: string;
+  schoolYearId?: string;
+}
+
+interface SemesterData {
+  id: string;
+  number: number;
+  semesterLabel?: string;
+  semesterLabelArabic?: string;
+  schoolYearId: string;
+}
+
+interface SchoolYearData {
+  id: string;
+  year: string;
+  tahunAkademik?: string;
+  tahunAkademikArabic?: string;
 }
 
 function CoverPreviewContent() {
@@ -25,6 +42,8 @@ function CoverPreviewContent() {
 
   const [student, setStudent] = useState<Student | null>(null);
   const [classData, setClassData] = useState<ClassData | null>(null);
+  const [semesterData, setSemesterData] = useState<SemesterData | null>(null);
+  const [schoolYearData, setSchoolYearData] = useState<SchoolYearData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [allStudents, setAllStudents] = useState<Student[]>([]);
@@ -56,10 +75,39 @@ function CoverPreviewContent() {
         if (classResponse.ok) {
           const classDataJson = await classResponse.json();
           if (classDataJson.success) {
-            setClassData({
+            const classDataResult = {
               id: classDataJson.data.id,
               name: classDataJson.data.name || 'N/A',
-            });
+              semesterId: classDataJson.data.semesterId,
+              schoolYearId: classDataJson.data.schoolYearId,
+            };
+            setClassData(classDataResult);
+            
+            // Fetch semester data if semesterId exists
+            if (classDataJson.data.semesterId) {
+              const semesterResponse = await fetch(`/api/admin/semesters/${classDataJson.data.semesterId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (semesterResponse.ok) {
+                const semesterDataJson = await semesterResponse.json();
+                if (semesterDataJson.success) {
+                  setSemesterData(semesterDataJson.data);
+                }
+              }
+            }
+            
+            // Fetch school year data if schoolYearId exists
+            if (classDataJson.data.schoolYearId) {
+              const schoolYearResponse = await fetch(`/api/admin/school-years/${classDataJson.data.schoolYearId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (schoolYearResponse.ok) {
+                const schoolYearDataJson = await schoolYearResponse.json();
+                if (schoolYearDataJson.success) {
+                  setSchoolYearData(schoolYearDataJson.data);
+                }
+              }
+            }
           }
         }
 
@@ -253,13 +301,13 @@ function CoverPreviewContent() {
           width: 215mm;
           height: 330mm;
           background: white;
-          font-size: 11px;
-          line-height: 1.2;
+          font-size: 13px;
+          line-height: 1.3;
           direction: rtl;
           position: relative;
-          overflow: auto;
+          overflow: hidden;
           font-family: 'Amiri', 'Traditional Arabic', 'Arial Unicode MS', serif;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.12);
         }
 
         @media (max-width: 640px) {
@@ -302,29 +350,33 @@ function CoverPreviewContent() {
 
         .cover-header-section {
           text-align: center;
-          margin-bottom: 8mm;
-          padding-bottom: 8px;
+          margin-bottom: 6mm;
+          padding-bottom: 0;
         }
 
         .cover-institution-main {
-          font-size: 26px;
+          font-size: 18px;
           font-weight: bold;
           color: #1a1a1a;
-          margin-bottom: 8px;
-          line-height: 1.4;
+          margin-bottom: 6px;
+          line-height: 1.3;
+          direction: rtl;
         }
 
         .cover-institution-sub {
-          font-size: 16px;
+          font-size: 13px;
           color: #333;
-          margin-bottom: 6px;
+          margin-bottom: 4px;
           font-weight: 500;
+          direction: rtl;
         }
 
         .cover-institution-location {
-          font-size: 11px;
-          color: #666;
+          font-size: 24px;
+          color: #1b025b;
           margin-bottom: 0;
+          direction: rtl;
+          font-weight: 700;
         }
 
         .cover-logo-section {
@@ -332,97 +384,130 @@ function CoverPreviewContent() {
           flex-direction: column;
           justify-content: center;
           align-items: center;
-          gap: 8px;
+          gap: 12px;
           margin-bottom: 10mm;
           width: 100%;
         }
 
-        .cover-logo-section img {
-          max-width: 90px;
+        .cover-logo-kmi {
+          max-width: 600px;
           height: auto;
           object-fit: contain;
+          margin-top: 14mm;
+        }
+
+        .cover-logo-mahad {
+          max-width: 380px;
+          height: auto;
+          object-fit: contain;
+          margin-top: 0mm;
         }
 
         .cover-title-section {
           text-align: center;
-          margin: 10mm 0 8mm 0;
+          margin: 6mm 0 12mm 0;
         }
 
         .cover-title-image {
-          max-width: 180px;
+          max-width: 400px;
           height: auto;
           object-fit: contain;
-          margin-bottom: 6px;
+          margin-bottom: 46px;
+
         }
 
         .cover-semester-info {
           text-align: center;
-          font-size: 12px;
-          color: #555;
-          margin-bottom: 4px;
-          line-height: 1.2;
+          font-size: 18px;
+          color: #000000;
+          margin-bottom: 15px;
+          line-height: 1.3;
+          font-weight: 700;
+          direction: rtl;
         }
 
         .cover-year-info {
           text-align: center;
-          font-size: 11px;
-          color: #666;
-          margin-bottom: 10mm;
+          font-size: 16px;
+          color: #000000;
+          margin-bottom: 16mm;
+          line-height: 1.4;
+          direction: rtl;
+          font-weight: 600;
         }
 
         .cover-student-info {
-          background: white;
-          padding: 15px 20px;
+          background: transparent;
+          padding: 0;
           width: 100%;
           font-size: 13px;
-          margin: 0 auto 15mm auto;
+          margin: 0 auto 14mm auto;
           max-width: 100%;
+          border: none;
+          border-radius: 0;
         }
 
         .cover-info-row {
           display: flex;
-          justify-content: flex-start;
-          align-items: center;
-          margin: 10px 0;
+          width: 100%;
+          margin: 0;
           padding: 8px 0;
-          border-bottom: 1px solid #ddd;
+          border-bottom: none;
+          align-items: center;
+          direction: rtl;
+          justify-content: space-between;
+        }
+
+        .cover-info-label {
+          flex: 0 0 auto;
+          font-weight: 500;
+          text-align: left;
+          color: #333;
+          font-size: 13px;
+          direction: rtl;
+          padding: 0;
+          vertical-align: middle;
+          margin-left: 16px;
         }
 
         .cover-info-row:last-child {
           border-bottom: none;
         }
 
-        .cover-info-label {
-          font-weight: bold;
+        .cover-info-value {
+          flex: 1;
           text-align: right;
-          flex: 0 0 35%;
-          padding-right: 15px;
+          font-weight: 600;
           color: #1a1a1a;
           font-size: 13px;
+          padding: 0;
+          vertical-align: middle;
+          white-space: normal;
+          direction: ltr;
         }
-
-        .cover-info-value {
-          text-align: left;
-          flex: 1;
-          font-weight: 500;
+        
+        .cover-info-value::after {
+          content: ':';
+          margin: 0 8px;
           color: #333;
-          font-size: 13px;
+          font-weight: 600;
         }
 
         .cover-serial-section {
           text-align: center;
           margin-top: auto;
-          padding-top: 5mm;
+          padding-top: 8mm;
         }
 
         .cover-serial-box {
-          border: 1px solid #333;
+          border: 2px solid #333;
           display: inline-block;
-          padding: 6px 16px;
+          padding: 8px 18px;
           font-family: 'Courier New', monospace;
-          font-size: 11px;
-          font-weight: bold;
-          color: #333;
+          font-size: 12px;
+          font-weight: 600;
+          color: #1a1a1a;
+          background: #fafafa;
         }
 
         .toolbar {
@@ -627,8 +712,8 @@ function CoverPreviewContent() {
             <div className="cover-content">
               {/* Logo Section */}
               <div className="cover-logo-section">
-                <img src="/KMI.jpg" alt="KMI Logo" />
-                <img src="/mahad.png" alt="Mahad Logo" />
+                <img src="/KMI.jpg" alt="KMI Logo" className="cover-logo-kmi" />
+                <img src="/mahad.png" alt="Mahad Logo" className="cover-logo-mahad" />
               </div>
 
               {/* Institution Header */}
@@ -641,9 +726,11 @@ function CoverPreviewContent() {
                 <div className="flex justify-center">
                   <img src="/kasyfu.jpg" alt="Kasyfu Title" className="cover-title-image" />
                 </div>
-                <div className="cover-semester-info">للفصل الدراسي الثاني</div>
+                <div className="cover-semester-info">
+                  {semesterData?.semesterLabelArabic || 'للفصل الدراسي الثاني'}
+                </div>
                 <div className="cover-year-info">
-                  <div>عام ٢٠٢٥-٢٠٢٤ | ١٤٤٦ – ١٤٤٥</div>
+                  <div>{schoolYearData?.tahunAkademikArabic || 'عام ٢٠٢٥-٢٠٢٤'} {schoolYearData?.year ? `| ${schoolYearData.year}` : '| ١٤٤٦ – ١٤٤٥'}</div>
                 </div>
               </div>
 
@@ -663,7 +750,7 @@ function CoverPreviewContent() {
                 </div>
                 <div className="cover-info-row">
                   <span className="cover-info-value"><strong>LAHAT</strong></span>
-                  <span className="cover-info-label">البرنامج</span>
+                  <span className="cover-info-label">الدائرة</span>
                 </div>
               </div>
 

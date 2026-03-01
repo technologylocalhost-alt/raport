@@ -75,33 +75,37 @@ model Level {
 }
 
 model SchoolYear {
-  id        String     @id @default(cuid())
-  schoolId  String
-  year      String
-  startDate DateTime
-  endDate   DateTime
-  isActive  Boolean    @default(true)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  classes   Class[]
-  school    School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  semesters Semester[]
+  id                    String     @id @default(cuid())
+  schoolId              String
+  year                  String
+  tahunAkademik         String?
+  tahunAkademikArabic   String?
+  startDate             DateTime
+  endDate               DateTime
+  isActive              Boolean    @default(true)
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+  classes               Class[]
+  school                School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  semesters             Semester[]
 
   @@unique([schoolId, year])
   @@index([schoolId])
 }
 
 model Semester {
-  id           String     @id @default(cuid())
-  schoolYearId String
-  number       Int
-  startDate    DateTime
-  endDate      DateTime
-  isActive     Boolean    @default(true)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  classes      Class[]
-  schoolYear   SchoolYear @relation(fields: [schoolYearId], references: [id], onDelete: Cascade)
+  id                  String     @id @default(cuid())
+  schoolYearId        String
+  number              Int
+  semesterLabel       String?
+  semesterLabelArabic String?
+  startDate           DateTime
+  endDate             DateTime
+  isActive            Boolean    @default(true)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  classes             Class[]
+  schoolYear          SchoolYear @relation(fields: [schoolYearId], references: [id], onDelete: Cascade)
 
   @@unique([schoolYearId, number])
   @@index([schoolYearId])

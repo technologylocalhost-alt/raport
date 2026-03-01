@@ -7,6 +7,8 @@ interface SchoolYear {
   id: string;
   schoolId: string;
   year: string;
+  tahunAkademik?: string;
+  tahunAkademikArabic?: string;
   startDate: string;
   endDate: string;
   isActive: boolean;
@@ -17,6 +19,8 @@ interface Semester {
   id: string;
   number: number;
   schoolYearId: string;
+  semesterLabel?: string;
+  semesterLabelArabic?: string;
   startDate: string;
   endDate: string;
   isActive: boolean;
@@ -48,6 +52,7 @@ export default function AcademicStructurePage() {
   const [yearFormData, setYearFormData] = useState({
     schoolId: '',
     year: '',
+    tahunAkademikArabic: '',
     startDate: '',
     endDate: '',
     isActive: true,
@@ -55,6 +60,7 @@ export default function AcademicStructurePage() {
 
   const [semesterFormData, setSemesterFormData] = useState({
     number: 1,
+    semesterLabelArabic: '',
     startDate: '',
     endDate: '',
     isActive: true,
@@ -150,6 +156,7 @@ export default function AcademicStructurePage() {
       const payload = {
         schoolId: yearFormData.schoolId.trim(),
         year: normalizedYear,
+        tahunAkademikArabic: yearFormData.tahunAkademikArabic.trim(),
         startDate: startDateTime,
         endDate: endDateTime,
         isActive: yearFormData.isActive,
@@ -176,6 +183,7 @@ export default function AcademicStructurePage() {
         setYearFormData({
           schoolId: '',
           year: '',
+          tahunAkademikArabic: '',
           startDate: '',
           endDate: '',
           isActive: true,
@@ -248,6 +256,7 @@ export default function AcademicStructurePage() {
       const payload = {
         schoolYearId,
         number: semesterFormData.number,
+        semesterLabelArabic: semesterFormData.semesterLabelArabic.trim(),
         startDate: startDateTime,
         endDate: endDateTime,
         isActive: semesterFormData.isActive,
@@ -271,6 +280,7 @@ export default function AcademicStructurePage() {
         setEditingSemesterId(null);
         setSemesterFormData({
           number: 1,
+          semesterLabelArabic: '',
           startDate: '',
           endDate: '',
           isActive: true,
@@ -318,6 +328,7 @@ export default function AcademicStructurePage() {
     setYearFormData({
       schoolId: year.schoolId,
       year: year.year,
+      tahunAkademikArabic: year.tahunAkademikArabic || '',
       startDate: year.startDate.split('T')[0],
       endDate: year.endDate.split('T')[0],
       isActive: year.isActive,
@@ -329,6 +340,7 @@ export default function AcademicStructurePage() {
   function handleEditSemester(semester: Semester) {
     setSemesterFormData({
       number: semester.number,
+      semesterLabelArabic: semester.semesterLabelArabic || '',
       startDate: semester.startDate.split('T')[0],
       endDate: semester.endDate.split('T')[0],
       isActive: semester.isActive,
@@ -360,6 +372,7 @@ export default function AcademicStructurePage() {
             setYearFormData({
               schoolId: '',
               year: '',
+              tahunAkademikArabic: '',
               startDate: '',
               endDate: '',
               isActive: true,
@@ -426,6 +439,21 @@ export default function AcademicStructurePage() {
               </div>
             </div>
 
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Tahun Akademik (Bahasa Arab)
+                </label>
+                <input
+                  type="text"
+                  placeholder="السنة الدراسية"
+                  value={yearFormData.tahunAkademikArabic}
+                  onChange={(e) => setYearFormData({ ...yearFormData, tahunAkademikArabic: e.target.value })}
+                  className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-lg text-gray-900 text-base placeholder:text-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-300 focus:outline-none transition-all"
+                />
+              </div>
+            </div>
+
             <div className="flex items-center">
               <label className="flex items-center gap-3">
                 <input
@@ -481,6 +509,7 @@ export default function AcademicStructurePage() {
                   setYearFormData({
                     schoolId: '',
                     year: '',
+                    tahunAkademikArabic: '',
                     startDate: '',
                     endDate: '',
                     isActive: true,
@@ -522,6 +551,9 @@ export default function AcademicStructurePage() {
                     <p className="text-sm text-slate-300">
                       {formatDate(year.startDate)} - {formatDate(year.endDate)}
                     </p>
+                    {year.tahunAkademikArabic && (
+                      <p className="text-sm text-slate-300 mt-1">{year.tahunAkademikArabic}</p>
+                    )}
                   </div>
                   {year.isActive && (
                     <span className="ml-4 px-3 py-1 bg-green-500 text-white rounded-full text-xs font-medium">
@@ -570,6 +602,7 @@ export default function AcademicStructurePage() {
                         onClick={() => {
                           setSemesterFormData({
                             number: 1,
+                            semesterLabelArabic: '',
                             startDate: '',
                             endDate: '',
                             isActive: true,
@@ -594,19 +627,22 @@ export default function AcademicStructurePage() {
                           onSubmit={(e) => handleSaveSemester(e, year.id)}
                           className="space-y-4"
                         >
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div>
                               <label className="block text-sm font-semibold text-gray-700 mb-1">
                                 Nomor <span className="text-red-500">*</span>
                               </label>
                               <select
                                 value={semesterFormData.number}
-                                onChange={(e) =>
+                                onChange={(e) => {
+                                  const newNumber = parseInt(e.target.value);
+                                  const arabicLabel = newNumber === 1 ? 'للفصل الدراسي الأول' : 'للفصل الدراسي الثاني';
                                   setSemesterFormData({
                                     ...semesterFormData,
-                                    number: parseInt(e.target.value),
-                                  })
-                                }
+                                    number: newNumber,
+                                    semesterLabelArabic: arabicLabel,
+                                  });
+                                }}
                                 className="w-full px-3 py-2 bg-white border-2 border-gray-200 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                               >
                                 <option value={1}>Semester 1</option>
@@ -614,6 +650,21 @@ export default function AcademicStructurePage() {
                               </select>
                             </div>
 
+                            <div>
+                              <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                Label Semester (Arab) - Otomatis
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="Otomatis sesuai nomor semester"
+                                value={semesterFormData.semesterLabelArabic}
+                                readOnly
+                                className="w-full px-3 py-2 bg-gray-100 border-2 border-gray-200 rounded-lg text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-not-allowed"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div>
                               <label className="block text-sm font-semibold text-gray-700 mb-1">
                                 Mulai <span className="text-red-500">*</span>
@@ -684,6 +735,7 @@ export default function AcademicStructurePage() {
                                 setEditingSemesterId(null);
                                 setSemesterFormData({
                                   number: 1,
+                                  semesterLabelArabic: '',
                                   startDate: '',
                                   endDate: '',
                                   isActive: true,
@@ -715,6 +767,9 @@ export default function AcademicStructurePage() {
                               <p className="text-sm text-gray-600">
                                 {formatDate(semester.startDate)} - {formatDate(semester.endDate)}
                               </p>
+                              {semester.semesterLabelArabic && (
+                                <p className="text-sm text-gray-600 mt-1">{semester.semesterLabelArabic}</p>
+                              )}
                               <div className="flex items-center gap-2 mt-2">
                                 {semester.isActive && (
                                   <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">

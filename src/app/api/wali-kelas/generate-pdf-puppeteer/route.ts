@@ -452,7 +452,7 @@ export async function POST(request: NextRequest) {
                         <span class="cover-info-label">اسم الطالب</span>
                     </div>
                     <div class="cover-info-row">
-                        <span class="cover-info-value"><strong>الفصل الأول</strong></span>
+                        <span class="cover-info-value"><strong>${student.class || 'الفصل الأول'}</strong></span>
                         <span class="cover-info-label">الفصل</span>
                     </div>
                     <div class="cover-info-row">
