@@ -6,7 +6,10 @@ import { verifyAccessToken } from '@/lib/auth/jwt';
 
 const gradeSchema = z.object({
   studentId: z.string().min(1, 'Student ID is required'),
-  competencyId: z.string().min(1, 'Competency ID is required'),
+  competencyId: z.union([
+    z.string().min(1),
+    z.literal('')
+  ]), // Allow empty string or valid ID
   score: z
     .union([z.string(), z.number()])
     .transform((val) => parseFloat(String(val)))
@@ -155,8 +158,24 @@ export async function GET(request: NextRequest) {
     }
 
     if (subjectId) {
-      if (!whereClause.competency) whereClause.competency = {};
-      whereClause.competency.subjectId = subjectId;
+      // Filter by subject: either through competency.subjectId OR through levelId
+      // (for grades without competency, we can't filter by subject directly)
+      // So we only apply subjectId filter if competency exists
+      // But we need to include grades without competency too if they're in the same assessment type
+      if (!whereClause.AND) {
+        whereClause.AND = [];
+      } else if (!Array.isArray(whereClause.AND)) {
+        whereClause.AND = [whereClause.AND];
+      }
+      
+      whereClause.AND.push({
+        OR: [
+          { competency: { subjectId } },
+          // Also include grades without competency (competencyId is null)
+          // since they might be for the same subject
+          { competencyId: null }
+        ]
+      });
     }
 
     if (assessmentType) {
@@ -203,9 +222,9 @@ export async function GET(request: NextRequest) {
         studentNisn: g.student.studentNo || '-',
         studentNourut: g.student.nourut,
         className: g.student.class?.name || '-',
-        competencyId: g.competencyId,
-        competencyName: g.competency.name,
-        subjectName: g.competency.subject.name,
+        competencyId: g.competencyId || '',
+        competencyName: g.competency?.name || '',
+        subjectName: g.competency?.subject?.name || '',
         score: g.score,
         assessmentType: g.assessmentType,
         teacherId: g.teacherId,
@@ -293,29 +312,51 @@ export async function POST(request: NextRequest) {
       return errorResponse('Student not found in your classes', 400);
     }
 
-    // Verify that competency exists
-    const competency = await prisma.competency.findUnique({
-      where: { id: validatedData.competencyId },
-      include: {
-        subject: true,
-      },
-    });
+    // Verify that competency exists (if provided)
+    if (validatedData.competencyId && validatedData.competencyId !== '') {
+      const competency = await prisma.competency.findUnique({
+        where: { id: validatedData.competencyId },
+        include: {
+          subject: true,
+        },
+      });
 
-    if (!competency) {
-      return errorResponse('Competency not found', 404);
+      if (!competency) {
+        return errorResponse('Competency not found', 404);
+      }
     }
 
     // Check if grade already exists with same combination
-    const existingGrade = await prisma.grade.findUnique({
-      where: {
-        studentId_competencyId_teacherId_assessmentType: {
+    // Only check if competencyId is provided
+    let existingGrade = null;
+    if (validatedData.competencyId && validatedData.competencyId !== '') {
+      existingGrade = await prisma.grade.findFirst({
+        where: {
           studentId: validatedData.studentId,
           competencyId: validatedData.competencyId,
           teacherId: user.id,
           assessmentType: validatedData.assessmentType,
         },
+      });
+    }
+
+    // Get student and their class/level information
+    const student = await prisma.student.findUnique({
+      where: { id: validatedData.studentId },
+      include: { 
+        class: {
+          include: {
+            level: true
+          }
+        } 
       },
     });
+
+    if (!student || !student.class) {
+      return errorResponse('Student or student class not found', 400);
+    }
+
+    const levelId = student.class.level?.id || '';
 
     let grade;
     if (existingGrade) {
@@ -340,12 +381,12 @@ export async function POST(request: NextRequest) {
       grade = await prisma.grade.create({
         data: {
           studentId: validatedData.studentId,
-          competencyId: validatedData.competencyId,
+          competencyId: validatedData.competencyId && validatedData.competencyId !== '' ? validatedData.competencyId : null,
           score: String(validatedData.score),
           assessmentType: validatedData.assessmentType,
           notes: validatedData.notes,
           teacherId: user.id,
-          levelId: competency.subject.levelId || '',
+          levelId: levelId,
           scoringType: 'NUMERIC_0_100',
         },
         include: {
@@ -365,9 +406,9 @@ export async function POST(request: NextRequest) {
       id: grade.id,
       studentId: grade.studentId,
       studentName: grade.student.name,
-      competencyId: grade.competencyId,
-      competencyName: grade.competency.name,
-      subjectName: grade.competency.subject.name,
+      competencyId: grade.competencyId || '',
+      competencyName: grade.competency?.name || '',
+      subjectName: grade.competency?.subject.name || '',
       score: grade.score,
       assessmentType: grade.assessmentType,
       notes: grade.notes || '',

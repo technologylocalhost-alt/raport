@@ -199,14 +199,13 @@ export async function POST(request: NextRequest) {
     for (const grade of grades) {
       try {
         // Check if already approved (avoid duplicates)
-        const existingApproval = await prisma.nilaiApprove.findUnique({
+        // Use findFirst since competencyId can be null
+        const existingApproval = await prisma.nilaiApprove.findFirst({
           where: {
-            studentId_competencyId_teacherId_assessmentType: {
-              studentId: grade.studentId,
-              competencyId: grade.competencyId,
-              teacherId: grade.teacherId,
-              assessmentType: grade.assessmentType,
-            },
+            studentId: grade.studentId,
+            competencyId: grade.competencyId,
+            teacherId: grade.teacherId,
+            assessmentType: grade.assessmentType,
           },
         });
 
@@ -294,8 +293,8 @@ export async function POST(request: NextRequest) {
 
     // Log bulk approval activity (background task - doesn't block response)
     const userId = user.id; // Save for background task
-    const subjectName = grades[0].competency.subject.name;
-    const className = classData.name;
+    const subjectName = grades[0]?.competency?.subject.name || 'Unknown Subject';
+    const className = classData?.name || 'Unknown Class';
 
     (async () => {
       try {

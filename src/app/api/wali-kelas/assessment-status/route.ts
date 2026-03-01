@@ -71,6 +71,9 @@ export async function GET(request: NextRequest) {
     // Build map: subjectId -> Set<assessmentType>
     const statusMap: Record<string, string[]> = {};
     for (const row of results) {
+      // Skip grades without competency
+      if (!row.competency) continue;
+      
       const sid = row.competency.subjectId;
       if (!statusMap[sid]) statusMap[sid] = [];
       if (!statusMap[sid].includes(row.assessmentType)) {

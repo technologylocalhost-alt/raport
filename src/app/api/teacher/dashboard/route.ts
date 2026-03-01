@@ -67,11 +67,12 @@ async function getRecentActivities(teacherId: string, classIds: string[]): Promi
   });
 
   recentGrades.forEach((grade) => {
+    const competencyText = grade.competency ? `di kompetensi ${grade.competency.subject.name}` : '(tanpa kompetensi)';
     activities.push({
       id: grade.id,
       type: 'grade',
       title: 'Nilai Input Berhasil',
-      description: `Nilai ${grade.score} untuk siswa ${grade.student.name} di kompetensi ${grade.competency.subject.name}`,
+      description: `Nilai ${grade.score} untuk siswa ${grade.student.name} ${competencyText}`,
       timestamp: new Date(grade.createdAt).toLocaleString('id-ID', {
         day: 'numeric',
         month: 'short',

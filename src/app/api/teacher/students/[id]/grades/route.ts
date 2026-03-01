@@ -56,15 +56,17 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      grades: grades.map((g) => ({
-        id: g.id,
-        competencyName: g.competency.name,
-        competencyCode: g.competency.code,
-        score: g.score,
-        assessmentType: g.assessmentType,
-        notes: g.notes,
-        createdAt: g.createdAt,
-      })),
+      grades: grades
+        .filter((g) => g.competency) // Only include grades with competency
+        .map((g) => ({
+          id: g.id,
+          competencyName: g.competency!.name,
+          competencyCode: g.competency!.code,
+          score: g.score,
+          assessmentType: g.assessmentType,
+          notes: g.notes,
+          createdAt: g.createdAt,
+        })),
     });
   } catch (error) {
     console.error('Error fetching grades:', error);

@@ -89,6 +89,11 @@ export async function GET(request: NextRequest) {
       // Collect all grades for each subject
       cls.students.forEach((student) => {
         student.grades.forEach((grade) => {
+          // Skip grades without competency
+          if (!grade.competency) {
+            return;
+          }
+
           const subjectId = grade.competency.subjectId;
           const scoreNum = parseFloat(grade.score);
 

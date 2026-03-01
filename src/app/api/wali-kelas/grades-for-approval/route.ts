@@ -107,6 +107,11 @@ export async function GET(request: NextRequest) {
     } = {};
 
     grades.forEach((grade) => {
+      // Skip grades without competency
+      if (!grade.competency) {
+        return;
+      }
+
       const key = `${grade.competency.subjectId}-${grade.student.classId}`;
 
       if (!gradesBySubject[key]) {

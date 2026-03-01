@@ -165,7 +165,7 @@ export async function GET(request: NextRequest) {
       studentNo: raport.student.studentNo,
       className: raport.student.class.name,
       subjectName: raport.subject.name,
-      competencyName: raport.competency.name,
+      competencyName: raport.competency?.name || '',
       teacherName: raport.teacher.name,
       score: raport.score,
       scoringType: raport.scoringType,

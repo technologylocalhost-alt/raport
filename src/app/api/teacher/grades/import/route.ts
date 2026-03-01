@@ -6,7 +6,7 @@ import { verifyAccessToken } from '@/lib/auth/jwt';
 
 const importGradeSchema = z.object({
   studentNo: z.string().min(1, 'Student number is required'),
-  competencyName: z.string().min(1, 'Competency name is required'),
+  competencyName: z.string().optional(), // Make competency optional
   score: z
     .union([z.string(), z.number()])
     .transform((val) => parseFloat(String(val)))
@@ -128,17 +128,20 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // Find competency by name (case-insensitive)
-      const competency = competencies.find(
-        (c) => c.name.toLowerCase() === row.competencyName.toLowerCase()
-      );
-      if (!competency) {
-        results.failed++;
-        results.errors.push({
-          row: i + 2,
-          error: `Competency "${row.competencyName}" not found for this subject`,
-        });
-        continue;
+      // Find competency by name (case-insensitive) - only if competencyName is provided
+      let competency: any = null;
+      if (row.competencyName && row.competencyName.trim() !== '') {
+        competency = competencies.find(
+          (c) => c.name.toLowerCase() === row.competencyName!.toLowerCase()
+        );
+        if (!competency) {
+          results.failed++;
+          results.errors.push({
+            row: i + 2,
+            error: `Competency "${row.competencyName}" not found for this subject`,
+          });
+          continue;
+        }
       }
 
       try {
@@ -146,7 +149,7 @@ export async function POST(req: NextRequest) {
         const existingGrade = await prisma.grade.findFirst({
           where: {
             studentId: student.id,
-            competencyId: competency.id,
+            competencyId: competency?.id || null,
             assessmentType: row.assessmentType,
           },
         });
@@ -165,7 +168,7 @@ export async function POST(req: NextRequest) {
           await prisma.grade.create({
             data: {
               studentId: student.id,
-              competencyId: competency.id,
+              competencyId: competency?.id || null,
               levelId: levelId,
               teacherId: teacherId,
               score: String(row.score),

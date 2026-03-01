@@ -67,7 +67,7 @@ export default function TeacherLayout({ children }: TeacherLayoutProps) {
         { title: 'Mata Pelajaran', icon: Library, href: '/teacher/subjects' },
         { title: 'Daftar Nilai', icon: BookOpen, href: '/teacher/grades' },
         { title: 'Absensi', icon: CheckCircle, href: '/teacher/attendance' },
-        { title: 'Kompetensi', icon: Target, href: '/teacher/competencies' },
+        // { title: 'Kompetensi', icon: Target, href: '/teacher/competencies' },
       ],
     },
     {

@@ -352,8 +352,8 @@ export default function WaliKelasStudentsPage() {
   const handleSubmitGrade = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!gradeFormData.competencyId || !gradeFormData.score) {
-      setGradeError('Pilih kompetensi dan masukkan nilai');
+    if (!gradeFormData.score) {
+      setGradeError('Masukkan nilai');
       return;
     }
 
@@ -558,7 +558,6 @@ export default function WaliKelasStudentsPage() {
       {
         'Nomor Siswa': '387',
         'Nama Siswa': 'Faaiq Husain',
-        'Nama Kompetensi': 'Membaca Al-Qur\'an',
         'Nilai (1-10)': 8.5,
         'Jenis Penilaian': 'UTS_1',
         'Catatan': 'Bagus',
@@ -566,7 +565,6 @@ export default function WaliKelasStudentsPage() {
       {
         'Nomor Siswa': '412',
         'Nama Siswa': 'Rayyan Aryatama Karim',
-        'Nama Kompetensi': 'Menulis Arab',
         'Nilai (1-10)': 7.0,
         'Jenis Penilaian': 'UTS_1',
         'Catatan': '',
@@ -604,7 +602,7 @@ export default function WaliKelasStudentsPage() {
 
         if (!row['Nomor Siswa']) errors.push('Nomor Siswa kosong');
         if (!row['Nama Siswa']) errors.push('Nama Siswa kosong');
-        if (!row['Nama Kompetensi']) errors.push('Nama Kompetensi kosong');
+        // Kompetensi adalah opsional, jadi tidak perlu validasi
         if (!score || isNaN(score) || score < 1 || score > 10) errors.push('Nilai harus 1-10');
         if (!row['Jenis Penilaian']) errors.push('Jenis Penilaian kosong');
         if (!Object.keys(assessmentTypeLabels).includes(row['Jenis Penilaian'])) {
@@ -614,7 +612,7 @@ export default function WaliKelasStudentsPage() {
         return {
           studentNo: String(row['Nomor Siswa']).trim(),
           studentName: String(row['Nama Siswa']).trim(),
-          competencyName: String(row['Nama Kompetensi']).trim(),
+          competencyName: row['Nama Kompetensi'] ? String(row['Nama Kompetensi']).trim() : '',
           score: score,
           assessmentType: String(row['Jenis Penilaian']).trim(),
           notes: row['Catatan'] ? String(row['Catatan']).trim() : '',
@@ -876,7 +874,7 @@ export default function WaliKelasStudentsPage() {
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="border-b border-gray-200 bg-gray-100">
-                                <th className="px-4 py-2 text-left font-semibold text-gray-700">Kompetensi</th>
+                                <th className="px-4 py-2 text-left font-semibold text-gray-700 hidden">Kompetensi</th>
                                 <th className="px-4 py-2 text-center font-semibold text-gray-700">Jenis Penilaian</th>
                                 <th className="px-4 py-2 text-center font-semibold text-gray-700">Nilai</th>
                                 <th className="px-4 py-2 text-left font-semibold text-gray-700">Catatan</th>
@@ -889,7 +887,7 @@ export default function WaliKelasStudentsPage() {
                                 const isApproved = isGradeApproved(grade, student.id);
                                 return (
                                   <tr key={grade.id} className={`border-b border-gray-200 transition-colors ${isApproved ? 'bg-blue-50 hover:bg-blue-50' : 'hover:bg-white'}`}>
-                                    <td className="px-4 py-3 font-medium text-gray-900">{grade.competencyName}</td>
+                                    <td className="px-4 py-3 font-medium text-gray-900 hidden">{grade.competencyName}</td>
                                     <td className="px-4 py-3 text-center">
                                       <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
                                         {getAssessmentTypeLabel(grade.assessmentType)}
@@ -1091,19 +1089,18 @@ export default function WaliKelasStudentsPage() {
                 )}
 
                 <form onSubmit={handleSubmitGrade} className="space-y-4">
-                  {/* Competency Select */}
-                  <div>
+                  {/* Competency Select - HIDDEN */}
+                  <div className="hidden">
                     <label className="block text-sm font-semibold text-gray-900 mb-2">
-                      Kompetensi <span className="text-red-500">*</span>
+                      Kompetensi <span className="text-gray-500 text-xs">(opsional)</span>
                     </label>
                     <select
                       value={gradeFormData.competencyId}
                       onChange={(e) => setGradeFormData({ ...gradeFormData, competencyId: e.target.value })}
                       disabled={competenciesLoading || !!editingGradeId}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
-                      required
                     >
-                      <option value="">-- Pilih Kompetensi --</option>
+                      <option value="">-- Kosongkan / Tanpa Kompetensi --</option>
                       {competencies.map((comp) => (
                         <option key={comp.id} value={comp.id}>
                           {comp.name}

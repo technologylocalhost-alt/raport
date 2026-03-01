@@ -72,7 +72,7 @@ export default function WaliKelasLayout({ children }: WaliKelasLayoutProps) {
       title: 'Mata Pelajaran & Kelas',
       items: [
         { title: 'Mata Pelajaran', icon: Library, href: '/wali-kelas/subjects' },
-        { title: 'Kompetensi', icon: Target, href: '/wali-kelas/competencies' },
+        // { title: 'Kompetensi', icon: Target, href: '/wali-kelas/competencies' },
         { title: 'Absensi', icon: CheckCircle, href: '/wali-kelas/attendance' },
       ],
     },
