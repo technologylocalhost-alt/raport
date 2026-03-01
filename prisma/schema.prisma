@@ -22,6 +22,7 @@ model User {
   nilaiApproves      NilaiApprove[] @relation("UserNilaiApprove")
   refreshTokens      RefreshToken[]
   competencies       Competency[]   @relation("TeacherCompetencies")
+  activityLogs       ActivityLog[]
   school             School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
   @@index([schoolId])
@@ -375,4 +376,50 @@ enum AttendanceStatus {
   SAKIT
   IZIN
   ALFA
+}
+
+enum ActivityAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  LOGIN
+  LOGOUT
+  IMPORT
+  EXPORT
+  BULK_UPDATE
+  RESTORE
+}
+
+enum ActivityStatus {
+  SUCCESS
+  FAILED
+  PARTIAL
+}
+
+model ActivityLog {
+  id              String         @id @default(cuid())
+  userId          String
+  action          ActivityAction
+  resourceType    String
+  resourceId      String?
+  resourceName    String?
+  description     String?
+  oldValue        String?
+  newValue        String?
+  ipAddress       String?
+  userAgent       String?
+  status          ActivityStatus @default(SUCCESS)
+  errorMessage    String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+  @@index([resourceType])
+  @@index([resourceId])
 }

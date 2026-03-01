@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -115,6 +116,8 @@ export async function GET(request: NextRequest) {
  * Create a new student
  */
 export async function POST(request: NextRequest) {
+  let studentData: any = {};
+  
   try {
     const user = await verifyAdmin(request);
     if (!user) {
@@ -122,6 +125,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+    studentData = body; // Save for error logging
     const { name, studentNo, nourut, email, phone, address, birthDate, classId, parentPhoneNo } = body;
 
     if (!name || !studentNo || !classId) {
@@ -159,6 +163,24 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Log activity
+    await logActivity({
+      userId: user.id,
+      action: 'CREATE',
+      resourceType: 'Student',
+      resourceId: student.id,
+      resourceName: `${student.name} (${student.studentNo})`,
+      description: `Created student: ${student.name} with student number ${student.studentNo}`,
+      newValue: {
+        name: student.name,
+        studentNo: student.studentNo,
+        classId: student.classId,
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse({
       id: student.id,
       name: student.name,
@@ -172,6 +194,23 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error creating student:', error);
+    
+    // Log failed student creation
+    const user = await verifyAdmin(request);
+    if (user) {
+      await logActivity({
+        userId: user.id,
+        action: 'CREATE',
+        resourceType: 'Student',
+        description: `Failed to create student`,
+        newValue: { studentNo: studentData?.studentNo || 'unknown' },
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'FAILED',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+    
     return errorResponse('Failed to create student', 500);
   }
 }

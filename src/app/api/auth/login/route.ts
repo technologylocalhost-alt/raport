@@ -3,6 +3,7 @@ import { comparePassword } from '@/lib/auth/password';
 import { generateTokens } from '@/lib/auth/jwt';
 import { parseExpiryString, getTokenExpiryDate } from '@/lib/auth/utils';
 import { prisma } from '@/lib/db';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import { z } from 'zod';
 
 // Validation schema
@@ -27,6 +28,18 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user || !user.isActive) {
+      // Log failed login attempt
+      await logActivity({
+        userId: 'SYSTEM', // Use SYSTEM for failed login since user doesn't exist
+        action: 'LOGIN',
+        resourceType: 'User',
+        description: `Failed login attempt for email: ${email}`,
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'FAILED',
+        errorMessage: 'User not found or inactive',
+      });
+
       return NextResponse.json(
         { error: 'Invalid credentials' },
         { status: 401 }
@@ -37,6 +50,20 @@ export async function POST(request: NextRequest) {
     const isPasswordValid = await comparePassword(password, user.password);
 
     if (!isPasswordValid) {
+      // Log failed login attempt
+      await logActivity({
+        userId: user.id,
+        action: 'LOGIN',
+        resourceType: 'User',
+        resourceId: user.id,
+        resourceName: user.email,
+        description: `Failed login attempt - invalid password`,
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'FAILED',
+        errorMessage: 'Invalid password',
+      });
+
       return NextResponse.json(
         { error: 'Invalid credentials' },
         { status: 401 }
@@ -127,6 +154,19 @@ export async function POST(request: NextRequest) {
     response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     response.headers.set('Pragma', 'no-cache');
     response.headers.set('Expires', '0');
+
+    // Log successful login
+    await logActivity({
+      userId: user.id,
+      action: 'LOGIN',
+      resourceType: 'User',
+      resourceId: user.id,
+      resourceName: user.email,
+      description: `Successful login`,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
 
     return response;
   } catch (error) {

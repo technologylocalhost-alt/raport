@@ -3,6 +3,7 @@ import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, logBulkActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 const approveGradesSchema = z.object({
   subjectId: z.string().min(1, 'Subject ID is required'),
@@ -291,9 +292,31 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Log bulk approval activity (background task - doesn't block response)
+    const userId = user.id; // Save for background task
+    const subjectName = grades[0].competency.subject.name;
+    const className = classData.name;
+
+    (async () => {
+      try {
+        await logBulkActivity(
+          userId,
+          'APPROVE',
+          'Grades',
+          `Approved grades for subject ${subjectName}`,
+          grades.length,
+          createdApprovals.length,
+          getClientIp(request),
+          getUserAgent(request)
+        );
+      } catch (err) {
+        console.error('Error logging approval activity:', err);
+      }
+    })();
+
     return successResponse(
       {
-        message: `Approved ${createdApprovals.length} grades for ${grades[0].competency.subject.name} in ${classData.name}`,
+        message: `Approved ${createdApprovals.length} grades for ${subjectName} in ${className}`,
         count: createdApprovals.length,
         totalGrades: grades.length,
       },

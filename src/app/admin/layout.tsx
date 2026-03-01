@@ -94,6 +94,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       items: [
         { title: 'Pengguna', icon: Users, href: '/admin/users' },
         { title: 'Analytics', icon: BarChart3, href: '/admin/analytics' },
+        { title: 'Activity Logs', icon: Clock, href: '/admin/activity-logs' },
       ],
     },
   ];

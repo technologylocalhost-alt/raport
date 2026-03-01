@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { verifyAccessToken } from '@/lib/auth/jwt';
 import { hashPassword } from '@/lib/auth/password';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -106,6 +107,8 @@ export async function GET(request: NextRequest) {
  * Create a new user
  */
 export async function POST(request: NextRequest) {
+  let userData: any = {};
+  
   try {
     const admin = await verifyAdmin(request);
     if (!admin) {
@@ -113,6 +116,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+    userData = body; // Save for error logging
     const validatedData = userSchema.parse(body);
 
     // Check if email already exists
@@ -161,12 +165,47 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Log activity
+    await logActivity({
+      userId: admin.id,
+      action: 'CREATE',
+      resourceType: 'User',
+      resourceId: user.id,
+      resourceName: `${user.name} (${user.email})`,
+      description: `Created user: ${user.name} with role ${user.role}`,
+      newValue: {
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse(user, 201);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return errorResponse('Validation error', 400, error.issues);
     }
     console.error('Create user error:', error);
+    
+    // Log failed user creation
+    const admin = await verifyAdmin(request);
+    if (admin) {
+      await logActivity({
+        userId: admin.id,
+        action: 'CREATE',
+        resourceType: 'User',
+        description: `Failed to create user`,
+        newValue: { email: userData?.email || 'unknown' },
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'FAILED',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+    
     return errorResponse('Failed to create user', 500);
   }
 }

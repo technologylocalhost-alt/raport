@@ -3,7 +3,7 @@
  * Central location untuk semua type definitions
  */
 
-import { UserRole, CompetencyType, ScoringType, AssessmentType, AttendanceStatus } from '@prisma/client';
+import { UserRole, CompetencyType, ScoringType, AssessmentType, AttendanceStatus, ActivityAction, ActivityStatus } from '@prisma/client';
 
 // ============================================================================
 // API Response Types
@@ -291,5 +291,62 @@ export type Nullable<T> = T | null;
 export type Optional<T> = T | undefined;
 export type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 
+// ============================================================================
+// Activity Logging Types
+// ============================================================================
+
+export interface ActivityLogData {
+  id: string;
+  userId: string;
+  action: ActivityAction;
+  resourceType: string;
+  resourceId?: string;
+  resourceName?: string;
+  description?: string;
+  oldValue?: string;
+  newValue?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  status: ActivityStatus;
+  errorMessage?: string;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+export interface ActivityLogResponse extends ActivityLogData {
+  user: {
+    id: string;
+    name: string;
+    email: string;
+  };
+}
+
+export interface LogActivityInput {
+  userId: string;
+  action: ActivityAction;
+  resourceType: string;
+  resourceId?: string;
+  resourceName?: string;
+  description?: string;
+  oldValue?: any;
+  newValue?: any;
+  ipAddress?: string;
+  userAgent?: string;
+  status?: ActivityStatus;
+  errorMessage?: string;
+}
+
+export interface ActivityLogFilter {
+  userId?: string;
+  action?: ActivityAction;
+  resourceType?: string;
+  resourceId?: string;
+  status?: ActivityStatus;
+  startDate?: Date | string;
+  endDate?: Date | string;
+  page?: number;
+  limit?: number;
+}
+
 // Export Prisma enums for convenience
-export { UserRole, CompetencyType, ScoringType, AssessmentType, AttendanceStatus };
+export { UserRole, CompetencyType, ScoringType, AssessmentType, AttendanceStatus, ActivityAction, ActivityStatus };
