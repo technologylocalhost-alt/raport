@@ -3,6 +3,7 @@ import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -128,6 +129,19 @@ export async function PUT(
       },
     });
 
+    await logActivity({
+      userId: admin.id,
+      action: 'UPDATE',
+      resourceType: 'Subject',
+      resourceId: id,
+      resourceName: subject.name,
+      description: `Updated subject: ${subject.name}`,
+      newValue: validatedData,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse(subject);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -176,6 +190,22 @@ export async function DELETE(
 
     await prisma.subject.delete({
       where: { id },
+    });
+
+    await logActivity({
+      userId: admin.id,
+      action: 'DELETE',
+      resourceType: 'Subject',
+      resourceId: id,
+      resourceName: existingSubject.name,
+      description: `Deleted subject: ${existingSubject.name}`,
+      oldValue: {
+        name: existingSubject.name,
+        code: existingSubject.code,
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
     });
 
     return successResponse({ message: 'Subject deleted successfully' });

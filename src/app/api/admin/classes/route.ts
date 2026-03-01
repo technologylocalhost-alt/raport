@@ -3,6 +3,7 @@ import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-res
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -138,8 +139,9 @@ export async function GET(request: NextRequest) {
  * Create a new class
  */
 export async function POST(request: NextRequest) {
+  let admin;
   try {
-    const admin = await verifyAdmin(request);
+    admin = await verifyAdmin(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -214,12 +216,47 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Log activity
+    await logActivity({
+      userId: admin.id,
+      action: 'CREATE',
+      resourceType: 'Class',
+      resourceId: newClass.id,
+      resourceName: newClass.name,
+      description: `Created class: ${newClass.name} for level ${level.name}`,
+      newValue: {
+        name: newClass.name,
+        levelId: newClass.levelId,
+        schoolYearId: newClass.schoolYearId,
+        semesterId: newClass.semesterId,
+        capacity: newClass.capacity,
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse(newClass, 201);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return errorResponse('Validation error', 400, error.issues);
     }
     console.error('Create class error:', error);
+    
+    // Log failed class creation
+    if (admin) {
+      await logActivity({
+        userId: admin.id,
+        action: 'CREATE',
+        resourceType: 'Class',
+        description: 'Failed to create class',
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'FAILED',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+
     return errorResponse('Failed to create class', 500);
   }
 }

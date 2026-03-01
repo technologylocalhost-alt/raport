@@ -3,6 +3,7 @@ import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 const schoolSchema = z.object({
   name: z.string().min(1, 'School name is required'),
@@ -119,6 +120,26 @@ export async function PUT(
       },
     });
 
+    // Log activity
+    await logActivity({
+      userId: admin.id,
+      action: 'UPDATE',
+      resourceType: 'School',
+      resourceId: id,
+      resourceName: school.name,
+      description: `Updated school: ${school.name}`,
+      newValue: {
+        name: school.name,
+        address: validatedData.address,
+        phone: validatedData.phone,
+        email: validatedData.email,
+        npsn: validatedData.npsn,
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse(school);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -167,6 +188,26 @@ export async function DELETE(
 
     await prisma.school.delete({
       where: { id },
+    });
+
+    // Log activity
+    await logActivity({
+      userId: admin.id,
+      action: 'DELETE',
+      resourceType: 'School',
+      resourceId: id,
+      resourceName: existingSchool.name,
+      description: `Deleted school: ${existingSchool.name}`,
+      oldValue: {
+        name: existingSchool.name,
+        address: existingSchool.address,
+        phone: existingSchool.phone,
+        email: existingSchool.email,
+        npsn: existingSchool.npsn,
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
     });
 
     return successResponse({ message: 'School deleted successfully' });

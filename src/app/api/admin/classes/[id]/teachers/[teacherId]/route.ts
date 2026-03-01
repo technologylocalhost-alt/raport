@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -34,13 +35,18 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; teacherId: string }> }
 ) {
+  let user: any;
+  let id = '';
+  let teacherId = '';
   try {
-    const user = await verifyAdmin(request);
+    user = await verifyAdmin(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
 
-    const { id, teacherId } = await params;
+    const result = await params;
+    id = result.id;
+    teacherId = result.teacherId;
 
     // Verify the class exists
     const classData = await prisma.class.findUnique({
@@ -60,11 +66,41 @@ export async function DELETE(
     // Delete class teacher by id
     const deleted = await prisma.classTeacher.delete({
       where: { id: teacherId },
+      include: {
+        teacher: { select: { id: true, name: true } },
+        subject: { select: { id: true, name: true } },
+      },
+    });
+
+    await logActivity({
+      userId: user.id,
+      action: 'DELETE',
+      resourceType: 'ClassTeacher',
+      resourceId: teacherId,
+      resourceName: `${deleted.teacher.name} - ${deleted.subject.name}`,
+      description: `Removed ${deleted.teacher.name} from teaching ${deleted.subject.name}`,
+      oldValue: { teacherId: deleted.teacher.id, subjectId: deleted.subject.id },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
     });
 
     return successResponse(deleted, 'Teacher removed from class');
   } catch (error: any) {
     console.error('Delete teacher from class error:', error);
+    if (user) {
+      await logActivity({
+        userId: user.id,
+        action: 'DELETE',
+        resourceType: 'ClassTeacher',
+        resourceId: teacherId,
+        description: `Failed to remove teacher from class`,
+        errorMessage: error?.message || 'Unknown error',
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'FAILED',
+      });
+    }
     if (error.code === 'P2025') {
       return errorResponse('Teacher assignment not found', 404);
     }

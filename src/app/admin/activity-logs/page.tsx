@@ -149,24 +149,24 @@ export default function ActivityLogsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 sm:p-4 md:p-6 space-y-4 md:space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Activity Logs</h1>
-        <p className="text-gray-600 mt-1">Track all user activities in the system</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Activity Logs</h1>
+        <p className="text-gray-900 mt-1 text-sm sm:text-base">Track all user activities in the system</p>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-4 space-y-4">
+      <div className="bg-white rounded-lg shadow p-3 sm:p-4 md:p-6 space-y-4">
         <h2 className="font-semibold text-gray-900">Filters</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-900 mb-1">
               Action
             </label>
             <select
               value={filters.action}
               onChange={(e) => handleFilterChange('action', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">All Actions</option>
               {Object.values(ActivityAction).map(action => (
@@ -176,7 +176,7 @@ export default function ActivityLogsPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-900 mb-1">
               Resource Type
             </label>
             <input
@@ -184,18 +184,18 @@ export default function ActivityLogsPage() {
               value={filters.resourceType}
               onChange={(e) => handleFilterChange('resourceType', e.target.value)}
               placeholder="e.g., Student, Grade"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-900 mb-1">
               Status
             </label>
             <select
               value={filters.status}
               onChange={(e) => handleFilterChange('status', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">All Status</option>
               <option value="SUCCESS">Success</option>
@@ -205,26 +205,26 @@ export default function ActivityLogsPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-900 mb-1">
               Start Date
             </label>
             <input
               type="date"
               value={filters.startDate}
               onChange={(e) => handleFilterChange('startDate', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-900 mb-1">
               End Date
             </label>
             <input
               type="date"
               value={filters.endDate}
               onChange={(e) => handleFilterChange('endDate', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
         </div>
@@ -233,39 +233,40 @@ export default function ActivityLogsPage() {
       {/* Logs Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {isLoading ? (
-          <div className="p-8 text-center text-gray-500">
+          <div className="p-8 text-center text-gray-900">
             Loading activity logs...
           </div>
         ) : logs.length === 0 ? (
-          <div className="p-8 text-center text-gray-500 flex items-center justify-center gap-2">
+          <div className="p-8 text-center text-gray-900 flex items-center justify-center gap-2">
             <AlertCircle size={20} />
             No activity logs found
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">
                       User
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">
                       Action
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">
                       Resource
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">
                       Status
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">
                       IP Address
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">
                       Timestamp
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">
                       Details
                     </th>
                   </tr>
@@ -273,14 +274,12 @@ export default function ActivityLogsPage() {
                 <tbody className="divide-y divide-gray-200">
                   {logs.map((log) => (
                     <React.Fragment key={log.id}>
-                      <tr
-                        className="hover:bg-gray-50 transition-colors"
-                      >
+                      <tr className="hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3 text-sm">
                           <div className="font-medium text-gray-900">
                             {log.user.name}
                           </div>
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-gray-900">
                             {log.user.email}
                           </div>
                         </td>
@@ -298,7 +297,7 @@ export default function ActivityLogsPage() {
                             {log.resourceType}
                           </div>
                           {log.resourceName && (
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-gray-900">
                               {log.resourceName}
                             </div>
                           )}
@@ -312,16 +311,16 @@ export default function ActivityLogsPage() {
                             {log.status}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">
+                        <td className="px-4 py-3 text-sm text-gray-900">
                           {log.ipAddress || '-'}
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">
+                        <td className="px-4 py-3 text-sm text-gray-900">
                           {new Date(log.createdAt).toLocaleString('id-ID')}
                         </td>
                         <td className="px-4 py-3 text-sm">
                           <button
                             onClick={() => toggleRowExpand(log.id)}
-                            className="p-1 hover:bg-gray-200 rounded transition-colors"
+                            className="p-1 hover:bg-gray-200 rounded transition-colors text-gray-900"
                             title="View details"
                           >
                             {expandedRows.has(log.id) ? (
@@ -339,10 +338,10 @@ export default function ActivityLogsPage() {
                             <div className="space-y-3">
                               {log.description && (
                                 <div>
-                                  <h4 className="text-xs font-semibold text-gray-700 mb-1">
+                                  <h4 className="text-xs font-semibold text-gray-900 mb-1">
                                     Description
                                   </h4>
-                                  <p className="text-sm text-gray-600">
+                                  <p className="text-sm text-gray-900">
                                     {log.description}
                                   </p>
                                 </div>
@@ -350,10 +349,10 @@ export default function ActivityLogsPage() {
 
                               {log.userAgent && (
                                 <div>
-                                  <h4 className="text-xs font-semibold text-gray-700 mb-1">
+                                  <h4 className="text-xs font-semibold text-gray-900 mb-1">
                                     User Agent
                                   </h4>
-                                  <p className="text-xs text-gray-600 break-all">
+                                  <p className="text-xs text-gray-900 break-all">
                                     {log.userAgent}
                                   </p>
                                 </div>
@@ -361,23 +360,23 @@ export default function ActivityLogsPage() {
 
                               {log.resourceId && (
                                 <div>
-                                  <h4 className="text-xs font-semibold text-gray-700 mb-1">
+                                  <h4 className="text-xs font-semibold text-gray-900 mb-1">
                                     Resource ID
                                   </h4>
-                                  <p className="text-sm font-mono text-gray-600">
+                                  <p className="text-sm font-mono text-gray-900">
                                     {log.resourceId}
                                   </p>
                                 </div>
                               )}
 
                               {(log.oldValue || log.newValue) && (
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                                   {log.oldValue && (
                                     <div>
-                                      <h4 className="text-xs font-semibold text-gray-700 mb-1">
+                                      <h4 className="text-xs font-semibold text-gray-900 mb-1">
                                         Old Value
                                       </h4>
-                                      <pre className="text-xs bg-white p-2 rounded border border-gray-200 overflow-auto max-h-48">
+                                      <pre className="text-xs bg-white p-2 rounded border border-gray-200 overflow-auto max-h-48 text-gray-900">
                                         {JSON.stringify(
                                           parseJson(log.oldValue),
                                           null,
@@ -388,10 +387,10 @@ export default function ActivityLogsPage() {
                                   )}
                                   {log.newValue && (
                                     <div>
-                                      <h4 className="text-xs font-semibold text-gray-700 mb-1">
+                                      <h4 className="text-xs font-semibold text-gray-900 mb-1">
                                         New Value
                                       </h4>
-                                      <pre className="text-xs bg-white p-2 rounded border border-gray-200 overflow-auto max-h-48">
+                                      <pre className="text-xs bg-white p-2 rounded border border-gray-200 overflow-auto max-h-48 text-gray-900">
                                         {JSON.stringify(
                                           parseJson(log.newValue),
                                           null,
@@ -408,7 +407,7 @@ export default function ActivityLogsPage() {
                                   <h4 className="text-xs font-semibold text-red-700 mb-1">
                                     Error Message
                                   </h4>
-                                  <p className="text-sm text-red-600">
+                                  <p className="text-sm text-red-700">
                                     {log.errorMessage}
                                   </p>
                                 </div>
@@ -423,15 +422,153 @@ export default function ActivityLogsPage() {
               </table>
             </div>
 
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-4 p-3 sm:p-4">
+              {logs.map((log) => (
+                <div key={log.id} className="border border-gray-200 rounded-lg p-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                    <div>
+                      <div className="font-medium text-gray-900 text-sm">
+                        {log.user.name}
+                      </div>
+                      <div className="text-xs text-gray-900">
+                        {log.user.email}
+                      </div>
+                    </div>
+                    <span
+                      className={`inline-block px-2 py-1 rounded text-xs font-semibold w-fit ${getActionBadgeColor(
+                        log.action
+                      )}`}
+                    >
+                      {log.action}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm">
+                    <div>
+                      <span className="text-gray-900 font-medium">{log.resourceType}</span>
+                      {log.resourceName && (
+                        <span className="text-gray-900 text-xs ml-2">({log.resourceName})</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs sm:text-sm">
+                    <span
+                      className={`inline-block px-2 py-1 rounded text-xs font-semibold w-fit ${getStatusBadgeColor(
+                        log.status
+                      )}`}
+                    >
+                      {log.status}
+                    </span>
+                    <div className="text-gray-900">
+                      <span className="font-medium">IP:</span> {log.ipAddress || '-'}
+                    </div>
+                    <div className="text-gray-900">
+                      <span className="font-medium">Time:</span> {new Date(log.createdAt).toLocaleString('id-ID')}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => toggleRowExpand(log.id)}
+                    className="w-full text-left py-2 px-2 hover:bg-gray-50 rounded transition-colors text-gray-900 font-medium text-sm"
+                  >
+                    {expandedRows.has(log.id) ? 'Hide Details' : 'Show Details'}
+                  </button>
+
+                  {expandedRows.has(log.id) && (
+                    <div className="border-t border-gray-200 pt-3 space-y-3 text-sm">
+                      {log.description && (
+                        <div>
+                          <h4 className="text-xs font-semibold text-gray-900 mb-1">
+                            Description
+                          </h4>
+                          <p className="text-sm text-gray-900">
+                            {log.description}
+                          </p>
+                        </div>
+                      )}
+
+                      {log.userAgent && (
+                        <div>
+                          <h4 className="text-xs font-semibold text-gray-900 mb-1">
+                            User Agent
+                          </h4>
+                          <p className="text-xs text-gray-900 break-all">
+                            {log.userAgent}
+                          </p>
+                        </div>
+                      )}
+
+                      {log.resourceId && (
+                        <div>
+                          <h4 className="text-xs font-semibold text-gray-900 mb-1">
+                            Resource ID
+                          </h4>
+                          <p className="text-sm font-mono text-gray-900">
+                            {log.resourceId}
+                          </p>
+                        </div>
+                      )}
+
+                      {(log.oldValue || log.newValue) && (
+                        <div className="space-y-2">
+                          {log.oldValue && (
+                            <div>
+                              <h4 className="text-xs font-semibold text-gray-900 mb-1">
+                                Old Value
+                              </h4>
+                              <pre className="text-xs bg-gray-50 p-2 rounded border border-gray-200 overflow-auto max-h-48 text-gray-900">
+                                {JSON.stringify(
+                                  parseJson(log.oldValue),
+                                  null,
+                                  2
+                                )}
+                              </pre>
+                            </div>
+                          )}
+                          {log.newValue && (
+                            <div>
+                              <h4 className="text-xs font-semibold text-gray-900 mb-1">
+                                New Value
+                              </h4>
+                              <pre className="text-xs bg-gray-50 p-2 rounded border border-gray-200 overflow-auto max-h-48 text-gray-900">
+                                {JSON.stringify(
+                                  parseJson(log.newValue),
+                                  null,
+                                  2
+                                )}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {log.errorMessage && (
+                        <div>
+                          <h4 className="text-xs font-semibold text-red-700 mb-1">
+                            Error Message
+                          </h4>
+                          <p className="text-sm text-red-700">
+                            {log.errorMessage}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
             {/* Pagination */}
             {pagination.totalPages > 1 && (
-              <div className="bg-gray-50 border-t border-gray-200 px-4 py-3 flex items-center justify-between">
-                <div className="text-sm text-gray-600">
+              <div className="bg-gray-50 border-t border-gray-200 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="text-xs sm:text-sm text-gray-900">
                   Showing {(pagination.page - 1) * pagination.limit + 1} to{' '}
                   {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
                   {pagination.total} logs
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
                   <button
                     onClick={() =>
                       setPagination(prev => ({
@@ -440,11 +577,11 @@ export default function ActivityLogsPage() {
                       }))
                     }
                     disabled={pagination.page === 1}
-                    className="px-3 py-1 border border-gray-300 rounded text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1 border border-gray-300 rounded text-xs sm:text-sm font-medium text-gray-900 bg-white hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Previous
                   </button>
-                  <span className="px-3 py-1 text-sm font-medium text-gray-700">
+                  <span className="px-3 py-1 text-xs sm:text-sm font-medium text-gray-900 bg-white border border-gray-300 rounded">
                     Page {pagination.page} of {pagination.totalPages}
                   </span>
                   <button
@@ -455,7 +592,7 @@ export default function ActivityLogsPage() {
                       }))
                     }
                     disabled={pagination.page === pagination.totalPages}
-                    className="px-3 py-1 border border-gray-300 rounded text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1 border border-gray-300 rounded text-xs sm:text-sm font-medium text-gray-900 bg-white hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Next
                   </button>
@@ -464,7 +601,6 @@ export default function ActivityLogsPage() {
             )}
           </>
         )}
-      </div>
-    </div>
+      </div>    </div>
   );
 }

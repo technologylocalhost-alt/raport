@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -89,8 +90,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let user: any;
   try {
-    const user = await verifyAdmin(request);
+    user = await verifyAdmin(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
@@ -162,9 +164,35 @@ export async function POST(
       },
     });
 
+    await logActivity({
+      userId: user.id,
+      action: 'CREATE',
+      resourceType: 'ClassSubject',
+      resourceId: classSubject.subject.id,
+      resourceName: classSubject.subject.name,
+      description: `Added subject ${classSubject.subject.name} to class`,
+      newValue: { subjectId },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse(classSubject, 'Subject added to class', 201);
   } catch (error: any) {
     console.error('Add subject to class error:', error);
+    if (user) {
+      await logActivity({
+        userId: user.id,
+        action: 'CREATE',
+        resourceType: 'ClassSubject',
+        resourceId: '',
+        description: `Failed to add subject to class`,
+        errorMessage: error?.message || 'Unknown error',
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'FAILED',
+      });
+    }
     if (error.code === 'P2002') {
       return errorResponse('Subject already assigned to this class', 400);
     }

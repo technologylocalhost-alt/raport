@@ -3,6 +3,7 @@ import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -116,6 +117,19 @@ export async function PUT(
       },
     });
 
+    await logActivity({
+      userId: admin.id,
+      action: 'UPDATE',
+      resourceType: 'Level',
+      resourceId: id,
+      resourceName: level.name,
+      description: `Updated level: ${level.name}`,
+      newValue: validatedData,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse(level);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -176,6 +190,22 @@ export async function DELETE(
 
     await prisma.level.delete({
       where: { id },
+    });
+
+    await logActivity({
+      userId: admin.id,
+      action: 'DELETE',
+      resourceType: 'Level',
+      resourceId: id,
+      resourceName: existingLevel.name,
+      description: `Deleted level: ${existingLevel.name}`,
+      oldValue: {
+        name: existingLevel.name,
+        code: existingLevel.code,
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
     });
 
     return successResponse({ message: 'Level deleted successfully' });

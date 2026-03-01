@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { verifyAccessToken } from '@/lib/auth/jwt';
 import { extractAccessToken } from '@/lib/auth/token-extractor';
 import { parseClassName, calculateNextClass } from '@/lib/class-promotion';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 async function verifyAdmin(req: NextRequest) {
   const token = extractAccessToken(req);
@@ -307,26 +308,48 @@ export async function POST(
       data: { isActive: false, updatedAt: new Date() },
     });
 
-    return successResponse(
-      {
-        promoted: createdStudents.length,
-        retained: retainStudentIds.length,
-        targetClass: {
-          id: targetClass.id,
-          name: targetClass.name,
-          level: targetClass.level.name,
-        },
-        sourceClass: {
-          id: sourceClass.id,
-          name: sourceClass.name,
-          level: sourceClass.level.name,
-          status: 'Kelas telah dinonaktifkan',
-        },
-        promotiondDetails: {
-          message: 'Data siswa di kelas lama tetap dipertahankan untuk keakuratan history. Kelas sumber telah dinonaktifkan.',
-          orderingMethod: 'Berdasarkan ranking nilai dari tertinggi ke terendah',
-        },
+    const promotionResult = {
+      promoted: createdStudents.length,
+      retained: retainStudentIds.length,
+      targetClass: {
+        id: targetClass.id,
+        name: targetClass.name,
+        level: targetClass.level.name,
       },
+      sourceClass: {
+        id: sourceClass.id,
+        name: sourceClass.name,
+        level: sourceClass.level.name,
+        status: 'Kelas telah dinonaktifkan',
+      },
+      promotiondDetails: {
+        message: 'Data siswa di kelas lama tetap dipertahankan untuk keakuratan history. Kelas sumber telah dinonaktifkan.',
+        orderingMethod: 'Berdasarkan ranking nilai dari tertinggi ke terendah',
+      },
+    };
+
+    // Log activity
+    await logActivity({
+      userId: admin.id,
+      action: 'CREATE',
+      resourceType: 'StudentPromotion',
+      resourceId: sourceClassId,
+      resourceName: `Class promotion: ${sourceClass.name} → ${targetClass.name}`,
+      description: `Promoted ${createdStudents.length} students from class ${sourceClass.name} (${sourceClass.level.name}) to ${targetClass.name} (${targetClass.level.name})`,
+      newValue: {
+        promotedCount: createdStudents.length,
+        retainedCount: retainStudentIds.length,
+        targetClassId: targetClass.id,
+        sourceClassId: sourceClass.id,
+        studentIds: createdStudents.map((s: { id: string }) => s.id),
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
+    return successResponse(
+      promotionResult,
       `Berhasil memproses naik kelas: ${createdStudents.length} siswa duplikat ke ${targetClass.name} (${targetClass.level.name}). Kelas lama "${sourceClass.name}" telah dinonaktifkan.`
     );
   } catch (error) {
@@ -334,6 +357,30 @@ export async function POST(
       return errorResponse('Validation error', 400, error.issues);
     }
     console.error('Promote error:', error);
+
+    // Log failed promotion
+    const token = extractAccessToken(request);
+    if (token) {
+      const payload = verifyAccessToken(token);
+      if (payload) {
+        const admin = await prisma.user.findUnique({
+          where: { id: payload.userId },
+        });
+        if (admin) {
+          await logActivity({
+            userId: admin.id,
+            action: 'CREATE',
+            resourceType: 'StudentPromotion',
+            description: 'Failed to process class promotion',
+            ipAddress: getClientIp(request),
+            userAgent: getUserAgent(request),
+            status: 'FAILED',
+            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
+    }
+
     return errorResponse('Failed to process class promotion', 500);
   }
 }

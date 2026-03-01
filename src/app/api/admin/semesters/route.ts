@@ -3,6 +3,7 @@ import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-res
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -87,8 +88,9 @@ export async function GET(request: NextRequest) {
  * Create a new semester
  */
 export async function POST(request: NextRequest) {
+  let admin;
   try {
-    const admin = await verifyAdmin(request);
+    admin = await verifyAdmin(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -136,6 +138,25 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Log activity
+    await logActivity({
+      userId: admin.id,
+      action: 'CREATE',
+      resourceType: 'Semester',
+      resourceId: semester.id,
+      resourceName: `Semester ${semester.number}`,
+      description: `Created semester ${semester.number} for school year ${schoolYear.year}`,
+      newValue: {
+        number: semester.number,
+        semesterLabel: semester.semesterLabel,
+        startDate: semester.startDate,
+        endDate: semester.endDate,
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse(semester, 201);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -147,6 +168,21 @@ export async function POST(request: NextRequest) {
       return errorResponse('Validation error', 400, fieldErrors);
     }
     console.error('Create semester error:', error);
+    
+    // Log failed semester creation
+    if (admin) {
+      await logActivity({
+        userId: admin.id,
+        action: 'CREATE',
+        resourceType: 'Semester',
+        description: 'Failed to create semester',
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'FAILED',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+
     return errorResponse('Failed to create semester', 500);
   }
 }

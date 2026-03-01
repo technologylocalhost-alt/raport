@@ -3,6 +3,7 @@ import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -142,6 +143,19 @@ export async function PUT(
       },
     });
 
+    await logActivity({
+      userId: admin.id,
+      action: 'UPDATE',
+      resourceType: 'Semester',
+      resourceId: id,
+      resourceName: `Semester ${semester.number}`,
+      description: `Updated semester: ${semester.number}`,
+      newValue: updateData,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse(semester);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -165,8 +179,10 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let id = '';
   try {
-    const { id } = await params;
+    const result = await params;
+    id = result.id;
     const admin = await verifyAdmin(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
@@ -194,6 +210,21 @@ export async function DELETE(
 
     await prisma.semester.delete({
       where: { id },
+    });
+
+    await logActivity({
+      userId: admin.id,
+      action: 'DELETE',
+      resourceType: 'Semester',
+      resourceId: id,
+      resourceName: `Semester ${existingSemester.number}`,
+      description: `Deleted semester: ${existingSemester.number}`,
+      oldValue: {
+        number: existingSemester.number,
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
     });
 
     return successResponse({ message: 'Semester berhasil dihapus' });

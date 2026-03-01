@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 async function getTeacher(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -135,8 +136,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  let teacher: any;
   try {
-    const teacher = await getTeacher(req);
+    teacher = await getTeacher(req);
     if (!teacher) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -201,6 +203,19 @@ export async function POST(req: NextRequest) {
         include: { student: true },
       });
 
+      await logActivity({
+        userId: teacher.id,
+        action: 'UPDATE',
+        resourceType: 'Attendance',
+        resourceId: updated.id,
+        resourceName: `${updated.student.name} - ${new Date(updated.date).toLocaleDateString()}`,
+        description: `Updated attendance for ${updated.student.name}`,
+        newValue: { status, notes },
+        ipAddress: getClientIp(req),
+        userAgent: getUserAgent(req),
+        status: 'SUCCESS',
+      });
+
       return NextResponse.json({
         success: true,
         data: updated,
@@ -218,12 +233,36 @@ export async function POST(req: NextRequest) {
       include: { student: true },
     });
 
+    await logActivity({
+      userId: teacher.id,
+      action: 'CREATE',
+      resourceType: 'Attendance',
+      resourceId: attendance.id,
+      resourceName: `${attendance.student.name} - ${new Date(attendance.date).toLocaleDateString()}`,
+      description: `Created attendance record for ${attendance.student.name}`,
+      newValue: { studentId, date: attendanceDate, status, notes },
+      ipAddress: getClientIp(req),
+      userAgent: getUserAgent(req),
+      status: 'SUCCESS',
+    });
+
     return NextResponse.json({
       success: true,
       data: attendance,
     });
   } catch (error) {
     console.error('Error creating attendance:', error);
+    await logActivity({
+      userId: teacher?.id || 'unknown',
+      action: 'CREATE',
+      resourceType: 'Attendance',
+      resourceId: '',
+      description: `Failed to create attendance record`,
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      ipAddress: getClientIp(req),
+      userAgent: getUserAgent(req),
+      status: 'FAILED',
+    });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

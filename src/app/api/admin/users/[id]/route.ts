@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { verifyAccessToken } from '@/lib/auth/jwt';
 import { hashPassword } from '@/lib/auth/password';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -87,9 +88,12 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let admin: any;
+  let id = '';
   try {
-    const { id } = await params;
-    const admin = await verifyAdmin(request);
+    const result = await params;
+    id = result.id;
+    admin = await verifyAdmin(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -151,12 +155,42 @@ export async function PUT(
       },
     });
 
+    // Log without password
+    const logData = { ...validatedData };
+    delete (logData as any).password;
+
+    await logActivity({
+      userId: admin.id,
+      action: 'UPDATE',
+      resourceType: 'User',
+      resourceId: id,
+      resourceName: user.name,
+      description: `Updated user ${user.name}`,
+      newValue: logData,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse(user);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return errorResponse('Validation error', 400, error.issues);
     }
     console.error('Update user error:', error);
+    if (admin) {
+      await logActivity({
+        userId: admin.id,
+        action: 'UPDATE',
+        resourceType: 'User',
+        resourceId: id,
+        description: `Failed to update user`,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'FAILED',
+      });
+    }
     return errorResponse('Failed to update user', 500);
   }
 }
@@ -169,9 +203,12 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let admin: any;
+  let id = '';
   try {
-    const { id } = await params;
-    const admin = await verifyAdmin(request);
+    const result = await params;
+    id = result.id;
+    admin = await verifyAdmin(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -195,9 +232,35 @@ export async function DELETE(
       where: { id },
     });
 
+    await logActivity({
+      userId: admin.id,
+      action: 'DELETE',
+      resourceType: 'User',
+      resourceId: id,
+      resourceName: existingUser.name,
+      description: `Deleted user ${existingUser.name}`,
+      oldValue: { email: existingUser.email, name: existingUser.name, role: existingUser.role },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse({ message: 'User berhasil dihapus' });
   } catch (error) {
     console.error('Delete user error:', error);
+    if (admin) {
+      await logActivity({
+        userId: admin.id,
+        action: 'DELETE',
+        resourceType: 'User',
+        resourceId: id,
+        description: `Failed to delete user`,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'FAILED',
+      });
+    }
     return errorResponse('Failed to delete user', 500);
   }
 }

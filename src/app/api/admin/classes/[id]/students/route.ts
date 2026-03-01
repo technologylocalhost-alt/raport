@@ -3,6 +3,7 @@ import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-res
 import { prisma } from '@/lib/db';
 import { verifyAccessToken } from '@/lib/auth/jwt';
 import { z } from 'zod';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -206,8 +207,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let user;
   try {
-    const user = await verifyAdmin(request);
+    user = await verifyAdmin(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
@@ -281,6 +283,20 @@ export async function POST(
           classId: true,
         },
       });
+
+      await logActivity({
+        userId: user.id,
+        action: 'UPDATE',
+        resourceType: 'Student',
+        resourceId: updated.id,
+        resourceName: updated.name,
+        description: `Updated student ${updated.name} in class`,
+        newValue: validation.data,
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'SUCCESS',
+      });
+
       return successResponse(updated, 'Student updated successfully');
     }
 
@@ -313,9 +329,35 @@ export async function POST(
       },
     });
 
+    await logActivity({
+      userId: user.id,
+      action: 'CREATE',
+      resourceType: 'Student',
+      resourceId: newStudent.id,
+      resourceName: newStudent.name,
+      description: `Created new student ${newStudent.name}`,
+      newValue: validation.data,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse(newStudent, 'Student created successfully', 201);
   } catch (error: any) {
     console.error('Create student error:', error);
+    if (user) {
+      await logActivity({
+        userId: user.id,
+        action: 'CREATE',
+        resourceType: 'Student',
+        resourceId: '',
+        description: `Failed to create/update student`,
+        errorMessage: error?.message || 'Unknown error',
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'FAILED',
+      });
+    }
     if (error.code === 'P2002') {
       return errorResponse('Siswa dengan nomor yang sama sudah ada di kelas ini', 400);
     }

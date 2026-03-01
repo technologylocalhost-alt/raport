@@ -3,6 +3,7 @@ import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-res
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -89,6 +90,26 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return errorResponse('Unauthorized', 401);
+    }
+
+    const token = authHeader.slice(7);
+    const payload = verifyAccessToken(token);
+    
+    if (!payload) {
+      return errorResponse('Unauthorized', 401);
+    }
+
+    const admin = await prisma.user.findUnique({
+      where: { id: payload.userId },
+    });
+    
+    if (!admin || (admin.role !== 'ADMIN' && admin.role !== 'PRINCIPAL')) {
+      return errorResponse('Unauthorized', 401);
+    }
+
     const body = await request.json();
     const validatedData = schoolYearSchema.parse(body);
 
@@ -117,12 +138,56 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Log activity
+    await logActivity({
+      userId: admin.id,
+      action: 'CREATE',
+      resourceType: 'SchoolYear',
+      resourceId: schoolYear.id,
+      resourceName: schoolYear.year,
+      description: `Created school year: ${schoolYear.year}`,
+      newValue: {
+        year: schoolYear.year,
+        tahunAkademik: schoolYear.tahunAkademik,
+        startDate: schoolYear.startDate,
+        endDate: schoolYear.endDate,
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse(schoolYear, 201);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return errorResponse('Validation error', 400, error.issues);
     }
     console.error('Create school year error:', error);
+    
+    // Log failed school year creation
+    const authHeader = request.headers.get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7);
+      const payload = verifyAccessToken(token);
+      if (payload) {
+        const admin = await prisma.user.findUnique({
+          where: { id: payload.userId },
+        });
+        if (admin) {
+          await logActivity({
+            userId: admin.id,
+            action: 'CREATE',
+            resourceType: 'SchoolYear',
+            description: 'Failed to create school year',
+            ipAddress: getClientIp(request),
+            userAgent: getUserAgent(request),
+            status: 'FAILED',
+            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
+    }
+
     return errorResponse('Failed to create school year', 500);
   }
 }

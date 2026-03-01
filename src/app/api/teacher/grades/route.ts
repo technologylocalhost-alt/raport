@@ -3,13 +3,15 @@ import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-res
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 const gradeSchema = z.object({
   studentId: z.string().min(1, 'Student ID is required'),
-  competencyId: z.union([
-    z.string().min(1),
-    z.literal('')
-  ]), // Allow empty string or valid ID
+  // competencyId: z.union([
+  //   z.string().min(1),
+  //   z.literal('')
+  // ]), // Allow empty string or valid ID
+  competencyId: z.any().optional(), // Allow any competencyId value
   score: z
     .union([z.string(), z.number()])
     .transform((val) => parseFloat(String(val)))
@@ -253,8 +255,8 @@ export async function POST(request: NextRequest) {
       return errorResponse('Unauthorized', 401);
     }
 
-    // Allow both TEACHER and WALI_KELAS
-    if (user.role !== 'TEACHER' && user.role !== 'WALI_KELAS') {
+    // Allow ADMIN, PRINCIPAL, TEACHER, and WALI_KELAS
+    if (user.role !== 'ADMIN' && user.role !== 'PRINCIPAL' && user.role !== 'TEACHER' && user.role !== 'WALI_KELAS') {
       return errorResponse('Unauthorized', 401);
     }
 
@@ -263,8 +265,11 @@ export async function POST(request: NextRequest) {
     const validatedData = gradeSchema.parse(body);
 
     // Verify that student exists in a class taught by/assigned to this user
+    // Admin and Principal can create grades for any student
     let classTeacher;
-    if (user.role === 'TEACHER') {
+    if (user.role === 'ADMIN' || user.role === 'PRINCIPAL') {
+      // Admin/Principal can create grades for any student, no verification needed
+    } else if (user.role === 'TEACHER') {
       classTeacher = await prisma.classTeacher.findFirst({
         where: {
           teacherId: user.id,
@@ -308,6 +313,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Verify student ownership based on role
     if (user.role === 'TEACHER' && !classTeacher) {
       return errorResponse('Student not found in your classes', 400);
     }
@@ -402,6 +408,27 @@ export async function POST(request: NextRequest) {
 
     console.log('Grade saved successfully:', grade.id, 'for student:', grade.studentId, 'competency:', grade.competencyId);
 
+    // Log activity
+    await logActivity({
+      userId: user.id,
+      action: existingGrade ? 'UPDATE' : 'CREATE',
+      resourceType: 'Grade',
+      resourceId: grade.id,
+      resourceName: `Grade for ${grade.student.name} - ${grade.competency?.name || 'No Competency'}`,
+      description: existingGrade 
+        ? `Updated grade for ${grade.student.name}: ${grade.score}` 
+        : `Created grade for ${grade.student.name}: ${grade.score}`,
+      newValue: {
+        studentId: grade.studentId,
+        competencyId: grade.competencyId,
+        score: grade.score,
+        assessmentType: grade.assessmentType,
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse({
       id: grade.id,
       studentId: grade.studentId,
@@ -425,6 +452,22 @@ export async function POST(request: NextRequest) {
       return errorResponse('Validation error', 400, fieldErrors);
     }
     console.error('Create grade error:', error);
+
+    // Log failed grade creation
+    const user = await getUser(request);
+    if (user) {
+      await logActivity({
+        userId: user.id,
+        action: 'CREATE',
+        resourceType: 'Grade',
+        description: 'Failed to create grade',
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'FAILED',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+
     return errorResponse('Failed to create grade', 500);
   }
 }

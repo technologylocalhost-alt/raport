@@ -3,6 +3,7 @@ import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-res
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 const schoolSchema = z.object({
   name: z.string().min(1, 'School name is required'),
@@ -108,12 +109,48 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Log activity
+    await logActivity({
+      userId: admin.id,
+      action: 'CREATE',
+      resourceType: 'School',
+      resourceId: school.id,
+      resourceName: school.name,
+      description: `Created school: ${school.name}`,
+      newValue: {
+        name: school.name,
+        address: validatedData.address,
+        phone: validatedData.phone,
+        email: validatedData.email,
+        npsn: validatedData.npsn,
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse(school, 201);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return errorResponse('Validation error', 400, error.issues);
     }
     console.error('Create school error:', error);
+    
+    // Log failed school creation
+    const admin = await verifyAdmin(request);
+    if (admin) {
+      await logActivity({
+        userId: admin.id,
+        action: 'CREATE',
+        resourceType: 'School',
+        description: 'Failed to create school',
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'FAILED',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+
     return errorResponse('Failed to create school', 500);
   }
 }

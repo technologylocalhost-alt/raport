@@ -3,6 +3,7 @@ import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -209,6 +210,19 @@ export async function PUT(
       }
     }
 
+    await logActivity({
+      userId: admin.id,
+      action: 'UPDATE',
+      resourceType: 'Class',
+      resourceId: id,
+      resourceName: updatedClass.name,
+      description: `Updated class: ${updatedClass.name}`,
+      newValue: updateData,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse(updatedClass);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -258,6 +272,21 @@ export async function DELETE(
 
     await prisma.class.delete({
       where: { id },
+    });
+
+    await logActivity({
+      userId: admin.id,
+      action: 'DELETE',
+      resourceType: 'Class',
+      resourceId: id,
+      resourceName: existingClass.name,
+      description: `Deleted class: ${existingClass.name}`,
+      oldValue: {
+        name: existingClass.name,
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
     });
 
     return successResponse({ message: 'Kelas berhasil dihapus' });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -97,13 +98,18 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; subjectId: string }> }
 ) {
+  let user;
+  let id = '';
+  let subjectId = '';
   try {
-    const user = await verifyAdmin(request);
+    user = await verifyAdmin(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
 
-    const { id, subjectId } = await params;
+    const result = await params;
+    id = result.id;
+    subjectId = result.subjectId;
     console.log('[DELETE ClassSubject] Params:', { id, subjectId, userId: user.id, userRole: user.role });
 
     // Verify the class exists
@@ -146,12 +152,42 @@ export async function DELETE(
           subjectId,
         },
       },
+      include: {
+        subject: { select: { id: true, name: true } },
+      },
     });
 
     console.log('[DELETE ClassSubject] Successfully deleted:', { classId: id, subjectId });
+
+    await logActivity({
+      userId: user.id,
+      action: 'DELETE',
+      resourceType: 'ClassSubject',
+      resourceId: subjectId,
+      resourceName: deleted.subject.name,
+      description: `Removed subject ${deleted.subject.name} from class`,
+      oldValue: { classId: id, subjectId },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse(deleted, 'Subject removed from class');
   } catch (error: any) {
     console.error('Delete subject from class error:', error);
+    if (user) {
+      await logActivity({
+        userId: user.id,
+        action: 'DELETE',
+        resourceType: 'ClassSubject',
+        resourceId: subjectId,
+        description: `Failed to remove subject from class`,
+        errorMessage: error?.message || 'Unknown error',
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'FAILED',
+      });
+    }
     if (error.code === 'P2025') {
       return errorResponse('Subject not found in this class', 404);
     }

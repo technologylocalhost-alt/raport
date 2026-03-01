@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -93,8 +94,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let user: any;
   try {
-    const user = await verifyAdmin(request);
+    user = await verifyAdmin(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
@@ -195,9 +197,35 @@ export async function POST(
       },
     });
 
+    await logActivity({
+      userId: user.id,
+      action: 'CREATE',
+      resourceType: 'ClassTeacher',
+      resourceId: classTeacher.id,
+      resourceName: `${classTeacher.teacher.name} - ${classTeacher.subject.name}`,
+      description: `Assigned ${classTeacher.teacher.name} to teach ${classTeacher.subject.name}`,
+      newValue: { teacherId, subjectId },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse(classTeacher, 'Teacher added to class', 201);
   } catch (error: any) {
     console.error('Add teacher to class error:', error);
+    if (user) {
+      await logActivity({
+        userId: user.id,
+        action: 'CREATE',
+        resourceType: 'ClassTeacher',
+        resourceId: '',
+        description: `Failed to add teacher to class`,
+        errorMessage: error?.message || 'Unknown error',
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'FAILED',
+      });
+    }
     if (error.code === 'P2002') {
       return errorResponse('Teacher already assigned to this subject in this class', 400);
     }

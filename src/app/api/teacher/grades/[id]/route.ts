@@ -3,6 +3,7 @@ import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 const gradeUpdateSchema = z.object({
   score: z
@@ -33,7 +34,7 @@ async function getTeacher(req: NextRequest) {
     where: { id: payload.userId },
   });
 
-  if (teacher && (teacher.role === 'TEACHER' || teacher.role === 'WALI_KELAS')) {
+  if (teacher && (teacher.role === 'TEACHER' || teacher.role === 'WALI_KELAS' || teacher.role === 'ADMIN' || teacher.role === 'PRINCIPAL')) {
     return teacher;
   }
   return null;
@@ -71,9 +72,11 @@ export async function GET(
       return errorResponse('Grade not found', 404);
     }
 
-    // Check authorization - teacher owns the grade or wali-kelas is assigned to the student's class
+    // Check authorization - teacher owns the grade or wali-kelas is assigned to the student's class or admin/principal can do anything
     let authorized = false;
-    if (grade.teacherId === teacher.id) {
+    if (teacher.role === 'ADMIN' || teacher.role === 'PRINCIPAL') {
+      authorized = true;
+    } else if (grade.teacherId === teacher.id) {
       authorized = true;
     } else if (teacher.role === 'WALI_KELAS') {
       const student = await prisma.student.findUnique({
@@ -135,9 +138,11 @@ export async function PUT(
       return errorResponse('Grade not found', 404);
     }
 
-    // Check authorization - teacher owns the grade or wali-kelas is assigned to the student's class
+    // Check authorization - teacher owns the grade or wali-kelas is assigned to the student's class or admin/principal can do anything
     let authorized = false;
-    if (grade.teacherId === teacher.id) {
+    if (teacher.role === 'ADMIN' || teacher.role === 'PRINCIPAL') {
+      authorized = true;
+    } else if (grade.teacherId === teacher.id) {
       authorized = true;
     } else if (teacher.role === 'WALI_KELAS') {
       const student = await prisma.student.findUnique({
@@ -176,6 +181,24 @@ export async function PUT(
           },
         },
       },
+    });
+
+    // Log activity
+    await logActivity({
+      userId: teacher.id,
+      action: 'UPDATE',
+      resourceType: 'Grade',
+      resourceId: id,
+      resourceName: `Grade for ${updatedGrade.student.name} - ${updatedGrade.competency?.name || 'No Competency'}`,
+      description: `Updated grade for ${updatedGrade.student.name}: ${updatedGrade.score}`,
+      newValue: {
+        score: updatedGrade.score,
+        assessmentType: updatedGrade.assessmentType,
+        notes: updatedGrade.notes,
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
     });
 
     return successResponse({
@@ -222,15 +245,21 @@ export async function DELETE(
     // Verify that the teacher owns this grade
     const grade = await prisma.grade.findUnique({
       where: { id },
+      include: {
+        student: true,
+        competency: true,
+      },
     });
 
     if (!grade) {
       return errorResponse('Grade not found', 404);
     }
 
-    // Check authorization - teacher owns the grade or wali-kelas is assigned to the student's class
+    // Check authorization - teacher owns the grade or wali-kelas is assigned to the student's class or admin/principal can do anything
     let authorized = false;
-    if (grade.teacherId === teacher.id) {
+    if (teacher.role === 'ADMIN' || teacher.role === 'PRINCIPAL') {
+      authorized = true;
+    } else if (grade.teacherId === teacher.id) {
       authorized = true;
     } else if (teacher.role === 'WALI_KELAS') {
       const student = await prisma.student.findUnique({
@@ -248,6 +277,25 @@ export async function DELETE(
 
     await prisma.grade.delete({
       where: { id },
+    });
+
+    // Log activity
+    await logActivity({
+      userId: teacher.id,
+      action: 'DELETE',
+      resourceType: 'Grade',
+      resourceId: id,
+      resourceName: `Grade for ${grade.student.name} - ${grade.competency?.name || 'No Competency'}`,
+      description: `Deleted grade for ${grade.student.name}: ${grade.score}`,
+      oldValue: {
+        studentId: grade.studentId,
+        competencyId: grade.competencyId,
+        score: grade.score,
+        assessmentType: grade.assessmentType,
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
     });
 
     return successResponse({ message: 'Grade deleted successfully' });

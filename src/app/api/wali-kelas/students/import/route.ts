@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import * as XLSX from 'xlsx';
 
 interface ImportRow {
@@ -223,6 +224,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Log successful import
+    const ipAddress = getClientIp(request);
+    const userAgent = getUserAgent(request);
+    
+    await logActivity({
+      userId: user.id,
+      action: 'IMPORT',
+      resourceType: 'Student',
+      resourceId: `bulk_${Date.now()}`,
+      description: `Imported ${results.success} students to class ${classData.id} (${results.failed} failed, ${results.duplicates} duplicates)`,
+      status: 'SUCCESS',
+      ipAddress,
+      userAgent,
+    });
+
     return NextResponse.json(
       {
         success: true,
@@ -232,6 +248,24 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
+    // Log failed import
+    const user = await verifyWaliKelas(request);
+    if (user) {
+      const ipAddress = getClientIp(request);
+      const userAgent = getUserAgent(request);
+      
+      await logActivity({
+        userId: user.id,
+        action: 'IMPORT',
+        resourceType: 'Student',
+        description: 'Failed to import students from file',
+        status: 'FAILED',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        ipAddress,
+        userAgent,
+      });
+    }
+    
     console.error('[Import Students] Fatal error:', error);
     return NextResponse.json(
       {

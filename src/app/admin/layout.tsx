@@ -83,6 +83,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     {
       title: 'Penilaian',
       items: [
+        { title: 'Per Mata Pelajaran', icon: BookOpen, href: '/admin/penilaian' },
         { title: 'Penilaian', icon: Users, href: '/admin/raports' },
         { title: 'Siswa', icon: BarChart3, href: '/admin/students' },
         { title: 'Raport', icon: BookOpen, href: '/admin/raport-sampul' },

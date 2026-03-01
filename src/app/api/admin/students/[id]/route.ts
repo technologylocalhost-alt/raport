@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -85,9 +86,12 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let admin: any;
+  let id = '';
   try {
-    const { id } = await params;
-    const admin = await verifyAdmin(request);
+    const result = await params;
+    id = result.id;
+    admin = await verifyAdmin(request);
 
     if (!admin) {
       return errorResponse('Unauthorized', 401);
@@ -127,6 +131,19 @@ export async function PUT(
       },
     });
 
+    await logActivity({
+      userId: admin.id,
+      action: 'UPDATE',
+      resourceType: 'Student',
+      resourceId: id,
+      resourceName: updatedStudent.name,
+      description: `Updated student ${updatedStudent.name}`,
+      newValue: body,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse({
       id: updatedStudent.id,
       name: updatedStudent.name,
@@ -140,6 +157,19 @@ export async function PUT(
     });
   } catch (error) {
     console.error('Error updating student:', error);
+    if (admin) {
+      await logActivity({
+        userId: admin.id,
+      action: 'UPDATE',
+      resourceType: 'Student',
+      resourceId: id,
+      description: `Failed to update student`,
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+        status: 'FAILED',
+      });
+    }
     return errorResponse('Gagal mengubah data siswa', 500);
   }
 }
@@ -152,9 +182,12 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let admin: any;
+  let id = '';
   try {
-    const { id } = await params;
-    const admin = await verifyAdmin(request);
+    const result = await params;
+    id = result.id;
+    admin = await verifyAdmin(request);
 
     if (!admin) {
       return errorResponse('Unauthorized', 401);
@@ -168,13 +201,40 @@ export async function DELETE(
       return errorResponse('Siswa tidak ditemukan', 404);
     }
 
+    const deletedStudent = student;
     await prisma.student.delete({
       where: { id },
+    });
+
+    await logActivity({
+      userId: admin.id,
+      action: 'DELETE',
+      resourceType: 'Student',
+      resourceId: id,
+      resourceName: student.name,
+      description: `Deleted student ${student.name}`,
+      oldValue: student,
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
     });
 
     return successResponse(null, 'Siswa berhasil dihapus');
   } catch (error) {
     console.error('Error deleting student:', error);
+    if (admin) {
+      await logActivity({
+        userId: admin.id,
+        action: 'DELETE',
+        resourceType: 'Student',
+        resourceId: id,
+        description: `Failed to delete student`,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'FAILED',
+      });
+    }
     return errorResponse('Gagal menghapus data siswa', 500);
   }
 }

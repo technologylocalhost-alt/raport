@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { verifyAccessToken } from '@/lib/auth/jwt';
 import { extractAccessToken } from '@/lib/auth/token-extractor';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 async function verifyAdmin(req: NextRequest) {
   const token = extractAccessToken(req);
@@ -85,6 +86,21 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const token = extractAccessToken(request);
+    if (!token) {
+      return errorResponse('Unauthorized', 401);
+    }
+    const payload = verifyAccessToken(token);
+    if (!payload) {
+      return errorResponse('Unauthorized', 401);
+    }
+    const admin = await prisma.user.findUnique({
+      where: { id: payload.userId },
+    });
+    if (!admin || (admin.role !== 'ADMIN' && admin.role !== 'PRINCIPAL')) {
+      return errorResponse('Unauthorized', 401);
+    }
+
     const body = await request.json();
     const validatedData = levelSchema.parse(body);
 
@@ -106,12 +122,54 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Log activity
+    await logActivity({
+      userId: admin.id,
+      action: 'CREATE',
+      resourceType: 'Level',
+      resourceId: level.id,
+      resourceName: level.name,
+      description: `Created level: ${level.name} (${level.code})`,
+      newValue: {
+        name: level.name,
+        code: level.code,
+        order: level.order,
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse(level, 201);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return errorResponse('Validation error', 400, error.issues);
     }
     console.error('Create level error:', error);
+    
+    // Log failed level creation
+    const token = extractAccessToken(request);
+    if (token) {
+      const payload = verifyAccessToken(token);
+      if (payload) {
+        const admin = await prisma.user.findUnique({
+          where: { id: payload.userId },
+        });
+        if (admin) {
+          await logActivity({
+            userId: admin.id,
+            action: 'CREATE',
+            resourceType: 'Level',
+            description: 'Failed to create level',
+            ipAddress: getClientIp(request),
+            userAgent: getUserAgent(request),
+            status: 'FAILED',
+            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
+    }
+
     return errorResponse('Failed to create level', 500);
   }
 }

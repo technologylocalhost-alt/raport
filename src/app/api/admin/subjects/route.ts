@@ -3,6 +3,7 @@ import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-res
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -105,6 +106,26 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return errorResponse('Unauthorized', 401);
+    }
+
+    const token = authHeader.slice(7);
+    const payload = verifyAccessToken(token);
+    
+    if (!payload) {
+      return errorResponse('Unauthorized', 401);
+    }
+
+    const admin = await prisma.user.findUnique({
+      where: { id: payload.userId },
+    });
+    
+    if (!admin || (admin.role !== 'ADMIN' && admin.role !== 'PRINCIPAL')) {
+      return errorResponse('Unauthorized', 401);
+    }
+
     const body = await request.json();
     const validatedData = subjectSchema.parse(body);
 
@@ -132,12 +153,55 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Log activity
+    await logActivity({
+      userId: admin.id,
+      action: 'CREATE',
+      resourceType: 'Subject',
+      resourceId: subject.id,
+      resourceName: subject.name,
+      description: `Created subject: ${subject.name} (${subject.code})`,
+      newValue: {
+        name: subject.name,
+        code: subject.code,
+        levelId: subject.levelId,
+      },
+      ipAddress: getClientIp(request),
+      userAgent: getUserAgent(request),
+      status: 'SUCCESS',
+    });
+
     return successResponse(subject, 201);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return errorResponse('Validation error', 400, error.issues);
     }
     console.error('Create subject error:', error);
+    
+    // Log failed subject creation
+    const authHeader = request.headers.get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7);
+      const payload = verifyAccessToken(token);
+      if (payload) {
+        const admin = await prisma.user.findUnique({
+          where: { id: payload.userId },
+        });
+        if (admin) {
+          await logActivity({
+            userId: admin.id,
+            action: 'CREATE',
+            resourceType: 'Subject',
+            description: 'Failed to create subject',
+            ipAddress: getClientIp(request),
+            userAgent: getUserAgent(request),
+            status: 'FAILED',
+            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
+    }
+
     return errorResponse('Failed to create subject', 500);
   }
 }
