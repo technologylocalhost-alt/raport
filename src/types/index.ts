@@ -173,7 +173,8 @@ export interface UpdateStudentInput {
 export interface GradeData {
   id: string;
   studentId: string;
-  competencyId: string;
+  competencyId?: string | null;
+  subjectId: string;
   levelId: string;
   teacherId: string;
   score: string;
@@ -187,7 +188,8 @@ export interface GradeData {
 
 export interface CreateGradeInput {
   studentId: string;
-  competencyId: string;
+  competencyId?: string | null;
+  subjectId: string;
   levelId: string;
   score: string;
   scoringType: ScoringType;

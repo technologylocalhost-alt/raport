@@ -1106,7 +1106,7 @@ export default function AdminPenilaianStudentsPage() {
 
                   <button
                     onClick={downloadTemplate}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-semibold flex items-center justify-center gap-2"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-semibold flex items-center justify-center gap-2 text-gray-900"
                   >
                     <Download size={20} />
                     Download Template
@@ -1131,20 +1131,20 @@ export default function AdminPenilaianStudentsPage() {
                         <table className="w-full text-xs">
                           <thead className="bg-gray-100 sticky top-0">
                             <tr>
-                              <th className="px-3 py-2 text-left">Nomor Siswa</th>
-                              <th className="px-3 py-2 text-left">Nama</th>
-                              <th className="px-3 py-2 text-center">Nilai</th>
-                              <th className="px-3 py-2 text-left">Jenis Penilaian</th>
-                              <th className="px-3 py-2 text-left">Status</th>
+                              <th className="px-3 py-2 text-left text-gray-900 font-semibold">Nomor Siswa</th>
+                              <th className="px-3 py-2 text-left text-gray-900 font-semibold">Nama</th>
+                              <th className="px-3 py-2 text-center text-gray-900 font-semibold">Nilai</th>
+                              <th className="px-3 py-2 text-left text-gray-900 font-semibold">Jenis Penilaian</th>
+                              <th className="px-3 py-2 text-left text-gray-900 font-semibold">Status</th>
                             </tr>
                           </thead>
                           <tbody>
                             {importedRows.map((row, idx) => (
                               <tr key={idx} className={row.errors ? 'bg-red-50' : 'hover:bg-gray-50'}>
-                                <td className="px-3 py-2 border-b">{row.studentNo}</td>
-                                <td className="px-3 py-2 border-b">{row.studentName}</td>
-                                <td className="px-3 py-2 border-b text-center font-semibold">{row.score}</td>
-                                <td className="px-3 py-2 border-b">{row.assessmentType}</td>
+                                <td className="px-3 py-2 border-b text-gray-900">{row.studentNo}</td>
+                                <td className="px-3 py-2 border-b text-gray-900">{row.studentName}</td>
+                                <td className="px-3 py-2 border-b text-center font-semibold text-gray-900">{row.score}</td>
+                                <td className="px-3 py-2 border-b text-gray-900">{row.assessmentType}</td>
                                 <td className="px-3 py-2 border-b">
                                   {row.errors ? (
                                     <span className="text-red-700 font-semibold">Error</span>
@@ -1183,7 +1183,7 @@ export default function AdminPenilaianStudentsPage() {
                             setImportedRows([]);
                             setImportError('');
                           }}
-                          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-900 font-medium"
                         >
                           Batal
                         </button>

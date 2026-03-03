@@ -162,8 +162,8 @@ export default function GradesPage() {
     setSuccessMessage('');
 
     // Validation
-    if (!formData.studentId || !formData.competencyId || !formData.score || !formData.assessmentType) {
-      setErrorMessage('Mohon isi semua field yang wajib');
+    if (!formData.studentId || !formData.score || !formData.assessmentType) {
+      setErrorMessage('Mohon isi semua field yang wajib (Siswa, Nilai, Jenis Penilaian)');
       return;
     }
 

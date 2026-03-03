@@ -71,9 +71,7 @@ export async function POST(request: NextRequest) {
         student: {
           classId: validatedData.classId,
         },
-        competency: {
-          subjectId: validatedData.subjectId,
-        },
+        subjectId: validatedData.subjectId,
       },
       include: {
         student: {
@@ -86,11 +84,8 @@ export async function POST(request: NextRequest) {
             },
           },
         },
-        competency: {
-          include: {
-            subject: true,
-          },
-        },
+        subject: true,
+        competency: true,
         teacher: true,
       },
     });
@@ -293,7 +288,7 @@ export async function POST(request: NextRequest) {
 
     // Log bulk approval activity (background task - doesn't block response)
     const userId = user.id; // Save for background task
-    const subjectName = grades[0]?.competency?.subject.name || 'Unknown Subject';
+    const subjectName = grades[0]?.subject?.name || 'Unknown Subject';
     const className = classData?.name || 'Unknown Class';
 
     (async () => {

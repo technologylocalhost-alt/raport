@@ -83,11 +83,8 @@ export async function GET(request: NextRequest) {
             class: true,
           },
         },
-        competency: {
-          include: {
-            subject: true,
-          },
-        },
+        subject: true,
+        competency: true,
         teacher: true,
       },
     });
@@ -107,18 +104,19 @@ export async function GET(request: NextRequest) {
     } = {};
 
     grades.forEach((grade) => {
-      // Skip grades without competency
-      if (!grade.competency) {
+      // Skip grades without subject (cannot group without a subject)
+      if (!grade.subject || !grade.subjectId) {
         return;
       }
 
-      const key = `${grade.competency.subjectId}-${grade.student.classId}`;
+      // Group by subjectId and classId (no longer skipping grades without competency)
+      const key = `${grade.subjectId}-${grade.student.classId}`;
 
       if (!gradesBySubject[key]) {
         const classData = classes.find((c) => c.id === grade.student.classId);
         gradesBySubject[key] = {
-          subjectId: grade.competency.subjectId,
-          subjectName: grade.competency.subject.name,
+          subjectId: grade.subjectId,
+          subjectName: grade.subject.name,
           classId: grade.student.classId,
           className: classData?.name || 'N/A',
           totalStudents: 0, // Will be calculated from unique students
@@ -137,7 +135,7 @@ export async function GET(request: NextRequest) {
         studentId: grade.studentId,
         studentName: grade.student.name,
         gender: grade.student.gender || 'MALE',
-        competencyName: grade.competency.name,
+        competencyName: grade.competency?.name || '(Tanpa Kompetensi)',
         score: grade.score,
         assessmentType: grade.assessmentType,
         teacherName: grade.teacher?.name || 'N/A',

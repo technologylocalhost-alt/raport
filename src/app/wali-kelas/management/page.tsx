@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, FormEvent } from 'react';
-import { Plus, Trash2, X, AlertCircle, CheckCircle, ArrowLeft, BookOpen, Users } from 'lucide-react';
+import { Plus, Trash2, X, AlertCircle, CheckCircle, ArrowLeft, BookOpen, Users, Download, Upload } from 'lucide-react';
 
 interface Class {
   id: string;
@@ -85,6 +85,9 @@ export default function WaliKelasClassManagementPage() {
   const [teacherSearchText, setTeacherSearchText] = useState('');
   const [subjectSearchTeacherText, setSubjectSearchTeacherText] = useState('');
   const [showSubjectDropdown, setShowSubjectDropdown] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
+  const [showImportResult, setShowImportResult] = useState(false);
   const itemsPerPage = 10;
 
   useEffect(() => {
@@ -303,6 +306,109 @@ export default function WaliKelasClassManagementPage() {
     }
   }
 
+  async function handleExport(type: 'subjects' | 'teachers') {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const endpoint = type === 'subjects'
+        ? `/api/admin/classes/${selectedClassId}/subjects/export`
+        : `/api/admin/classes/${selectedClassId}/teachers/export`;
+
+      const response = await fetch(endpoint, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        setErrorMessage('Gagal mengekspor data');
+        return;
+      }
+
+      const blob = await response.blob();
+      const fileName = response.headers.get('content-disposition')?.split('filename=')[1]?.slice(1, -1) || `export-${type}.csv`;
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Export error:', error);
+      setErrorMessage('Terjadi kesalahan saat mengekspor');
+    }
+  }
+
+  async function handleDownloadTemplate(type: 'subjects' | 'teachers') {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const endpoint = type === 'subjects'
+        ? `/api/admin/classes/${selectedClassId}/subjects/template`
+        : `/api/admin/classes/${selectedClassId}/teachers/template`;
+
+      const response = await fetch(endpoint, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        setErrorMessage('Gagal mengunduh template');
+        return;
+      }
+
+      const blob = await response.blob();
+      const fileName = response.headers.get('content-disposition')?.split('filename=')[1]?.slice(1, -1) || `template-${type}.csv`;
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Download template error:', error);
+      setErrorMessage('Terjadi kesalahan saat mengunduh template');
+    }
+  }
+
+  async function handleImport(type: 'subjects' | 'teachers', file: File) {
+    try {
+      setIsImporting(true);
+      const token = localStorage.getItem('accessToken');
+      const endpoint = type === 'subjects'
+        ? `/api/admin/classes/${selectedClassId}/subjects/import`
+        : `/api/admin/classes/${selectedClassId}/teachers/import`;
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setImportResult(data.data);
+        setShowImportResult(true);
+        if (type === 'subjects') {
+          fetchClassSubjects();
+        } else {
+          fetchClassTeachers();
+        }
+        setSuccessMessage(`${data.data.imported} data berhasil diimpor`);
+      } else {
+        setErrorMessage(data.error || 'Gagal mengimpor data');
+      }
+    } catch (error) {
+      console.error('Import error:', error);
+      setErrorMessage('Terjadi kesalahan saat mengimpor');
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
   // View: Classes List
   if (!selectedClassId) {
     return (
@@ -487,17 +593,46 @@ export default function WaliKelasClassManagementPage() {
         {/* Subjects Tab */}
         {activeTab === 'subjects' && (
           <div className="space-y-6">
-            {!showSubjectForm && (
+            <div className="flex flex-col sm:flex-row gap-3">
+              {!showSubjectForm && (
+                <button
+                  onClick={() => {
+                    setShowSubjectForm(true);
+                    setSubjectFormData({ subjectId: '' });
+                  }}
+                  className="flex-1 sm:flex-none bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
+                >
+                  <Plus size={20} /> <span className="hidden sm:inline">Tambah Mata Pelajaran</span><span className="sm:hidden">Tambah</span>
+                </button>
+              )}
               <button
-                onClick={() => {
-                  setShowSubjectForm(true);
-                  setSubjectFormData({ subjectId: '' });
-                }}
-                className="w-full sm:w-auto bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
+                onClick={() => handleDownloadTemplate('subjects')}
+                className="flex-1 sm:flex-none bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
               >
-                <Plus size={20} /> <span className="hidden sm:inline">Tambah Mata Pelajaran</span><span className="sm:hidden">Tambah</span>
+                <Download size={20} /> <span className="hidden sm:inline">Unduh Template</span><span className="sm:hidden">Template</span>
               </button>
-            )}
+              <label className="flex-1 sm:flex-none bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 cursor-pointer flex items-center justify-center gap-2 transition-colors text-sm sm:text-base">
+                <Upload size={20} /> <span className="hidden sm:inline">Impor Data</span><span className="sm:hidden">Impor</span>
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleImport('subjects', file);
+                    }
+                  }}
+                  disabled={isImporting}
+                  className="hidden"
+                />
+              </label>
+              <button
+                onClick={() => handleExport('subjects')}
+                className="flex-1 sm:flex-none bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
+              >
+                <Download size={20} /> <span className="hidden sm:inline">Ekspor Data</span><span className="sm:hidden">Ekspor</span>
+              </button>
+            </div>
 
             {showSubjectForm && (
               <div className="bg-emerald-50 rounded-lg p-4 sm:p-6 border-l-4 border-emerald-600">
@@ -704,20 +839,49 @@ export default function WaliKelasClassManagementPage() {
         {/* Teachers Tab */}
         {activeTab === 'teachers' && (
           <div className="space-y-6">
-            {!showTeacherForm && (
+            <div className="flex flex-col sm:flex-row gap-3">
+              {!showTeacherForm && (
+                <button
+                  onClick={() => {
+                    setShowTeacherForm(true);
+                    setTeacherFormData({ teacherId: '', subjectId: '' });
+                    setTeacherSearchText('');
+                    setSubjectSearchTeacherText('');
+                    if (!allTeachers.length) fetchAllTeachers();
+                  }}
+                  className="flex-1 sm:flex-none bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
+                >
+                  <Plus size={20} /> <span className="hidden sm:inline">Tambah Guru</span><span className="sm:hidden">Tambah</span>
+                </button>
+              )}
               <button
-                onClick={() => {
-                  setShowTeacherForm(true);
-                  setTeacherFormData({ teacherId: '', subjectId: '' });
-                  setTeacherSearchText('');
-                  setSubjectSearchTeacherText('');
-                  if (!allTeachers.length) fetchAllTeachers();
-                }}
-                className="w-full sm:w-auto bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
+                onClick={() => handleDownloadTemplate('teachers')}
+                className="flex-1 sm:flex-none bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
               >
-                <Plus size={20} /> <span className="hidden sm:inline">Tambah Guru</span><span className="sm:hidden">Tambah</span>
+                <Download size={20} /> <span className="hidden sm:inline">Unduh Template</span><span className="sm:hidden">Template</span>
               </button>
-            )}
+              <label className="flex-1 sm:flex-none bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 cursor-pointer flex items-center justify-center gap-2 transition-colors text-sm sm:text-base">
+                <Upload size={20} /> <span className="hidden sm:inline">Impor Data</span><span className="sm:hidden">Impor</span>
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleImport('teachers', file);
+                    }
+                  }}
+                  disabled={isImporting}
+                  className="hidden"
+                />
+              </label>
+              <button
+                onClick={() => handleExport('teachers')}
+                className="flex-1 sm:flex-none bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
+              >
+                <Download size={20} /> <span className="hidden sm:inline">Ekspor Data</span><span className="sm:hidden">Ekspor</span>
+              </button>
+            </div>
 
             {showTeacherForm && (
               <div className="bg-emerald-50 rounded-lg p-4 sm:p-6 border-l-4 border-emerald-600">
@@ -961,6 +1125,57 @@ export default function WaliKelasClassManagementPage() {
           </div>
         )}
       </div>
+
+      {/* Import Result Modal */}
+      {showImportResult && importResult && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-96 overflow-y-auto">
+            <div className="flex justify-between items-center p-6 border-b bg-gray-50">
+              <h3 className="text-lg font-bold text-gray-900">Hasil Impor Data</h3>
+              <button
+                onClick={() => {
+                  setShowImportResult(false);
+                  setImportResult(null);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-green-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-600">Data Berhasil</p>
+                  <p className="text-2xl font-bold text-green-600">{importResult.imported}</p>
+                </div>
+                <div className="bg-yellow-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-600">Data Dilewati</p>
+                  <p className="text-2xl font-bold text-yellow-600">{importResult.skipped}</p>
+                </div>
+              </div>
+              {importResult.errors && importResult.errors.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <p className="font-semibold text-red-700 mb-2">Kesalahan ({importResult.errors.length}):</p>
+                  <ul className="space-y-1">
+                    {importResult.errors.map((error: string, idx: number) => (
+                      <li key={idx} className="text-sm text-red-600">• {error}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  setShowImportResult(false);
+                  setImportResult(null);
+                }}
+                className="w-full bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

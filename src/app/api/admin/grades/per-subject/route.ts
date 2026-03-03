@@ -63,9 +63,7 @@ export async function GET(request: NextRequest) {
             grades: {
               select: {
                 score: true,
-                competency: {
-                  select: { subjectId: true },
-                },
+                subjectId: true,
               },
             },
           },
@@ -89,12 +87,12 @@ export async function GET(request: NextRequest) {
       // Collect all grades for each subject
       cls.students.forEach((student) => {
         student.grades.forEach((grade) => {
-          // Skip grades without competency
-          if (!grade.competency) {
+          // Include all grades (even without competency), but skip if no subjectId
+          if (!grade.subjectId) {
             return;
           }
 
-          const subjectId = grade.competency.subjectId;
+          const subjectId = grade.subjectId;
           const scoreNum = parseFloat(grade.score);
 
           if (!isNaN(scoreNum) && subjectGrades[subjectId]) {

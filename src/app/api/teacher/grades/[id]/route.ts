@@ -65,6 +65,7 @@ export async function GET(
             subject: true,
           },
         },
+        subject: true,
       },
     });
 
@@ -98,7 +99,7 @@ export async function GET(
       studentName: grade.student.name,
       competencyId: grade.competencyId || '',
       competencyName: grade.competency?.name || '',
-      subjectName: grade.competency?.subject.name || '',
+      subjectName: grade.competency?.subject?.name || grade.subject?.name || '',
       score: grade.score,
       assessmentType: grade.assessmentType,
       notes: grade.notes || '',
@@ -180,6 +181,7 @@ export async function PUT(
             subject: true,
           },
         },
+        subject: true,
       },
     });
 
@@ -207,7 +209,7 @@ export async function PUT(
       studentName: updatedGrade.student.name,
       competencyId: updatedGrade.competencyId || '',
       competencyName: updatedGrade.competency?.name || '',
-      subjectName: updatedGrade.competency?.subject.name || '',
+      subjectName: updatedGrade.competency?.subject?.name || updatedGrade.subject?.name || '',
       score: updatedGrade.score,
       assessmentType: updatedGrade.assessmentType,
       notes: updatedGrade.notes || '',

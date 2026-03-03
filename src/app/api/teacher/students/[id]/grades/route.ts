@@ -34,20 +34,23 @@ export async function GET(
 
     // Filter by subject if provided
     if (subjectId) {
-      gradesQueryWhere.competency = {
-        subjectId: subjectId,
-      };
+      gradesQueryWhere.subjectId = subjectId;
     }
 
     const grades = await prisma.grade.findMany({
       where: gradesQueryWhere,
       include: {
+        subject: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         competency: {
           select: {
             id: true,
             name: true,
             code: true,
-            subjectId: true,
           },
         },
       },
@@ -56,17 +59,15 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      grades: grades
-        .filter((g) => g.competency) // Only include grades with competency
-        .map((g) => ({
-          id: g.id,
-          competencyName: g.competency!.name,
-          competencyCode: g.competency!.code,
-          score: g.score,
-          assessmentType: g.assessmentType,
-          notes: g.notes,
-          createdAt: g.createdAt,
-        })),
+      grades: grades.map((g) => ({
+        id: g.id,
+        competencyName: g.competency?.name || '(Tanpa Kompetensi)',
+        competencyCode: g.competency?.code || '',
+        score: g.score,
+        assessmentType: g.assessmentType,
+        notes: g.notes,
+        createdAt: g.createdAt,
+      })),
     });
   } catch (error) {
     console.error('Error fetching grades:', error);

@@ -41,7 +41,7 @@ async function getUser(req: NextRequest) {
     where: { id: payload.userId },
   });
 
-  if (user && (user.role === 'TEACHER' || user.role === 'WALI_KELAS')) {
+  if (user && (user.role === 'TEACHER' || user.role === 'WALI_KELAS' || user.role === 'ADMIN')) {
     return user;
   }
   return null;

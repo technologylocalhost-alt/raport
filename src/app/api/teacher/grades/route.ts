@@ -12,6 +12,7 @@ const gradeSchema = z.object({
   //   z.literal('')
   // ]), // Allow empty string or valid ID
   competencyId: z.any().optional(), // Allow any competencyId value
+  subjectId: z.string().optional(), // Allow optional subjectId
   score: z
     .union([z.string(), z.number()])
     .transform((val) => parseFloat(String(val)))
@@ -201,6 +202,7 @@ export async function GET(request: NextRequest) {
             subject: true,
           },
         },
+        subject: true,
         teacher: true,
       },
       skip,
@@ -226,7 +228,7 @@ export async function GET(request: NextRequest) {
         className: g.student.class?.name || '-',
         competencyId: g.competencyId || '',
         competencyName: g.competency?.name || '',
-        subjectName: g.competency?.subject?.name || '',
+        subjectName: g.competency?.subject?.name || g.subject?.name || '',
         score: g.score,
         assessmentType: g.assessmentType,
         teacherId: g.teacherId,
@@ -380,6 +382,7 @@ export async function POST(request: NextRequest) {
               subject: true,
             },
           },
+          subject: true,
         },
       });
     } else {
@@ -388,6 +391,7 @@ export async function POST(request: NextRequest) {
         data: {
           studentId: validatedData.studentId,
           competencyId: validatedData.competencyId && validatedData.competencyId !== '' ? validatedData.competencyId : null,
+          subjectId: validatedData.subjectId,
           score: String(validatedData.score),
           assessmentType: validatedData.assessmentType,
           notes: validatedData.notes,
@@ -402,6 +406,7 @@ export async function POST(request: NextRequest) {
               subject: true,
             },
           },
+          subject: true,
         },
       });
     }
@@ -435,7 +440,7 @@ export async function POST(request: NextRequest) {
       studentName: grade.student.name,
       competencyId: grade.competencyId || '',
       competencyName: grade.competency?.name || '',
-      subjectName: grade.competency?.subject.name || '',
+      subjectName: grade.competency?.subject?.name || grade.subject?.name || '',
       score: grade.score,
       assessmentType: grade.assessmentType,
       notes: grade.notes || '',

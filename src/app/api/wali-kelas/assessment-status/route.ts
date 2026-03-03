@@ -49,9 +49,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (subjectId) {
-      whereClause.competency = {
-        subjectId: subjectId,
-      };
+      whereClause.subjectId = subjectId;
     }
 
     // Use groupBy to get distinct subjectId + assessmentType combinations
@@ -59,22 +57,18 @@ export async function GET(request: NextRequest) {
       where: whereClause,
       select: {
         assessmentType: true,
-        competency: {
-          select: {
-            subjectId: true,
-          },
-        },
+        subjectId: true,
       },
-      distinct: ['assessmentType', 'competencyId'],
+      distinct: ['assessmentType', 'subjectId'],
     });
 
     // Build map: subjectId -> Set<assessmentType>
     const statusMap: Record<string, string[]> = {};
     for (const row of results) {
-      // Skip grades without competency
-      if (!row.competency) continue;
-      
-      const sid = row.competency.subjectId;
+      // Skip grades without a subject (cannot report status for them)
+      if (!row.subjectId) continue;
+
+      const sid = row.subjectId;
       if (!statusMap[sid]) statusMap[sid] = [];
       if (!statusMap[sid].includes(row.assessmentType)) {
         statusMap[sid].push(row.assessmentType);

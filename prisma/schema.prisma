@@ -194,6 +194,7 @@ model Subject {
   teachers      ClassTeacher[]
   competencies  Competency[]
   nilaiApproves NilaiApprove[] @relation("SubjectNilaiApprove")
+  grades        Grade[]        @relation("SubjectGrade")
   level         Level?         @relation(fields: [levelId], references: [id])
 
   @@index([levelId])
@@ -238,6 +239,7 @@ model Grade {
   id             String         @id @default(cuid())
   studentId      String
   competencyId   String?
+  subjectId      String?
   levelId        String
   teacherId      String
   score          String
@@ -249,10 +251,12 @@ model Grade {
   competency     Competency?    @relation(fields: [competencyId], references: [id], onDelete: SetNull)
   level          Level          @relation(fields: [levelId], references: [id], onDelete: Cascade)
   student        Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subject        Subject?       @relation("SubjectGrade", fields: [subjectId], references: [id], onDelete: SetNull)
   teacher        User           @relation(fields: [teacherId], references: [id], onDelete: Cascade)
 
   @@index([studentId])
   @@index([competencyId])
+  @@index([subjectId])
   @@index([levelId])
   @@index([teacherId])
 }
