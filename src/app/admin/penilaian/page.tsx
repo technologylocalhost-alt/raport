@@ -3,6 +3,12 @@
 import { useEffect, useState } from 'react';
 import { Library, AlertCircle, X, Search, RotateCw } from 'lucide-react';
 
+interface SchoolYear {
+  id: string;
+  year: string;
+  isActive?: boolean;
+}
+
 interface Subject {
   id: string;
   code: string;
@@ -10,33 +16,41 @@ interface Subject {
   nameArabic?: string;
   description?: string;
   creditHours?: number;
-  classes: Array<{ id: string; name: string }>;
+  classes: Array<{ id: string; name: string; schoolYearId?: string }>;
 }
 
 interface Class {
   id: string;
   name: string;
+  schoolYearId?: string;
 }
 
 export default function AdminPenilaianPage() {
+  const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>('');
   const [selectedClass, setSelectedClass] = useState<string>('');
   const [searchText, setSearchText] = useState('');
   const itemsPerPage = 10;
 
   useEffect(() => {
-    fetchAllSubjects();
+    fetchInitialData();
   }, []);
 
-  async function fetchAllSubjects() {
+  async function fetchInitialData() {
     try {
       setIsLoading(true);
       const token = localStorage.getItem('accessToken');
       const headers = { Authorization: `Bearer ${token}` };
+
+      // Fetch school years
+      const yearsRes = await fetch('/api/admin/school-years?limit=100', { headers });
+      const yearsData = await yearsRes.json();
+      setSchoolYears(yearsData.data || []);
 
       // Fetch subjects with their classes
       const subjectsResponse = await fetch(`/api/admin/subjects-with-classes`, { headers });
@@ -62,12 +76,15 @@ export default function AdminPenilaianPage() {
 
   const sortedSubjects = [...subjects].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' }));
 
-  // Get unique classes from all subjects
-  const classMap = new Map<string, { id: string; name: string }>();
+  // Get unique classes from all subjects, filtered by selected school year
+  const classMap = new Map<string, { id: string; name: string; schoolYearId?: string }>();
   sortedSubjects.forEach(subject => {
     subject.classes.forEach(cls => {
-      if (!classMap.has(cls.id)) {
-        classMap.set(cls.id, cls);
+      // Only add classes that match the selected school year (if one is selected)
+      if (!selectedSchoolYear || cls.schoolYearId === selectedSchoolYear) {
+        if (!classMap.has(cls.id)) {
+          classMap.set(cls.id, cls);
+        }
       }
     });
   });
@@ -75,12 +92,13 @@ export default function AdminPenilaianPage() {
 
   // Filter subjects based on class and search
   const filteredSubjects = sortedSubjects.filter((subject) => {
+    const matchesSchoolYear = !selectedSchoolYear || subject.classes.some(c => c.schoolYearId === selectedSchoolYear);
     const matchesClass = !selectedClass || subject.classes.some(c => c.id === selectedClass);
     const matchesSearch = !searchText || 
       subject.code.toLowerCase().includes(searchText.toLowerCase()) ||
       subject.name.toLowerCase().includes(searchText.toLowerCase()) ||
       (subject.nameArabic && subject.nameArabic.includes(searchText));
-    return matchesClass && matchesSearch;
+    return matchesSchoolYear && matchesClass && matchesSearch;
   });
 
   const paginatedSubjects = filteredSubjects.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -89,12 +107,12 @@ export default function AdminPenilaianPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedClass, searchText]);
+  }, [selectedSchoolYear, selectedClass, searchText]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await fetchAllSubjects();
+      await fetchInitialData();
     } finally {
       setIsRefreshing(false);
     }
@@ -143,7 +161,29 @@ export default function AdminPenilaianPage() {
           {/* Filter and Search */}
           <div className="bg-white rounded-lg shadow p-6 space-y-4">
             <h2 className="text-lg font-semibold text-gray-900">Filter dan Pencarian</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* School Year Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tahun Ajaran
+                </label>
+                <select
+                  value={selectedSchoolYear}
+                  onChange={(e) => {
+                    setSelectedSchoolYear(e.target.value);
+                    setSelectedClass('');
+                  }}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors bg-white text-gray-900"
+                >
+                  <option value="">-- Semua Tahun --</option>
+                  {schoolYears.map((year) => (
+                    <option key={year.id} value={year.id}>
+                      {year.year} {year.isActive ? '(Aktif)' : '(Nonaktif)'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* Class Filter */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -181,11 +221,12 @@ export default function AdminPenilaianPage() {
                 </div>
               </div>
             </div>
-            {(searchText || selectedClass) && (
+            {(searchText || selectedClass || selectedSchoolYear) && (
               <button
                 onClick={() => {
                   setSearchText('');
                   setSelectedClass('');
+                  setSelectedSchoolYear('');
                 }}
                 className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
               >
@@ -333,7 +374,11 @@ export default function AdminPenilaianPage() {
 
           {!selectedClass && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <p className="text-blue-800">Pilih kelas di atas untuk melihat mata pelajaran yang tersedia.</p>
+              <p className="text-blue-800">
+                {!selectedSchoolYear 
+                  ? 'Pilih tahun ajaran dan kelas di atas untuk melihat mata pelajaran yang tersedia.' 
+                  : 'Pilih kelas di atas untuk melihat mata pelajaran yang tersedia.'}
+              </p>
             </div>
           )}
         </>

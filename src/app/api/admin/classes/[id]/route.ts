@@ -164,8 +164,35 @@ export async function PUT(
       return errorResponse('Kelas tidak ditemukan', 404);
     }
 
-    // Update class basic info
+    // Prepare update data - use existing values if not provided
     const updateData: any = {};
+    const newName = validatedData.name || existingClass.name;
+    const newLevelId = validatedData.levelId || existingClass.levelId;
+    const newSchoolYearId = validatedData.schoolYearId || existingClass.schoolYearId;
+    const newSemesterId = validatedData.semesterId || existingClass.semesterId;
+
+    // Check if new combination would violate unique constraint
+    // Only check if any of the unique constraint fields are being changed
+    if (validatedData.name || validatedData.levelId || validatedData.schoolYearId || validatedData.semesterId) {
+      const duplicateClass = await prisma.class.findFirst({
+        where: {
+          name: newName,
+          levelId: newLevelId,
+          schoolYearId: newSchoolYearId,
+          semesterId: newSemesterId,
+          NOT: { id }, // Exclude current class
+        },
+      });
+
+      if (duplicateClass) {
+        return errorResponse(
+          'Kelas dengan kombinasi level, tahun ajaran, semester, dan nama yang sama sudah ada',
+          400
+        );
+      }
+    }
+
+    // Update class basic info
     if (validatedData.name) updateData.name = validatedData.name;
     if (validatedData.levelId) updateData.levelId = validatedData.levelId;
     if (validatedData.schoolYearId) updateData.schoolYearId = validatedData.schoolYearId;
@@ -173,23 +200,35 @@ export async function PUT(
     if (validatedData.capacity) updateData.capacity = validatedData.capacity;
     if (validatedData.waliKelasId !== undefined) updateData.waliKelasId = validatedData.waliKelasId || null;
 
-    const updatedClass = await prisma.class.update({
-      where: { id },
-      data: updateData,
-      include: {
-        level: true,
-        schoolYear: true,
-        semester: true,
-        waliKelas: { select: { id: true, name: true, email: true } },
-        teachers: {
-          include: {
-            teacher: true,
-            subject: true,
+    let updatedClass;
+    try {
+      updatedClass = await prisma.class.update({
+        where: { id },
+        data: updateData,
+        include: {
+          level: true,
+          schoolYear: true,
+          semester: true,
+          waliKelas: { select: { id: true, name: true, email: true } },
+          teachers: {
+            include: {
+              teacher: true,
+              subject: true,
+            },
           },
+          _count: { select: { students: true } },
         },
-        _count: { select: { students: true } },
-      },
-    });
+      });
+    } catch (error: any) {
+      // Handle unique constraint violation
+      if (error.code === 'P2002') {
+        return errorResponse(
+          'Kelas dengan kombinasi level, tahun ajaran, semester, dan nama yang sama sudah ada. Silakan gunakan nama kelas yang berbeda.',
+          400
+        );
+      }
+      throw error;
+    }
 
     // Update teachers if provided
     if (validatedData.teachers) {

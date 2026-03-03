@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, Users, Eye, EyeOff } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, Users, Eye, EyeOff, Download, Upload } from 'lucide-react';
 
 interface School {
   id: string;
@@ -39,6 +39,9 @@ export default function UsersPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
+  const [showImportResult, setShowImportResult] = useState(false);
   const [formData, setFormData] = useState<{
     email: string;
     name: string;
@@ -78,9 +81,9 @@ export default function UsersPage() {
         },
       });
 
-      const data: PaginatedResponse = await response.json();
+      const data: any = await response.json();
       setUsers(data.data || []);
-      setTotal(data.total || 0);
+      setTotal(data.pagination?.total || 0);
     } catch (error) {
       console.error('Failed to fetch users:', error);
     } finally {
@@ -199,6 +202,100 @@ export default function UsersPage() {
     }
   }
 
+  async function handleDownloadTemplate() {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch('/api/admin/users/template', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        alert('❌ Gagal mengunduh template');
+        return;
+      }
+
+      const blob = await response.blob();
+      const fileName = response.headers.get('content-disposition')?.split('filename=')[1]?.slice(1, -1) || 'template-users.xlsx';
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Download template error:', error);
+      alert('❌ Gagal mengunduh template');
+    }
+  }
+
+  async function handleExport() {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch('/api/admin/users/export', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        alert('❌ Gagal mengekspor data');
+        return;
+      }
+
+      const blob = await response.blob();
+      const fileName = response.headers.get('content-disposition')?.split('filename=')[1]?.slice(1, -1) || 'users.xlsx';
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('❌ Gagal mengekspor data');
+    }
+  }
+
+  async function handleImport(file: File) {
+    try {
+      setIsImporting(true);
+      const token = localStorage.getItem('accessToken');
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/admin/users/import', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setImportResult(data.data);
+        setShowImportResult(true);
+        fetchUsers();
+        alert(`✅ ${data.data.imported + data.data.updated} user berhasil diimpor/diperbarui`);
+      } else {
+        alert(`❌ ${data.error || 'Gagal mengimpor data'}`);
+      }
+    } catch (error) {
+      console.error('Import error:', error);
+      alert('❌ Gagal mengimpor data');
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
   function handleEdit(user: User) {
     setFormData({
       email: user.email,
@@ -230,26 +327,61 @@ export default function UsersPage() {
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Manajemen Pengguna</h1>
           <p className="text-gray-600 text-sm mt-1">Kelola pengguna sistem Anda</p>
         </div>
-        <button
-          onClick={() => {
-            setEditingId(null);
-            setFormData({
-              email: '',
-              name: '',
-              password: '',
-              role: 'TEACHER',
-              schoolId: '',
-              isActive: true,
-            });
-            setShowForm(true);
-            setShowPassword(false);
-          }}
-          className="flex items-center justify-center sm:justify-start gap-2 bg-blue-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg hover:bg-blue-700 transition-colors shadow-lg hover:shadow-xl font-medium whitespace-nowrap"
-        >
-          <Plus size={20} />
-          <span className="hidden xs:hidden sm:inline">Tambah Pengguna</span>
-          <span className="inline sm:hidden">Tambah</span>
-        </button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button
+            onClick={() => {
+              setEditingId(null);
+              setFormData({
+                email: '',
+                name: '',
+                password: '',
+                role: 'TEACHER',
+                schoolId: '',
+                isActive: true,
+              });
+              setShowForm(true);
+              setShowPassword(false);
+            }}
+            className="flex items-center justify-center sm:justify-start gap-2 bg-blue-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg hover:bg-blue-700 transition-colors shadow-lg hover:shadow-xl font-medium whitespace-nowrap"
+          >
+            <Plus size={20} />
+            <span className="hidden xs:hidden sm:inline">Tambah Pengguna</span>
+            <span className="inline sm:hidden">Tambah</span>
+          </button>
+          <button
+            onClick={handleDownloadTemplate}
+            className="flex items-center justify-center sm:justify-start gap-2 bg-green-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg hover:bg-green-700 transition-colors shadow-lg hover:shadow-xl font-medium whitespace-nowrap"
+          >
+            <Download size={20} />
+            <span className="hidden xs:hidden sm:inline">Template</span>
+            <span className="inline sm:hidden">Template</span>
+          </button>
+          <button
+            onClick={handleExport}
+            className="flex items-center justify-center sm:justify-start gap-2 bg-purple-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg hover:bg-purple-700 transition-colors shadow-lg hover:shadow-xl font-medium whitespace-nowrap"
+          >
+            <Download size={20} />
+            <span className="hidden xs:hidden sm:inline">Export</span>
+            <span className="inline sm:hidden">Export</span>
+          </button>
+          <label className="flex items-center justify-center sm:justify-start gap-2 bg-orange-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg hover:bg-orange-700 transition-colors shadow-lg hover:shadow-xl font-medium whitespace-nowrap cursor-pointer">
+            <Upload size={20} />
+            <span className="hidden xs:hidden sm:inline">Import</span>
+            <span className="inline sm:hidden">Import</span>
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  handleImport(file);
+                }
+              }}
+              disabled={isImporting}
+              className="hidden"
+            />
+          </label>
+        </div>
       </div>
 
       {/* Search Section */}
@@ -490,27 +622,85 @@ export default function UsersPage() {
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="bg-white rounded-lg shadow p-4 flex justify-between items-center">
-          <button
-            onClick={() => setPage(Math.max(1, page - 1))}
-            disabled={page === 1}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <ChevronLeft size={20} />
-            Sebelumnya
-          </button>
+      <div className="bg-white rounded-lg shadow p-4 flex justify-between items-center">
+        <button
+          onClick={() => setPage(Math.max(1, page - 1))}
+          disabled={page === 1}
+          className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-gray-900 font-medium"
+        >
+          <ChevronLeft size={20} />
+          Sebelumnya
+        </button>
+        <div className="flex flex-col items-center gap-1">
           <span className="text-sm text-gray-600">
             Halaman {page} dari {totalPages}
           </span>
-          <button
-            onClick={() => setPage(Math.min(totalPages, page + 1))}
-            disabled={page === totalPages}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            Selanjutnya
-            <ChevronRight size={20} />
-          </button>
+          <span className="text-xs text-gray-500">
+            Total: {total} pengguna
+          </span>
+        </div>
+        <button
+          onClick={() => setPage(Math.min(totalPages, page + 1))}
+          disabled={page === totalPages}
+          className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-gray-900 font-medium"
+        >
+          Selanjutnya
+          <ChevronRight size={20} />
+        </button>
+      </div>
+
+      {/* Import Result Modal */}
+      {showImportResult && importResult && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-96 overflow-y-auto">
+            <div className="flex justify-between items-center p-6 border-b bg-gray-50">
+              <h3 className="text-lg font-bold text-gray-900">Hasil Impor Data</h3>
+              <button
+                onClick={() => {
+                  setShowImportResult(false);
+                  setImportResult(null);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-green-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-600">Data Baru</p>
+                  <p className="text-2xl font-bold text-green-600">{importResult.imported}</p>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-600">Data Diupdate</p>
+                  <p className="text-2xl font-bold text-blue-600">{importResult.updated}</p>
+                </div>
+                <div className="bg-yellow-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-600">Data Dilewati</p>
+                  <p className="text-2xl font-bold text-yellow-600">{importResult.skipped}</p>
+                </div>
+              </div>
+              {importResult.errors && importResult.errors.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <p className="font-semibold text-red-700 mb-2">Kesalahan ({importResult.errors.length}):</p>
+                  <ul className="space-y-1 max-h-48 overflow-y-auto">
+                    {importResult.errors.map((error: string, idx: number) => (
+                      <li key={idx} className="text-sm text-red-600">• {error}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  setShowImportResult(false);
+                  setImportResult(null);
+                }}
+                className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

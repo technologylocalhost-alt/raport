@@ -92,9 +92,9 @@ export default function LevelsPage() {
         },
       });
 
-      const data: PaginatedResponse = await response.json();
+      const data: any = await response.json();
       setLevels(data.data || []);
-      setTotal(data.total || 0);
+      setTotal(data.pagination?.total || 0);
     } catch (error) {
       console.error('Failed to fetch levels:', error);
     } finally {
@@ -466,7 +466,7 @@ export default function LevelsPage() {
                 <button
                   onClick={() => setPage(Math.max(1, page - 1))}
                   disabled={page === 1}
-                  className="flex items-center gap-1 px-4 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 transition-colors font-medium"
+                  className="flex items-center gap-1 px-4 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 transition-colors font-medium text-gray-900"
                 >
                   <ChevronLeft size={16} />
                   Sebelumnya
@@ -474,7 +474,7 @@ export default function LevelsPage() {
                 <button
                   onClick={() => setPage(Math.min(totalPages, page + 1))}
                   disabled={page === totalPages}
-                  className="flex items-center gap-1 px-4 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 transition-colors font-medium"
+                  className="flex items-center gap-1 px-4 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 transition-colors font-medium text-gray-900"
                 >
                   Selanjutnya
                   <ChevronRight size={16} />

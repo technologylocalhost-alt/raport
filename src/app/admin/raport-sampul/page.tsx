@@ -4,6 +4,12 @@ import { useState, useEffect, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, AlertCircle, Filter, Users, BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
 
+interface SchoolYear {
+  id: string;
+  year: string;
+  isActive?: boolean;
+}
+
 interface ClassItem {
   id: string;
   name: string;
@@ -22,8 +28,10 @@ interface Student {
 export default function AdminRaportPage() {
   const router = useRouter();
 
+  const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
+  const [selectedSchoolYear, setSelectedSchoolYear] = useState('');
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedClassName, setSelectedClassName] = useState('');
   const [isLoadingClasses, setIsLoadingClasses] = useState(true);
@@ -51,7 +59,7 @@ export default function AdminRaportPage() {
       setTotalStudents(0);
       setTotalPages(1);
     }
-  }, [selectedClassId]);
+  }, [selectedSchoolYear, selectedClassId]);
 
   useEffect(() => {
     if (selectedClassId) {
@@ -68,7 +76,14 @@ export default function AdminRaportPage() {
         return;
       }
 
-      const response = await fetch('/api/admin/classes?limit=1000', {
+      // Fetch school years
+      const yearsResponse = await fetch('/api/admin/school-years?limit=100', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const yearsData = await yearsResponse.json();
+      setSchoolYears(yearsData.data || []);
+
+      const response = await fetch(`/api/admin/classes?limit=1000${selectedSchoolYear ? `&schoolYearId=${selectedSchoolYear}` : ''}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -173,7 +188,30 @@ export default function AdminRaportPage() {
           <Filter size={18} className="text-emerald-600" />
           <h2 className="text-base font-semibold text-gray-900">Filter</h2>
         </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Tahun Ajaran */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Tahun Ajaran</label>
+            <select
+              value={selectedSchoolYear}
+              onChange={(e) => {
+                setSelectedSchoolYear(e.target.value);
+                setSelectedClassId('');
+                setSelectedClassName('');
+                setSearch('');
+                setFilterAssessmentType('');
+              }}
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-gray-900 bg-white font-medium"
+            >
+              <option value="">-- Semua --</option>
+              {schoolYears.map((year) => (
+                <option key={year.id} value={year.id}>
+                  {year.year} {year.isActive ? '(Aktif)' : '(Nonaktif)'}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Pilih Kelas */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">Kelas</label>

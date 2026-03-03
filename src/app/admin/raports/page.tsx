@@ -4,6 +4,12 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Filter, FileText } from 'lucide-react';
 
+interface SchoolYear {
+  id: string;
+  year: string;
+  isActive?: boolean;
+}
+
 interface RaportData {
   id: string;
   studentId: string;
@@ -54,10 +60,12 @@ export default function RaportsPage() {
   const [filterClass, setFilterClass] = useState('');
   const [selectedClassName, setSelectedClassName] = useState('');
   const [filterSubject, setFilterSubject] = useState('');
-  const [filterStudent, setFilterStudent] = useState('');  const [filterAssessmentType, setFilterAssessmentType] = useState('');  const [classes, setClasses] = useState<Array<{ id: string; name: string }>>([]);
+  const [filterStudent, setFilterStudent] = useState('');  const [filterAssessmentType, setFilterAssessmentType] = useState('');  const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
+  const [classes, setClasses] = useState<Array<{ id: string; name: string }>>([]);
   const [subjects, setSubjects] = useState<Array<{ id: string; name: string }>>([]);
   const [students, setStudents] = useState<Array<{ id: string; name: string; no: string }>>([]);
   const [isClient, setIsClient] = useState(false);
+  const [filterSchoolYear, setFilterSchoolYear] = useState('');
   const [pivotData, setPivotData] = useState<StudentRowData[]>([]);
   const [pivotColumns, setPivotColumns] = useState<string[]>([]);
 
@@ -127,7 +135,7 @@ export default function RaportsPage() {
       setPage(1);
       fetchRaports();
     }
-  }, [filterClass, filterSubject, filterStudent, filterAssessmentType, search, page]);
+  }, [filterClass, filterSchoolYear, filterSubject, filterStudent, filterAssessmentType, search, page]);
 
   useEffect(() => {
     // Transform data to pivot table format when raports change
@@ -145,7 +153,14 @@ export default function RaportsPage() {
         return;
       }
 
-      const response = await fetch(`/api/admin/classes?limit=1000`, {
+      // Fetch school years
+      const yearsResponse = await fetch('/api/admin/school-years?limit=100', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const yearsData = await yearsResponse.json();
+      setSchoolYears(yearsData.data || []);
+
+      const response = await fetch(`/api/admin/classes?limit=1000${filterSchoolYear ? `&schoolYearId=${filterSchoolYear}` : ''}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -312,6 +327,36 @@ export default function RaportsPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          {/* Tahun Ajaran */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-900 mb-2">
+              Tahun Ajaran
+            </label>
+            <select
+              value={filterSchoolYear}
+              onChange={(e) => {
+                setFilterSchoolYear(e.target.value);
+                setFilterClass('');
+                setSelectedClassName('');
+                setFilterSubject('');
+                setFilterStudent('');
+                setFilterAssessmentType('');
+                setSearch('');
+                setPage(1);
+                // Refetch classes when school year changes
+                if (isClient) fetchClasses();
+              }}
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-gray-900 bg-white"
+            >
+              <option value="">-- Semua Tahun --</option>
+              {schoolYears.map((year) => (
+                <option key={year.id} value={year.id}>
+                  {year.year} {year.isActive ? '(Aktif)' : '(Nonaktif)'}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Kelas */}
           <div>
             <label className="block text-sm font-semibold text-gray-900 mb-2">

@@ -13,6 +13,7 @@ interface Level {
 interface SchoolYear {
   id: string;
   year: string;
+  isActive?: boolean;
 }
 
 interface Semester {
@@ -85,6 +86,7 @@ export default function ClassesPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [filterSchoolYearId, setFilterSchoolYearId] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedTeachers, setSelectedTeachers] = useState<Array<{ teacherId: string; subjectId: string }>>([]);
@@ -107,7 +109,7 @@ export default function ClassesPage() {
 
   useEffect(() => {
     fetchClasses();
-  }, [page, search]);
+  }, [page, search, filterSchoolYearId]);
 
   // Fetch semester when schoolYear changes
   useEffect(() => {
@@ -155,6 +157,7 @@ export default function ClassesPage() {
         page: page.toString(),
         limit: limit.toString(),
         ...(search && { search }),
+        ...(filterSchoolYearId && { schoolYearId: filterSchoolYearId }),
       });
 
       const token = localStorage.getItem('accessToken');
@@ -164,9 +167,9 @@ export default function ClassesPage() {
         },
       });
 
-      const data: PaginatedResponse = await response.json();
+      const data: any = await response.json();
       setClasses(data.data || []);
-      setTotal(data.total || 0);
+      setTotal(data.pagination?.total || 0);
     } catch (error) {
       console.error('Failed to fetch classes:', error);
     }
@@ -350,8 +353,8 @@ export default function ClassesPage() {
         </button>
       </div>
 
-      {/* Search Section */}
-      <div className="bg-white rounded-lg shadow p-4">
+      {/* Search and Filter Section */}
+      <div className="bg-white rounded-lg shadow p-4 space-y-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
           <input
@@ -364,6 +367,26 @@ export default function ClassesPage() {
             }}
             className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-gray-900"
           />
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Filter Tahun Ajaran
+          </label>
+          <select
+            value={filterSchoolYearId}
+            onChange={(e) => {
+              setFilterSchoolYearId(e.target.value);
+              setPage(1);
+            }}
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-gray-900 bg-white"
+          >
+            <option value="">-- Semua Tahun Ajaran --</option>
+            {schoolYears.map((year) => (
+              <option key={year.id} value={year.id}>
+                {year.year} {year.isActive ? '(Aktif)' : '(Nonaktif)'}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -694,7 +717,7 @@ export default function ClassesPage() {
           <button
             onClick={() => setPage(Math.max(1, page - 1))}
             disabled={page === 1}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-gray-900 font-medium"
           >
             <ChevronLeft size={20} />
             Sebelumnya
@@ -705,7 +728,7 @@ export default function ClassesPage() {
           <button
             onClick={() => setPage(Math.min(totalPages, page + 1))}
             disabled={page === totalPages}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-gray-900 font-medium"
           >
             Selanjutnya
             <ChevronRight size={20} />

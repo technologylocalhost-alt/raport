@@ -4,6 +4,12 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, Users, X, Filter } from 'lucide-react';
 
+interface SchoolYear {
+  id: string;
+  year: string;
+  isActive?: boolean;
+}
+
 interface Class {
   id: string;
   name: string;
@@ -38,6 +44,7 @@ interface PaginatedResponse {
 export default function StudentsPage() {
   const router = useRouter();
   const [students, setStudents] = useState<Student[]>([]);
+  const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -45,6 +52,7 @@ export default function StudentsPage() {
   const [total, setTotal] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [filterSchoolYear, setFilterSchoolYear] = useState('');
   const [filterClass, setFilterClass] = useState('');
 
   const [formData, setFormData] = useState<{
@@ -76,9 +84,9 @@ export default function StudentsPage() {
   }, []);
 
   useEffect(() => {
-    // Reset ke halaman 1 ketika filterClass atau search berubah
+    // Reset ke halaman 1 ketika filterSchoolYear, filterClass atau search berubah
     setPage(1);
-  }, [filterClass, search]);
+  }, [filterSchoolYear, filterClass, search]);
 
   useEffect(() => {
     // Fetch students ketika page, search, atau filterClass berubah
@@ -93,7 +101,15 @@ export default function StudentsPage() {
   async function fetchClasses() {
     try {
       const token = localStorage.getItem('accessToken');
-      const response = await fetch('/api/admin/classes?limit=1000', {
+      
+      // Fetch school years
+      const yearsResponse = await fetch('/api/admin/school-years?limit=100', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const yearsData = await yearsResponse.json();
+      setSchoolYears(yearsData.data || []);
+      
+      const response = await fetch(`/api/admin/classes?limit=1000${filterSchoolYear ? `&schoolYearId=${filterSchoolYear}` : ''}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -282,7 +298,32 @@ export default function StudentsPage() {
           <Filter size={20} className="text-emerald-600" />
           <h2 className="text-lg font-semibold text-gray-900">Filter & Pencarian</h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* School Year Filter */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-900 mb-2">
+              Tahun Ajaran
+            </label>
+            <select
+              value={filterSchoolYear}
+              onChange={(e) => {
+                setFilterSchoolYear(e.target.value);
+                setFilterClass('');
+                setPage(1);
+                // Refetch classes when school year changes
+                fetchClasses();
+              }}
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-gray-900 bg-white"
+            >
+              <option value="">-- Semua Tahun --</option>
+              {schoolYears.map((year) => (
+                <option key={year.id} value={year.id}>
+                  {year.year} {year.isActive ? '(Aktif)' : '(Nonaktif)'}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Class Filter */}
           <div>
             <label className="block text-sm font-semibold text-gray-900 mb-2">

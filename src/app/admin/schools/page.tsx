@@ -64,9 +64,9 @@ export default function SchoolsPage() {
         },
       });
 
-      const data: PaginatedResponse = await response.json();
+      const data: any = await response.json();
       setSchools(data.data || []);
-      setTotal(data.total || 0);
+      setTotal(data.pagination?.total || 0);
     } catch (error) {
       console.error('Failed to fetch schools:', error);
     } finally {
@@ -388,7 +388,7 @@ export default function SchoolsPage() {
                 <button
                   onClick={() => setPage(Math.max(1, page - 1))}
                   disabled={page === 1}
-                  className="flex items-center gap-1 px-3 sm:px-4 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 transition-colors font-medium text-xs sm:text-sm"
+                  className="flex items-center gap-1 px-3 sm:px-4 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 transition-colors font-medium text-xs sm:text-sm text-gray-900"
                 >
                   <ChevronLeft size={16} />
                   <span className="hidden sm:inline">Sebelumnya</span>
@@ -396,7 +396,7 @@ export default function SchoolsPage() {
                 <button
                   onClick={() => setPage(Math.min(totalPages, page + 1))}
                   disabled={page === totalPages}
-                  className="flex items-center gap-1 px-3 sm:px-4 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 transition-colors font-medium text-xs sm:text-sm"
+                  className="flex items-center gap-1 px-3 sm:px-4 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 transition-colors font-medium text-xs sm:text-sm text-gray-900"
                 >
                   <span className="hidden sm:inline">Selanjutnya</span>
                   <ChevronRight size={16} />

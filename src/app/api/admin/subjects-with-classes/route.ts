@@ -39,7 +39,10 @@ export async function GET(request: NextRequest) {
 
     // Get all classes with their subjects
     const classes = await prisma.class.findMany({
-      include: {
+      select: {
+        id: true,
+        name: true,
+        schoolYearId: true,
         subjects: {
           include: {
             subject: {
@@ -70,6 +73,7 @@ export async function GET(request: NextRequest) {
             existing.classes.push({
               id: cls.id,
               name: cls.name,
+              schoolYearId: cls.schoolYearId,
             });
           }
         } else {
@@ -83,6 +87,7 @@ export async function GET(request: NextRequest) {
             classes: [{
               id: cls.id,
               name: cls.name,
+              schoolYearId: cls.schoolYearId,
             }],
           });
         }

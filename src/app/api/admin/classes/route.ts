@@ -78,6 +78,18 @@ export async function GET(request: NextRequest) {
     // By default, only show active classes unless explicitly requested otherwise
     if (!includeInactive) {
       where.isActive = true;
+      // For WALI_KELAS, allow viewing classes even if school year is inactive
+      // They should still see all their assigned classes
+      // For ADMIN/PRINCIPAL, only show active school years unless explicitly selecting a schoolYearId
+      if (admin.role !== 'WALI_KELAS') {
+        // Also filter by active school years - BUT only if not explicitly filtering by a specific schoolYearId
+        // If user explicitly selects a schoolYearId (active or inactive), show classes from that year
+        if (!schoolYearId || schoolYearId.trim() === '') {
+          where.schoolYear = {
+            isActive: true,
+          };
+        }
+      }
     }
     
     if (levelId && levelId.trim() !== '') {
@@ -107,7 +119,7 @@ export async function GET(request: NextRequest) {
         where,
         include: {
           level: { select: { id: true, name: true, code: true } },
-          schoolYear: { select: { id: true, year: true } },
+          schoolYear: { select: { id: true, year: true, isActive: true } },
           semester: { select: { id: true, number: true } },
           waliKelas: { select: { id: true, name: true, email: true } },
           teachers: {
