@@ -229,11 +229,12 @@ export async function GET(
           );
 
           if (nextClassInfo && nextSemesterId) {
-            const nextLevelClasses = await prisma.class.findMany({
+            // Strategy 1: Try to find class in SAME level first (naik tingkat dalam level)
+            const sameLevelClasses = await prisma.class.findMany({
               where: {
                 schoolYearId: nextSchoolYearId,
                 semesterId: nextSemesterId,
-                levelId: nextLevel?.id,
+                levelId: classData.levelId,
               },
               select: {
                 id: true,
@@ -243,7 +244,7 @@ export async function GET(
               },
             });
 
-            const filteredClasses = nextLevelClasses.filter((c) => {
+            const filteredSameLevelClasses = sameLevelClasses.filter((c) => {
               const classParsed = parseClassName(c.name);
               return (
                 classParsed &&
@@ -251,7 +252,45 @@ export async function GET(
                 classParsed.levelNumber === nextClassInfo.nextClassNumber
               );
             });
-            targetClassSuggestions.push(...filteredClasses);
+
+            if (filteredSameLevelClasses.length > 0) {
+              targetClassSuggestions.push(...filteredSameLevelClasses);
+            } else if (nextLevel) {
+              // Strategy 2: If not found in same level, suggest class from NEXT level
+              // Try same class number in next level
+              const nextLevelClasses = await prisma.class.findMany({
+                where: {
+                  schoolYearId: nextSchoolYearId,
+                  semesterId: nextSemesterId,
+                  levelId: nextLevel.id,
+                },
+                select: {
+                  id: true,
+                  name: true,
+                  levelId: true,
+                  level: { select: { id: true, name: true, code: true, order: true, levelCount: true } },
+                },
+              });
+
+              // Try: sama class number tapi level baru (1B MTS → 1B MA)
+              const filteredNextLevelClasses = nextLevelClasses.filter((c) => {
+                const classParsed = parseClassName(c.name);
+                return (
+                  classParsed &&
+                  c.level.code === nextLevel.code &&
+                  classParsed.levelNumber === parsed.levelNumber // Sama number, level baru
+                );
+              });
+
+              if (filteredNextLevelClasses.length > 0) {
+                targetClassSuggestions.push(...filteredNextLevelClasses);
+              } else {
+                // Fallback: suggest ANY class in next level
+                if (nextLevelClasses.length > 0) {
+                  targetClassSuggestions.push(...nextLevelClasses.slice(0, 3));
+                }
+              }
+            }
           }
         }
       }

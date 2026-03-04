@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || '';
     const classId = searchParams.get('classId') || '';
     const semesterId = searchParams.get('semesterId') || '';
+    const schoolYearId = searchParams.get('schoolYearId') || '';
 
     const skip = (page - 1) * limit;
 
@@ -64,6 +65,13 @@ export async function GET(request: NextRequest) {
     if (semesterId) {
       where.class = {
         semesterId: semesterId,
+      };
+    }
+
+    if (schoolYearId) {
+      where.class = {
+        ...where.class,
+        schoolYearId: schoolYearId,
       };
     }
 

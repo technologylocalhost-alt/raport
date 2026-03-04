@@ -60,29 +60,25 @@ export function parseClassName(className: string): ClassInfo | null {
  * @param currentLevel Current level with levelCount
  * @param nextLevel Next level (if promoting to new level)
  * @returns { nextLevelCode, nextClassNumber } or null if cannot promote
+ * 
+ * IMPORTANT: This ALWAYS returns promotion within the SAME level first.
+ * System will try to find next class in next level only if it doesn't exist in current level.
  */
 export function calculateNextClass(
   currentClass: ClassInfo,
   currentLevel: LevelInfo,
   nextLevel: LevelInfo | null
 ): { nextLevelCode: string; nextClassNumber: number } | null {
-  // Check if student is at max level in their current level
-  if (currentClass.levelNumber < currentLevel.levelCount) {
-    // Promote to next class number within same level
-    return {
-      nextLevelCode: currentLevel.code,
-      nextClassNumber: currentClass.levelNumber + 1,
-    };
-  } else if (currentClass.levelNumber === currentLevel.levelCount && nextLevel) {
-    // At max level, promote to next level, next class number
-    return {
-      nextLevelCode: nextLevel.code,
-      nextClassNumber: currentClass.levelNumber + 1,
-    };
-  }
+  // ALWAYS try to promote within the same level first
+  // The next level logic will be handled by filterering target classes
+  const nextClassNumber = currentClass.levelNumber + 1;
   
-  // Cannot promote (already at highest level)
-  return null;
+  // Return next class in same level
+  // System will filter from available classes - if class doesn't exist, no suggestion
+  return {
+    nextLevelCode: currentLevel.code,
+    nextClassNumber,
+  };
 }
 
 /**

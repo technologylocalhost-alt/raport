@@ -9,6 +9,7 @@ interface Class {
   levelId: string;
   levelName?: string;
   capacity: number;
+  isActive?: boolean;
 }
 
 interface ClassSubject {
@@ -74,6 +75,7 @@ export default function WaliKelasClassManagementPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedClassName, setSelectedClassName] = useState<string>('');
+  const [selectedClassActive, setSelectedClassActive] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<TabType>('subjects');
   const [showSubjectForm, setShowSubjectForm] = useState(false);
   const [showTeacherForm, setShowTeacherForm] = useState(false);
@@ -111,7 +113,7 @@ export default function WaliKelasClassManagementPage() {
       const token = localStorage.getItem('accessToken');
       const headers = { Authorization: `Bearer ${token}` };
 
-      const response = await fetch(`/api/admin/classes?limit=100&waliKelasId=${waliKelasId}`, { headers });
+      const response = await fetch(`/api/admin/classes?limit=100&waliKelasId=${waliKelasId}&includeInactive=true`, { headers });
       const data = await response.json();
 
       if (response.ok) {
@@ -451,19 +453,33 @@ export default function WaliKelasClassManagementPage() {
                 </thead>
                 <tbody>
                   {classes.map((classItem) => (
-                    <tr key={classItem.id} className="border-b hover:bg-gray-50 transition-colors cursor-pointer">
-                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">{classItem.name}</td>
+                    <tr key={classItem.id} className={`border-b transition-colors ${classItem.isActive !== false ? 'hover:bg-gray-50 cursor-pointer' : 'bg-gray-50 opacity-70'}`}>
+                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">
+                        <div className="flex items-center gap-2">
+                          {classItem.name}
+                          {classItem.isActive === false && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 text-xs font-semibold rounded">
+                              Tidak Aktif
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-6 py-4 text-sm text-gray-700">{classItem.levelName}</td>
                       <td className="px-6 py-4 text-center text-sm text-gray-700">{classItem.capacity} siswa</td>
                       <td className="px-6 py-4 text-center">
                         <button
                           onClick={() => {
-                            setSelectedClassId(classItem.id);
-                            setSelectedClassName(classItem.name);
-                            setActiveTab('subjects');
-                            fetchAllSubjects();
+                            if (classItem.isActive !== false) {
+                              setSelectedClassId(classItem.id);
+                              setSelectedClassName(classItem.name);
+                              setSelectedClassActive(!!classItem.isActive);
+                              setActiveTab('subjects');
+                              fetchAllSubjects();
+                            }
                           }}
-                          className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 font-medium transition-colors"
+                          disabled={classItem.isActive === false}
+                          className={`text-white px-4 py-2 rounded-lg font-medium transition-colors ${classItem.isActive !== false ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-300 cursor-not-allowed'}`}
+                          title={classItem.isActive === false ? 'Kelas tidak aktif - tidak dapat dikelola' : 'Kelola kelas'}
                         >
                           Kelola
                         </button>
@@ -477,9 +493,16 @@ export default function WaliKelasClassManagementPage() {
             {/* Mobile Cards View */}
             <div className="md:hidden space-y-4">
               {classes.map((classItem) => (
-                <div key={classItem.id} className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
+                <div key={classItem.id} className={`bg-white rounded-lg shadow-md border border-gray-200 p-4 ${classItem.isActive === false ? 'opacity-70' : ''}`}>
                   <div className="mb-4">
-                    <p className="font-bold text-lg text-gray-900">{classItem.name}</p>
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="font-bold text-lg text-gray-900">{classItem.name}</p>
+                      {classItem.isActive === false && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 text-xs font-semibold rounded">
+                          Tidak Aktif
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-gray-600 mt-1">{classItem.levelName}</p>
                   </div>
                   
@@ -491,14 +514,19 @@ export default function WaliKelasClassManagementPage() {
 
                   <button
                     onClick={() => {
-                      setSelectedClassId(classItem.id);
-                      setSelectedClassName(classItem.name);
-                      setActiveTab('subjects');
-                      fetchAllSubjects();
+                      if (classItem.isActive !== false) {
+                        setSelectedClassId(classItem.id);
+                        setSelectedClassName(classItem.name);
+                        setSelectedClassActive(!!classItem.isActive);
+                        setActiveTab('subjects');
+                        fetchAllSubjects();
+                      }
                     }}
-                    className="w-full bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 font-medium transition-colors"
+                    disabled={classItem.isActive === false}
+                    className={`w-full text-white px-4 py-2 rounded-lg font-medium transition-colors ${classItem.isActive !== false ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-300 cursor-not-allowed'}`}
+                    title={classItem.isActive === false ? 'Kelas tidak aktif - tidak dapat dikelola' : 'Kelola kelas'}
                   >
-                    Kelola Kelas
+                    {classItem.isActive === false ? 'Tidak Aktif' : 'Kelola Kelas'}
                   </button>
                 </div>
               ))}

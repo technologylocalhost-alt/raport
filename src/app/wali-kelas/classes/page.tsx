@@ -16,6 +16,7 @@ interface Class {
   schoolYearId: string;
   schoolYear?: string;
   waliKelasId: string;
+  isActive?: boolean;
   _count?: {
     students: number;
   };
@@ -56,7 +57,7 @@ export default function WaliKelasClassesPage() {
       const headers = { Authorization: `Bearer ${token}` };
 
       const response = await fetch(
-        `/api/admin/classes?limit=100&waliKelasId=${waliKelasId}`,
+        `/api/admin/classes?limit=100&waliKelasId=${waliKelasId}&includeInactive=true`,
         { headers }
       );
 
@@ -168,10 +169,17 @@ export default function WaliKelasClassesPage() {
           </thead>
           <tbody>
             {classes.map((classItem) => (
-              <tr key={classItem.id} className="border-b hover:bg-gray-50">
+              <tr key={classItem.id} className={`border-b ${classItem.isActive !== false ? 'hover:bg-gray-50' : 'bg-gray-50'} ${classItem.isActive === false ? 'opacity-70' : ''}`}>
                 <td className="px-6 py-4">
                   <div>
-                    <p className="font-semibold text-gray-900">{classItem.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-gray-900">{classItem.name}</p>
+                      {classItem.isActive === false && (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded">
+                          Tidak Aktif
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-gray-500">Semester {classItem.semesterNumber}</p>
                   </div>
                 </td>
@@ -198,16 +206,18 @@ export default function WaliKelasClassesPage() {
                 <td className="px-6 py-4 text-center">
                   <div className="flex items-center justify-center gap-2">
                     <button
-                      onClick={() => router.push(`/wali-kelas/students?classId=${classItem.id}`)}
-                      className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg transition-colors"
-                      title="Kelola Siswa"
+                      onClick={() => classItem.isActive !== false && router.push(`/wali-kelas/students?classId=${classItem.id}`)}
+                      disabled={classItem.isActive === false}
+                      className={`px-3 py-1 rounded-lg transition-colors text-white text-xs font-medium ${classItem.isActive !== false ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-300 cursor-not-allowed'}`}
+                      title={classItem.isActive === false ? 'Kelas Tidak Aktif' : 'Kelola Siswa'}
                     >
                       Siswa
                     </button>
                     <button
-                      onClick={() => router.push(`/wali-kelas/management`)}
-                      className="p-1 hover:bg-gray-200 text-gray-600 rounded-lg transition-colors"
-                      title="Kelola Kelas"
+                      onClick={() => classItem.isActive !== false && router.push(`/wali-kelas/management`)}
+                      disabled={classItem.isActive === false}
+                      className={`p-1 rounded-lg transition-colors ${classItem.isActive !== false ? 'hover:bg-gray-200 text-gray-600' : 'text-gray-400 cursor-not-allowed'}`}
+                      title={classItem.isActive === false ? 'Kelas Tidak Aktif' : 'Kelola Kelas'}
                     >
                       <Eye size={18} />
                     </button>
@@ -222,10 +232,17 @@ export default function WaliKelasClassesPage() {
       {/* Classes Cards - Mobile View */}
       <div className="md:hidden space-y-4">
         {classes.map((classItem) => (
-          <div key={classItem.id} className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
+          <div key={classItem.id} className={`bg-white rounded-lg shadow-md border border-gray-200 p-4 ${classItem.isActive === false ? 'opacity-70' : ''}`}>
             {/* Class Name */}
             <div className="mb-4">
-              <p className="font-bold text-lg text-gray-900">{classItem.name}</p>
+              <div className="flex items-center gap-2 mb-1">
+                <p className="font-bold text-lg text-gray-900">{classItem.name}</p>
+                {classItem.isActive === false && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 text-xs font-semibold rounded">
+                    Tidak Aktif
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-gray-500">Semester {classItem.semesterNumber} • {classItem.schoolYear}</p>
             </div>
 
@@ -264,15 +281,17 @@ export default function WaliKelasClassesPage() {
             {/* Actions */}
             <div className="flex gap-2">
               <button
-                onClick={() => router.push(`/wali-kelas/students?classId=${classItem.id}`)}
-                className="flex-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors"
+                onClick={() => classItem.isActive !== false && router.push(`/wali-kelas/students?classId=${classItem.id}`)}
+                disabled={classItem.isActive === false}
+                className={`flex-1 px-3 py-2 text-white text-sm font-medium rounded-lg transition-colors ${classItem.isActive !== false ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-300 cursor-not-allowed'}`}
               >
-                Kelola Siswa
+                {classItem.isActive === false ? 'Tidak Aktif' : 'Kelola Siswa'}
               </button>
               <button
-                onClick={() => router.push(`/wali-kelas/management`)}
-                className="px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-600 rounded-lg transition-colors"
-                title="Kelola Kelas"
+                onClick={() => classItem.isActive !== false && router.push(`/wali-kelas/management`)}
+                disabled={classItem.isActive === false}
+                className={`px-3 py-2 rounded-lg transition-colors ${classItem.isActive !== false ? 'bg-gray-200 hover:bg-gray-300 text-gray-600' : 'bg-gray-100 cursor-not-allowed text-gray-400'}`}
+                title={classItem.isActive === false ? 'Kelas Tidak Aktif' : 'Kelola Kelas'}
               >
                 <Eye size={18} />
               </button>

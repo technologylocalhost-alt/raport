@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_APP_URL?.startsWith('https'),
       sameSite: 'lax',
-      maxAge: 3600, // 1 hour
+      maxAge: 36000, // 10 hours
       path: '/',
     });
 

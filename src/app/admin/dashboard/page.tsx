@@ -22,10 +22,27 @@ interface Statistics {
   teachers: number;
 }
 
+interface ActiveSchoolYear {
+  id: string;
+  year: string;
+  tahunAkademik?: string;
+  tahunAkademikArabic?: string;
+  startDate: string;
+  endDate: string;
+  semesters?: Array<{
+    id: string;
+    number: number;
+    semesterLabel?: string;
+    semesterLabelArabic?: string;
+    isActive: boolean;
+  }>;
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeSchoolYear, setActiveSchoolYear] = useState<ActiveSchoolYear | null>(null);
   const [statistics, setStatistics] = useState<Statistics>({
     schools: 0,
     schoolYears: 0,
@@ -75,29 +92,58 @@ export default function AdminDashboard() {
     try {
       const token = localStorage.getItem('accessToken');
       
-      const [schoolsRes, schoolYearsRes, levelsRes, classesRes, subjectsRes, studentsRes, teachersRes] = await Promise.all([
+      // First, get active school year
+      const schoolYearsRes = await fetch('/api/admin/school-years?limit=1000', { 
+        headers: { 'Authorization': `Bearer ${token}` } 
+      });
+      const schoolYearsData = await schoolYearsRes.json();
+      
+      // Find the active school year
+      const activeSchoolYearData = schoolYearsData.data?.find((sy: any) => sy.isActive);
+      const activeSchoolYearId = activeSchoolYearData?.id;
+
+      // Set active school year
+      if (activeSchoolYearData) {
+        setActiveSchoolYear(activeSchoolYearData);
+      }
+
+      // Get the active semester from active school year
+      let activeSemesterId = null;
+      if (activeSchoolYearData?.semesters && activeSchoolYearData.semesters.length > 0) {
+        const activeSem = activeSchoolYearData.semesters.find((sem: any) => sem.isActive);
+        activeSemesterId = activeSem?.id;
+      }
+
+      // Build query parameters for filtering by active school year
+      const schoolYearParam = activeSchoolYearId ? `?schoolYearId=${activeSchoolYearId}` : '';
+      const semesterParam = activeSemesterId ? `?semesterId=${activeSemesterId}` : '';
+
+      // For classes, we rely on the API's default active filtering
+      const [schoolsRes, levelsRes, classesRes, teachersRes] = await Promise.all([
         fetch('/api/admin/schools?limit=1000', { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch('/api/admin/school-years?limit=1000', { headers: { 'Authorization': `Bearer ${token}` } }),
         fetch('/api/admin/levels?limit=1000', { headers: { 'Authorization': `Bearer ${token}` } }),
         fetch('/api/admin/classes?limit=1000', { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch('/api/admin/subjects?limit=1000', { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch('/api/admin/students?limit=1000', { headers: { 'Authorization': `Bearer ${token}` } }),
         fetch('/api/admin/users?limit=1000&role=TEACHER', { headers: { 'Authorization': `Bearer ${token}` } }),
       ]);
 
-      const [schools, schoolYears, levels, classes, subjects, students, teachers] = await Promise.all([
+      // For students and subjects, filter by active school year/semester
+      const [studentsRes, subjectsRes] = await Promise.all([
+        fetch(`/api/admin/students${schoolYearParam}&limit=1000`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`/api/admin/subjects${semesterParam}&limit=1000`, { headers: { 'Authorization': `Bearer ${token}` } }),
+      ]);
+
+      const [schools, levels, classes, teachers, students, subjects] = await Promise.all([
         schoolsRes.json(),
-        schoolYearsRes.json(),
         levelsRes.json(),
         classesRes.json(),
-        subjectsRes.json(),
-        studentsRes.json(),
         teachersRes.json(),
+        studentsRes.json(),
+        subjectsRes.json(),
       ]);
 
       setStatistics({
         schools: schools.pagination?.total || schools.data?.length || 0,
-        schoolYears: schoolYears.pagination?.total || schoolYears.data?.length || 0,
+        schoolYears: 1, // Only count active school year
         levels: levels.pagination?.total || levels.data?.length || 0,
         classes: classes.pagination?.total || classes.data?.length || 0,
         subjects: subjects.pagination?.total || subjects.data?.length || 0,
@@ -148,6 +194,62 @@ export default function AdminDashboard() {
           Kelola sistem raport sekolah Anda dengan mudah dan efisien
         </p>
       </div>
+
+      {/* Active School Year Info */}
+      {activeSchoolYear && (
+        <div className="bg-white rounded-lg shadow-md border-l-4 border-green-500 p-4 sm:p-6">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">Tahun Ajaran Aktif</h2>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
+                  <span className="text-sm sm:text-base">
+                    <span className="font-semibold text-gray-700">{activeSchoolYear.year}</span>
+                    {activeSchoolYear.tahunAkademik && (
+                      <span className="text-gray-600"> • {activeSchoolYear.tahunAkademik}</span>
+                    )}
+                  </span>
+                </div>
+                {activeSchoolYear.tahunAkademikArabic && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm sm:text-base text-right" dir="rtl">
+                      <span className="font-semibold text-gray-700">{activeSchoolYear.tahunAkademikArabic}</span>
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs sm:text-sm text-gray-600">
+                    {new Date(activeSchoolYear.startDate).toLocaleDateString('id-ID', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })} - {new Date(activeSchoolYear.endDate).toLocaleDateString('id-ID', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })}
+                  </span>
+                </div>
+              </div>
+            </div>
+            {activeSchoolYear.semesters && activeSchoolYear.semesters.length > 0 && (
+              <div className="mt-3 sm:mt-0 sm:ml-4">
+                <div className="bg-green-50 rounded p-3 text-center">
+                  <div className="text-xs sm:text-sm text-gray-600 mb-1">Semester Aktif</div>
+                  {activeSchoolYear.semesters
+                    .filter(sem => sem.isActive)
+                    .map(sem => (
+                      <div key={sem.id} className="font-bold text-green-600 text-sm sm:text-base">
+                        {sem.semesterLabel || `Semester ${sem.number}`}
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Statistics Section */}
       <div>

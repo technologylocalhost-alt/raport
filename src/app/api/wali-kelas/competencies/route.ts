@@ -44,11 +44,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get competencies for the specific subject, only by this teacher
+    // Get competencies for the specific subject
+    // Include all competencies: both unassigned (teacherId null) and assigned to any teacher
     const competencies = await prisma.competency.findMany({
       where: {
         subjectId: subjectId,
-        teacherId: decoded.userId,
+        // Removed teacherId filter to show all competencies for the subject
       },
       select: {
         id: true,

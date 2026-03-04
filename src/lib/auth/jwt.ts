@@ -23,7 +23,7 @@ console.log('[JWT Config]', {
   refresh_secret_length: JWT_REFRESH_SECRET.length,
   refresh_secret_start: JWT_REFRESH_SECRET.substring(0, 10),
 });
-const JWT_ACCESS_EXPIRY = (process.env.JWT_ACCESS_EXPIRY || '15m') as string;
+const JWT_ACCESS_EXPIRY = (process.env.JWT_ACCESS_EXPIRY || '10h') as string;
 const JWT_REFRESH_EXPIRY = (process.env.JWT_REFRESH_EXPIRY || '7d') as string;
 
 /**

@@ -97,6 +97,7 @@ export function NaikKelasContent() {
   // Step 4 data
   const [students, setStudents] = useState<Student[]>([]);
   const [studentStatus, setStudentStatus] = useState<Record<string, 'promote' | 'retain'>>({});
+  const [studentTargetClass, setStudentTargetClass] = useState<Record<string, string>>({});
   const [isProcessing, setIsProcessing] = useState(false);
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '';
@@ -221,8 +222,14 @@ export function NaikKelasContent() {
       setStudents(studs);
       // Default semua siswa naik kelas
       const statusMap: Record<string, 'promote' | 'retain'> = {};
-      studs.forEach((s) => (statusMap[s.id] = 'promote'));
+      const targetClassMap: Record<string, string> = {};
+      const defaultTargetClass = targetClasses.length > 0 ? targetClasses[0].id : '';
+      studs.forEach((s) => {
+        statusMap[s.id] = 'promote';
+        targetClassMap[s.id] = defaultTargetClass;
+      });
       setStudentStatus(statusMap);
+      setStudentTargetClass(targetClassMap);
     } catch {
       setError('Gagal memuat data siswa');
     }
@@ -249,18 +256,9 @@ export function NaikKelasContent() {
   function handleGoToStep3() {
     if (!eligibility?.eligible) return;
     
-    // Auto-select target class jika ada suggestion
+    // Set target classes dan show step 3
     if (eligibility.targetClassSuggestions && eligibility.targetClassSuggestions.length > 0) {
-      // Jika hanya 1 suggestion, langsung ke step 4
-      if (eligibility.targetClassSuggestions.length === 1) {
-        setSelectedTargetClassId(eligibility.targetClassSuggestions[0].id);
-        fetchStudents(selectedSourceClassId);
-        setStep(4);
-        return;
-      }
-      // Jika >1 suggestion, set target classes dan show step 3
       setTargetClasses(eligibility.targetClassSuggestions as unknown as ClassItem[]);
-      setSelectedTargetClassId(eligibility.targetClassSuggestions[0].id);
       setStep(3);
     } else {
       setError('Tidak ada kelas tujuan yang tersedia untuk promosi');
@@ -272,10 +270,6 @@ export function NaikKelasContent() {
   }
 
   function handleGoToStep4() {
-    if (!selectedTargetClassId) {
-      setError('Pilih kelas tujuan terlebih dahulu');
-      return;
-    }
     fetchStudents(selectedSourceClassId);
     setStep(4);
   }
@@ -293,6 +287,13 @@ export function NaikKelasContent() {
     setStudentStatus(updated);
   }
 
+  function setStudentTargetClasses(studentId: string, targetClassId: string) {
+    setStudentTargetClass((prev) => ({
+      ...prev,
+      [studentId]: targetClassId,
+    }));
+  }
+
   async function handlePromote() {
     const promoteStudentIds = students
       .filter((s) => studentStatus[s.id] === 'promote')
@@ -305,6 +306,19 @@ export function NaikKelasContent() {
       setError('Minimal 1 siswa harus dipromosikan');
       return;
     }
+
+    // Validate setiap siswa yang naik kelas punya target class
+    const studentsWithoutTarget = promoteStudentIds.filter((sid) => !studentTargetClass[sid]);
+    if (studentsWithoutTarget.length > 0) {
+      setError('Pastikan semua siswa yang naik kelas sudah memiliki kelas tujuan');
+      return;
+    }
+
+    // Build student assignments dengan per-student target class
+    const studentAssignments = promoteStudentIds.map((sid) => ({
+      studentId: sid,
+      targetClassId: studentTargetClass[sid],
+    }));
 
     const confirmed = window.confirm(
       `Konfirmasi Naik Kelas:\n\n` +
@@ -323,7 +337,7 @@ export function NaikKelasContent() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ targetClassId: selectedTargetClassId, promoteStudentIds, retainStudentIds }),
+        body: JSON.stringify({ studentAssignments, retainStudentIds }),
       });
       const data = await res.json();
       if (data.success) {
@@ -657,8 +671,7 @@ export function NaikKelasContent() {
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-bold text-gray-900 mb-1">Langkah 3 — Pilih Kelas Tujuan</h2>
             <p className="text-sm text-gray-600 mb-4">
-              🎯 Berikut adalah kelas tujuan yang <span className="font-semibold">direkomendasikan sistem</span> berdasarkan
-              struktur level dan tingkat kelas. Pilih salah satu:
+              🎯 Berikut adalah kelas tujuan yang <span className="font-semibold">tersedia</span> untuk promosi. Anda bisa assign setiap siswa ke kelas tujuan yang berbeda-beda di langkah berikutnya:
             </p>
 
             {targetClasses.length === 0 ? (
@@ -676,14 +689,9 @@ export function NaikKelasContent() {
                   const willBeFull = siswaCount + (eligibility?.totalStudents ?? 0) > cls.capacity;
                   const isRecommended = targetClasses.length === 1;
                   return (
-                    <button
+                    <div
                       key={cls.id}
-                      onClick={() => handleSelectTargetClass(cls.id)}
-                      className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-all ${
-                        selectedTargetClassId === cls.id
-                          ? 'border-purple-500 bg-purple-50'
-                          : 'border-gray-200 hover:border-purple-300 hover:bg-purple-50'
-                      }`}
+                      className="w-full text-left px-4 py-3 rounded-lg border-2 border-gray-200 bg-white"
                     >
                       <div className="flex items-center justify-between">
                         <div>
@@ -715,7 +723,7 @@ export function NaikKelasContent() {
                           Wali Kelas: {cls.waliKelas.name}
                         </div>
                       )}
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -732,8 +740,7 @@ export function NaikKelasContent() {
             </button>
             <button
               onClick={handleGoToStep4}
-              disabled={!selectedTargetClassId}
-              className="flex items-center gap-2 bg-purple-600 text-white px-6 py-2.5 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+              className="flex items-center gap-2 bg-purple-600 text-white px-6 py-2.5 rounded-lg hover:bg-purple-700 transition-colors font-medium"
             >
               Atur Siswa
               <ChevronRight size={18} />
@@ -760,7 +767,7 @@ export function NaikKelasContent() {
                 <TrendingUp size={16} className="text-purple-500" />
                 <span className="text-purple-600">Ke:</span>
                 <span className="font-semibold text-purple-900">
-                  {selectedTarget?.name} ({selectedTarget?.level.name})
+                  Kelas Tujuan (disesuaikan per siswa)
                 </span>
               </div>
             </div>
@@ -768,9 +775,14 @@ export function NaikKelasContent() {
 
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-900">
-                Langkah 4 — Pilih Siswa yang Naik Kelas
-              </h2>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  Langkah 4 — Pilih Siswa & Kelas Tujuan
+                </h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  Tentukan siswa mana yang naik kelas dan pilih kelas tujuan untuk masing-masing siswa
+                </p>
+              </div>
               <div className="flex gap-2 text-xs">
                 <button
                   onClick={() => toggleAllStatus('promote')}
@@ -809,6 +821,7 @@ export function NaikKelasContent() {
                     <th className="px-4 py-3 text-left font-semibold text-gray-600">No. Siswa</th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-600">Gender</th>
                     <th className="px-4 py-3 text-center font-semibold text-gray-600">Nilai Rata-rata</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-600">Kelas Tujuan</th>
                     <th className="px-4 py-3 text-center font-semibold text-gray-600">Status</th>
                   </tr>
                 </thead>
@@ -837,6 +850,24 @@ export function NaikKelasContent() {
                           }`}>
                             {s.averageScore ? s.averageScore.toFixed(1) : '—'}
                           </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {isPromote ? (
+                            <select
+                              value={studentTargetClass[s.id] || ''}
+                              onChange={(e) => setStudentTargetClasses(s.id, e.target.value)}
+                              className="w-full px-2 py-1.5 text-xs border border-purple-300 rounded bg-purple-50 text-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            >
+                              <option value="">-- Pilih Kelas --</option>
+                              {targetClasses.map((cls) => (
+                                <option key={cls.id} value={cls.id}>
+                                  {cls.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="text-xs text-gray-500">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <button
@@ -902,6 +933,7 @@ export function NaikKelasContent() {
                 setEligibility(null);
                 setStudents([]);
                 setStudentStatus({});
+                setStudentTargetClass({});
                 setSuccessMsg(null);
                 setError(null);
                 fetchClasses();

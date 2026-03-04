@@ -618,89 +618,98 @@ export default function ClassesPage() {
         <table className="w-full">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Nama Kelas</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Level</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Tahun Akademik</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Semester</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Wali Kelas</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Guru</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Siswa</th>
-              <th className="px-6 py-4 text-center text-sm font-semibold text-gray-900">Aksi</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Nama Kelas</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Level</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">T.A.</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Sem</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Wali</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Guru</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Siswa</th>
+              <th className="px-4 py-3 text-center text-xs font-semibold text-gray-900">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {isLoading ? (
               <tr>
-                <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={8} className="px-4 py-6 text-center text-gray-500">
                   Loading...
                 </td>
               </tr>
             ) : classes.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={8} className="px-4 py-6 text-center text-gray-500">
                   Tidak ada kelas ditemukan
                 </td>
               </tr>
             ) : (
               classes.map((classData) => (
                 <tr key={classData.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 text-sm text-gray-900 font-medium">{classData.name}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
-                    {classData.level.name} ({classData.level.code})
+                  <td className="px-4 py-3 text-sm text-gray-900 font-medium">{classData.name}</td>
+                  <td className="px-4 py-3 text-xs text-gray-600">
+                    {classData.level.code}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{classData.schoolYear.year}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
-                    Semester {classData.semester.number}
+                  <td className="px-4 py-3 text-xs text-gray-600">{classData.schoolYear.year}</td>
+                  <td className="px-4 py-3 text-xs text-gray-600">
+                    S{classData.semester.number}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
+                  <td className="px-4 py-3 text-sm text-gray-600">
                     {classData.waliKelas ? (
-                      <span className="inline-block px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-mono">
+                      <span className="inline-block px-2 py-1 bg-purple-100 text-purple-800 rounded text-sm font-medium">
                         {classData.waliKelas.name}
                       </span>
                     ) : (
                       <span className="text-gray-400">-</span>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
-                    <div className="space-y-1">
+                  <td className="px-4 py-3 text-xs text-gray-600">
+                    <div className="flex flex-wrap gap-1">
                       {classData.teachers.length > 0 ? (
-                        classData.teachers.map((teacher) => (
-                          <div key={`${teacher.teacherId}-${teacher.subjectId}`} className="text-xs">
-                            {teacher.teacher.name} - {teacher.subject.name}
-                          </div>
+                        classData.teachers.slice(0, 2).map((teacher) => (
+                          <span
+                            key={`${teacher.teacherId}-${teacher.subjectId}`}
+                            className="inline-block px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs whitespace-nowrap"
+                            title={`${teacher.teacher.name} - ${teacher.subject.name}`}
+                          >
+                            {teacher.subject.code}
+                          </span>
                         ))
                       ) : (
-                        <span className="text-gray-400">Belum ada guru</span>
+                        <span className="text-gray-400">-</span>
+                      )}
+                      {classData.teachers.length > 2 && (
+                        <span className="inline-block px-2 py-0.5 bg-gray-200 text-gray-700 rounded text-xs font-medium">
+                          +{classData.teachers.length - 2}
+                        </span>
                       )}
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm">
-                    <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                      {classData._count.students} siswa
+                  <td className="px-4 py-3 text-xs">
+                    <span className="inline-block px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                      {classData._count.students}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-sm text-center">
-                    <div className="flex justify-center gap-2">
+                  <td className="px-4 py-3 text-sm text-center">
+                    <div className="flex justify-center gap-1">
                       <a
                         href={`/admin/naik-kelas?classId=${classData.id}`}
-                        className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors inline-flex"
+                        className="p-1.5 text-purple-600 hover:bg-purple-50 rounded transition-colors inline-flex"
                         title="Naik Kelas"
                       >
-                        <TrendingUp size={18} />
+                        <TrendingUp size={16} />
                       </a>
                       <button
                         onClick={() => handleEdit(classData)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
                         title="Edit"
                       >
-                        <Edit size={18} />
+                        <Edit size={16} />
                       </button>
                       <button
                         onClick={() => handleDelete(classData.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
                         title="Hapus"
                       >
-                        <Trash2 size={18} />
+                        <Trash2 size={16} />
                       </button>
                     </div>
                   </td>

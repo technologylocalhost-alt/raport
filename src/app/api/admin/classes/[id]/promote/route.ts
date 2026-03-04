@@ -18,10 +18,22 @@ async function verifyAdmin(req: NextRequest) {
 }
 
 const promoteSchema = z.object({
-  targetClassId: z.string().min(1, 'Target class ID is required'),
-  promoteStudentIds: z.array(z.string()).min(1, 'Minimal 1 siswa harus dipromosikan'),
+  targetClassId: z.string().min(1, 'Target class ID is required').optional(),
+  promoteStudentIds: z.array(z.string()).optional(),
+  studentAssignments: z.array(z.object({
+    studentId: z.string(),
+    targetClassId: z.string(),
+  })).optional(),
   retainStudentIds: z.array(z.string()).optional().default([]),
-});
+}).refine(
+  (data) => {
+    // Harus punya salah satu: old format (targetClassId + promoteStudentIds) atau new format (studentAssignments)
+    const hasOldFormat = data.targetClassId && data.promoteStudentIds && data.promoteStudentIds.length > 0;
+    const hasNewFormat = data.studentAssignments && data.studentAssignments.length > 0;
+    return hasOldFormat || hasNewFormat;
+  },
+  { message: 'Provide either old format (targetClassId + promoteStudentIds) or new format (studentAssignments)' }
+);
 
 /**
  * POST /api/admin/classes/[id]/promote
@@ -42,7 +54,28 @@ export async function POST(
       return errorResponse('Validation error', 400, parsed.error.issues);
     }
 
-    const { targetClassId, promoteStudentIds, retainStudentIds } = parsed.data;
+    // Identify format: old atau new
+    const { targetClassId, promoteStudentIds, studentAssignments, retainStudentIds } = parsed.data;
+    const isNewFormat = !!studentAssignments && studentAssignments.length > 0;
+    
+    // Konversi new format ke old format jika perlu (untuk backward compatibility)
+    let actualTargetClassId = targetClassId;
+    let actualPromoteStudentIds = promoteStudentIds || [];
+    let studentToTargetClassMap: Record<string, string> = {};
+    
+    if (isNewFormat && studentAssignments) {
+      // New format: check all students punya valid targetClassId
+      const invalidAssignments = studentAssignments.filter(a => !a.studentId || !a.targetClassId);
+      if (invalidAssignments.length > 0) {
+        return errorResponse('Setiap siswa harus memiliki studentId dan targetClassId', 400);
+      }
+      
+      // Build map dari studentId ke targetClassId
+      studentAssignments.forEach(a => {
+        studentToTargetClassMap[a.studentId] = a.targetClassId;
+      });
+      actualPromoteStudentIds = studentAssignments.map(a => a.studentId);
+    }
 
     // Ambil data kelas sumber
     const sourceClass = await prisma.class.findUnique({
@@ -60,16 +93,46 @@ export async function POST(
     if (!sourceClass) return errorResponse('Source class not found', 404);
 
     // Ambil data kelas tujuan
-    const targetClass = await prisma.class.findUnique({
-      where: { id: targetClassId },
-      include: {
-        level: true,
-        semester: true,
-        _count: { select: { students: true } },
-      },
-    });
-
-    if (!targetClass) return errorResponse('Target class not found', 404);
+    let targetClasses: any[] = [];
+    let targetClassIds: string[] = [];
+    
+    if (isNewFormat && studentAssignments) {
+      // Fetch semua unique target classes
+      const uniqueTargetIds = [...new Set(studentAssignments.map(a => a.targetClassId))];
+      targetClassIds = uniqueTargetIds;
+      targetClasses = await prisma.class.findMany({
+        where: { id: { in: uniqueTargetIds } },
+        include: {
+          level: true,
+          semester: true,
+          _count: { select: { students: true } },
+        },
+      });
+      
+      if (targetClasses.length === 0) {
+        return errorResponse('Target classes tidak ditemukan', 404);
+      }
+      
+      // Validasi bahwa semua target classes berada di level yang sama
+      const uniqueLevelIds = new Set(targetClasses.map(c => c.levelId));
+      if (uniqueLevelIds.size > 1) {
+        return errorResponse('Semua kelas tujuan harus berada di level yang sama', 400);
+      }
+    } else {
+      // Old format - single target class
+      const targetClass = await prisma.class.findUnique({
+        where: { id: actualTargetClassId! },
+        include: {
+          level: true,
+          semester: true,
+          _count: { select: { students: true } },
+        },
+      });
+      
+      if (!targetClass) return errorResponse('Target class not found', 404);
+      targetClasses = [targetClass];
+      targetClassIds = [actualTargetClassId!];
+    }
 
     // Validasi dengan intelligent class promotion logic
     // Parse source class name untuk extract level number
@@ -86,6 +149,9 @@ export async function POST(
       sourceParsed.levelCode = sourceClass.level.code;
     }
 
+    // Use first target class for validation purposes
+    const targetClass = targetClasses[0];
+    
     // Deteksi tipe promosi berdasarkan target (semester atau level)
     const targetParsed = parseClassName(targetClass.name);
     if (targetParsed && !targetParsed.levelCode) {
@@ -192,17 +258,35 @@ export async function POST(
 
 
     // Validasi: kapasitas kelas tujuan
-    const currentTargetCount = targetClass._count.students;
-    if (currentTargetCount + promoteStudentIds.length > targetClass.capacity) {
-      return errorResponse(
-        `Kapasitas kelas tujuan tidak mencukupi. Kapasitas: ${targetClass.capacity}, sudah terisi: ${currentTargetCount}, akan ditambah: ${promoteStudentIds.length}`,
-        400
-      );
+    if (isNewFormat && studentAssignments) {
+      // Validate capacity per target class
+      for (const assignment of studentAssignments) {
+        const targetCls = targetClasses.find(c => c.id === assignment.targetClassId);
+        if (!targetCls) continue;
+        
+        const studentsForThisClass = studentAssignments.filter(a => a.targetClassId === assignment.targetClassId).length;
+        const currentCount = targetCls._count.students;
+        if (currentCount + studentsForThisClass > targetCls.capacity) {
+          return errorResponse(
+            `Kapasitas kelas tujuan "${targetCls.name}" tidak mencukupi. Kapasitas: ${targetCls.capacity}, sudah terisi: ${currentCount}, akan ditambah: ${studentsForThisClass}`,
+            400
+          );
+        }
+      }
+    } else {
+      // Old format - single target class
+      const currentTargetCount = targetClass._count.students;
+      if (currentTargetCount + actualPromoteStudentIds.length > targetClass.capacity) {
+        return errorResponse(
+          `Kapasitas kelas tujuan tidak mencukupi. Kapasitas: ${targetClass.capacity}, sudah terisi: ${currentTargetCount}, akan ditambah: ${actualPromoteStudentIds.length}`,
+          400
+        );
+      }
     }
 
     // Validasi: semua promoteStudentIds harus berasal dari kelas sumber
     const sourceStudentIds = new Set(sourceClass.students.map((s: { id: string }) => s.id));
-    const invalidStudents = promoteStudentIds.filter((id) => !sourceStudentIds.has(id));
+    const invalidStudents = actualPromoteStudentIds.filter((id) => !sourceStudentIds.has(id));
     if (invalidStudents.length > 0) {
       return errorResponse(
         `Beberapa siswa tidak berasal dari kelas sumber: ${invalidStudents.join(', ')}`,
@@ -241,7 +325,7 @@ export async function POST(
     // Eksekusi: duplikasi siswa yang dipromosikan ke kelas baru
     // 1. Fetch semua students yang akan dipromosikan dengan data lengkap
     const studentsToPromote = await prisma.student.findMany({
-      where: { id: { in: promoteStudentIds } },
+      where: { id: { in: actualPromoteStudentIds } },
       include: {
         grades: {
           select: {
@@ -275,31 +359,73 @@ export async function POST(
       };
     });
 
-    // Sort dari nilai tertinggi ke terendah
-    studentsWithScores.sort((a, b) => b.avgScore - a.avgScore);
+    // Sort dari nilai tertinggi ke terendah (hanya untuk old format)
+    if (!isNewFormat) {
+      studentsWithScores.sort((a, b) => b.avgScore - a.avgScore);
+    }
 
     // 3. Create duplikat students di kelas baru dengan urutan berdasarkan nilai
     // Nomor siswa (studentNo) tetap sama, hanya nourut yang berdasarkan ranking nilai
     const createdStudents = [];
-    for (let i = 0; i < studentsWithScores.length; i++) {
-      const student = studentsWithScores[i];
+    
+    if (isNewFormat && studentAssignments) {
+      // New format: assign students to their respective target classes
+      // Group students by target class
+      const studentsByTargetClass: Record<string, any[]> = {};
+      for (const student of studentsWithScores) {
+        const targetCls = studentToTargetClassMap[student.id];
+        if (!studentsByTargetClass[targetCls]) {
+          studentsByTargetClass[targetCls] = [];
+        }
+        studentsByTargetClass[targetCls].push(student);
+      }
+      
+      // For each target class, create students with nourut based on their order within that class
+      for (const [targetCls, studentsInClass] of Object.entries(studentsByTargetClass)) {
+        for (let i = 0; i < studentsInClass.length; i++) {
+          const student = studentsInClass[i];
+          
+          const newStudent = await prisma.student.create({
+            data: {
+              classId: targetCls,
+              studentNo: student.studentNo,
+              name: student.name,
+              nourut: i + 1, // urutan per kelas target
+              email: student.email,
+              phone: student.phone,
+              gender: student.gender,
+              birthDate: student.birthDate,
+              address: student.address,
+              parentPhoneNo: student.parentPhoneNo,
+            },
+          });
+          createdStudents.push(newStudent);
+        }
+      }
+    } else {
+      // Old format: assign all students to single target class
+      studentsWithScores.sort((a, b) => b.avgScore - a.avgScore);
+      
+      for (let i = 0; i < studentsWithScores.length; i++) {
+        const student = studentsWithScores[i];
 
-      const newStudent = await prisma.student.create({
-        data: {
-          classId: targetClassId,
-          studentNo: student.studentNo, // Tetap nomor siswa original
-          name: student.name,
-          nourut: i + 1, // urutan berdasarkan ranking nilai (tertinggi ke terendah)
-          email: student.email,
-          phone: student.phone,
-          gender: student.gender,
-          birthDate: student.birthDate,
-          address: student.address,
-          parentPhoneNo: student.parentPhoneNo,
-        },
-      });
+        const newStudent = await prisma.student.create({
+          data: {
+            classId: actualTargetClassId!,
+            studentNo: student.studentNo, // Tetap nomor siswa original
+            name: student.name,
+            nourut: i + 1, // urutan berdasarkan ranking nilai (tertinggi ke terendah)
+            email: student.email,
+            phone: student.phone,
+            gender: student.gender,
+            birthDate: student.birthDate,
+            address: student.address,
+            parentPhoneNo: student.parentPhoneNo,
+          },
+        });
 
-      createdStudents.push(newStudent);
+        createdStudents.push(newStudent);
+      }
     }
 
     // 4. Deaktifkan kelas sumber setelah promosi berhasil
