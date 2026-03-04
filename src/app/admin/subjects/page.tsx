@@ -63,6 +63,21 @@ export default function SubjectsPage() {
     fetchSubjects();
   }, [page, search]);
 
+  // Reset form when it closes
+  useEffect(() => {
+    if (!showForm) {
+      setFormData({
+        levelId: '',
+        code: '',
+        name: '',
+        nameArabic: '',
+        description: '',
+        creditHours: '',
+      });
+      setEditingId(null);
+    }
+  }, [showForm]);
+
   async function fetchLevels() {
     try {
       const token = localStorage.getItem('accessToken');
@@ -131,7 +146,7 @@ export default function SubjectsPage() {
     e.preventDefault();
     
     // Validation
-    if (!formData.levelId.trim() || !formData.code.trim() || !formData.name.trim()) {
+    if (!formData.levelId || !formData.code.trim() || !formData.name.trim()) {
       alert('Jenjang, Kode, dan Nama Mata Pelajaran wajib diisi!');
       return;
     }
@@ -390,7 +405,6 @@ export default function SubjectsPage() {
           </button>
           <button
             onClick={() => {
-              setEditingId(null);
               setFormData({
                 levelId: '',
                 code: '',
@@ -399,6 +413,7 @@ export default function SubjectsPage() {
                 description: '',
                 creditHours: '',
               });
+              setEditingId(null);
               setShowForm(true);
             }}
             className="flex items-center gap-2 bg-orange-600 text-white px-6 py-3 rounded-lg hover:bg-orange-700 transition-colors shadow-lg hover:shadow-xl font-medium"

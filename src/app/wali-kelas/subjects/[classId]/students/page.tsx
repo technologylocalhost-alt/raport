@@ -8,11 +8,13 @@ import * as XLSX from 'xlsx';
 interface Student {
   id: string;
   name: string;
-  studentNo: string;
+  nisn?: string;
+  studentNo?: string;
   nourut?: number;
   email?: string;
   phone?: string;
   classId?: string;
+  className?: string;
 }
 
 interface Competency {
@@ -135,7 +137,7 @@ export default function WaliKelasStudentsPage() {
   useEffect(() => {
     fetchClassStudents();
     fetchClassInfo();
-  }, [classId, currentPage]);
+  }, [classId, subjectId]);
 
   // Auto-select first student when page loads and student changes
   useEffect(() => {
@@ -151,9 +153,34 @@ export default function WaliKelasStudentsPage() {
         notes: '',
       });
       setGradeError('');
+      setGradeSuccess('');
       fetchCompetencies(firstStudent.id);
     }
   }, [students]);
+
+  // Clear form when subjectId changes
+  useEffect(() => {
+    setGradeFormData({
+      competencyId: '',
+      score: '',
+      assessmentType: 'UTS_1',
+      notes: '',
+    });
+    setGradeError('');
+    setGradeSuccess('');
+    setEditingGradeId(null);
+  }, [subjectId]);
+
+  // Clear import data when subjectId changes
+  useEffect(() => {
+    setShowImportModal(false);
+    setImportFile(null);
+    setImportedRows([]);
+    setImportError('');
+    setImportSuccess('');
+    setImportLoading(false);
+    setImportSubmitting(false);
+  }, [subjectId]);
 
   // Auto-load grades for all students
   useEffect(() => {
@@ -171,23 +198,16 @@ export default function WaliKelasStudentsPage() {
       const token = localStorage.getItem('accessToken');
       if (!token) return;
 
-      // Get class name
-      const classResponse = await fetch(`/api/admin/classes/${classId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const classData = await classResponse.json();
-      if (classData.data?.name) {
-        setClassName(classData.data.name);
-      }
-
-      // Get subject name
+      // Get subject name from competencies endpoint
       if (subjectId) {
-        const subjectResponse = await fetch(`/api/admin/subjects/${subjectId}`, {
+        const response = await fetch(`/api/wali-kelas/competencies?subjectId=${subjectId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const subjectData = await subjectResponse.json();
-        if (subjectData.data?.name) {
-          setSubjectName(subjectData.data.name);
+        const data = await response.json();
+        
+        if (data.success && data.competencies && data.competencies.length > 0) {
+          const subject = data.competencies[0];
+          setSubjectName(subject.subjectName || '');
         }
       }
     } catch (error) {
@@ -213,8 +233,7 @@ export default function WaliKelasStudentsPage() {
         return;
       }
       
-      const skip = (currentPage - 1) * itemsPerPage;
-      const response = await fetch(`/api/admin/classes/${classId}/students?page=${currentPage}&limit=${itemsPerPage}`, {
+      const response = await fetch(`/api/wali-kelas/students?classId=${classId}&limit=10000`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -223,6 +242,11 @@ export default function WaliKelasStudentsPage() {
       const data: any = await response.json();
 
       console.log('Students fetched:', data);
+
+      if (response.status === 400) {
+        setError(`Permintaan tidak valid: ${data.message || 'Parameter tidak valid'}`);
+        return;
+      }
 
       if (response.status === 401) {
         setError('Anda tidak terautentikasi. Silakan login kembali');
@@ -238,14 +262,26 @@ export default function WaliKelasStudentsPage() {
         setError('Kelas tidak ditemukan');
         return;
       }
+
+      if (!response.ok) {
+        setError(`Gagal memuat data siswa: ${data.message || response.statusText}`);
+        return;
+      }
       
-      if (data.success && data.data) {
+      if (data.success && data.data && Array.isArray(data.data)) {
         setStudents(data.data);
-        // Get total pages from pagination info
-        const total = data.pagination?.total || 0;
+        // Set class name from first student if available
+        if (data.data.length > 0 && data.data[0].className) {
+          setClassName(data.data[0].className);
+        }
+        // Set pagination info
+        const total = data.total || data.data.length || 0;
         setTotalStudents(total);
-        setTotalPages(Math.ceil(total / itemsPerPage));
+        setTotalPages(1);
+      } else if (data.success && Array.isArray(data.data)) {
+        setStudents(data.data);
       } else {
+        setError('Format respons data tidak valid');
         setStudents([]);
       }
     } catch (err) {
@@ -346,6 +382,7 @@ export default function WaliKelasStudentsPage() {
       notes: '',
     });
     setGradeError('');
+    setGradeSuccess('');
     await fetchCompetencies(student.id);
   };
 
@@ -376,6 +413,7 @@ export default function WaliKelasStudentsPage() {
       const payload = {
         studentId: selectedStudent.id,
         competencyId: gradeFormData.competencyId,
+        subjectId: subjectId, // Add subjectId to ensure data is for correct subject
         score: parseFloat(gradeFormData.score),
         assessmentType: gradeFormData.assessmentType,
         notes: gradeFormData.notes,
@@ -414,6 +452,10 @@ export default function WaliKelasStudentsPage() {
           assessmentType: 'UTS_1',
           notes: '',
         });
+        // Auto clear success message after 3 seconds
+        setTimeout(() => {
+          setGradeSuccess('');
+        }, 3000);
         // Fetch latest grades and ensure the list is expanded to show them
         console.log('Fetching grades for student:', selectedStudent.id);
         await fetchStudentGrades(selectedStudent.id);
@@ -520,24 +562,7 @@ export default function WaliKelasStudentsPage() {
 
     let nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
     
-    // Check if we need to load next/previous page
-    if (nextIndex < 0 && currentPage > 1) {
-      // Go to previous page
-      const prevPage = currentPage - 1;
-      setCurrentPage(prevPage);
-      // The useEffect will handle fetching the students for the new page
-      // We'll set the selected student after students are loaded
-      return;
-    }
-    
-    if (nextIndex >= students.length && currentPage < totalPages) {
-      // Go to next page
-      const nextPage = currentPage + 1;
-      setCurrentPage(nextPage);
-      // The useEffect will handle fetching the students for the new page
-      return;
-    }
-
+    // Check boundary
     if (nextIndex < 0 || nextIndex >= students.length) return;
 
     const nextStudent = students[nextIndex];
@@ -554,25 +579,35 @@ export default function WaliKelasStudentsPage() {
   };
 
   const downloadTemplate = () => {
-    const ws = XLSX.utils.json_to_sheet([
-      {
-        'Nomor Siswa': '387',
-        'Nama Siswa': 'Faaiq Husain',
-        'Nilai (1-10)': 8.5,
-        'Jenis Penilaian': 'UTS_1',
-        'Catatan': 'Bagus',
-      },
-      {
-        'Nomor Siswa': '412',
-        'Nama Siswa': 'Rayyan Aryatama Karim',
-        'Nilai (1-10)': 7.0,
-        'Jenis Penilaian': 'UTS_1',
-        'Catatan': '',
-      },
-    ]);
+    // Create rows with actual student data
+    const templateRows = students.map((student) => ({
+      'Kelas': className,
+      'Mata Pelajaran': subjectName,
+      'Nomor Siswa': student.nisn || student.studentNo || '',
+      'Nama Siswa': student.name || '',
+      'Nama Kompetensi': '', // Empty for user to fill
+      'Nilai (1-10)': '', // Empty for user to fill
+      'Jenis Penilaian': 'UTS_1', // Default value
+      'Catatan': '', // Empty for user to fill
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(templateRows);
+    
+    // Set column widths for better readability
+    ws['!cols'] = [
+      { wch: 15 }, // Kelas
+      { wch: 20 }, // Mata Pelajaran
+      { wch: 12 }, // Nomor Siswa
+      { wch: 25 }, // Nama Siswa
+      { wch: 25 }, // Nama Kompetensi
+      { wch: 12 }, // Nilai
+      { wch: 18 }, // Jenis Penilaian
+      { wch: 20 }, // Catatan
+    ];
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Template Nilai');
-    XLSX.writeFile(wb, `Template_Nilai_${subjectName || 'Mata_Pelajaran'}.xlsx`);
+    XLSX.writeFile(wb, `Template_Nilai_${className}_${subjectName || 'Mata_Pelajaran'}.xlsx`);
   };
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -600,9 +635,17 @@ export default function WaliKelasStudentsPage() {
         const errors: string[] = [];
         const score = row['Nilai (1-10)'] ? parseFloat(String(row['Nilai (1-10)'])) : undefined;
 
+        // Validasi kelas dan mata pelajaran
+        if (row['Kelas'] && row['Kelas'] !== className) {
+          errors.push(`Kelas tidak sesuai (harapan: ${className}, dapat: ${row['Kelas']})`);
+        }
+        if (row['Mata Pelajaran'] && row['Mata Pelajaran'] !== subjectName) {
+          errors.push(`Mata Pelajaran tidak sesuai (harapan: ${subjectName}, dapat: ${row['Mata Pelajaran']})`);
+        }
+
         if (!row['Nomor Siswa']) errors.push('Nomor Siswa kosong');
         if (!row['Nama Siswa']) errors.push('Nama Siswa kosong');
-        // Kompetensi adalah opsional, jadi tidak perlu validasi
+        // Kompetensi adalah opsional
         if (!score || isNaN(score) || score < 1 || score > 10) errors.push('Nilai harus 1-10');
         if (!row['Jenis Penilaian']) errors.push('Jenis Penilaian kosong');
         if (!Object.keys(assessmentTypeLabels).includes(row['Jenis Penilaian'])) {
@@ -636,6 +679,12 @@ export default function WaliKelasStudentsPage() {
       return;
     }
 
+    // Validate that we still have the same subjectId
+    if (!subjectId) {
+      setImportError('ID Mata Pelajaran tidak valid. Silakan refresh halaman.');
+      return;
+    }
+
     // Check for rows with errors
     const rowsWithErrors = importedRows.filter((row) => row.errors && row.errors.length > 0);
     if (rowsWithErrors.length > 0) {
@@ -662,7 +711,10 @@ export default function WaliKelasStudentsPage() {
         notes: row.notes,
       }));
 
-      // Send to API
+      // Log untuk memastikan import gunakan subjectId yang benar
+      console.log('Submitting import with subjectId:', subjectId, 'classId:', classId);
+
+      // Send to API dengan subjectId yang benar
       const response = await fetch(`/api/teacher/grades/import?subjectId=${subjectId}&classId=${classId}`, {
         method: 'POST',
         headers: {
@@ -675,11 +727,25 @@ export default function WaliKelasStudentsPage() {
       const data = await response.json();
 
       if (response.ok) {
-        setImportSuccess(`${data.successCount || importedRows.length} nilai berhasil diimport`);
-        setShowImportModal(false);
-        setImportFile(null);
-        setImportedRows([]);
-        setImportError('');
+        // Build success message with created/updated details
+        let successMsg = '';
+        if (data.createdCount && data.updatedCount) {
+          successMsg = `${data.createdCount} nilai baru dibuat, ${data.updatedCount} nilai diperbarui`;
+        } else if (data.createdCount) {
+          successMsg = `${data.createdCount} nilai baru berhasil diimport`;
+        } else if (data.updatedCount) {
+          successMsg = `${data.updatedCount} nilai berhasil diperbarui`;
+        } else {
+          successMsg = `${data.successCount || importedRows.length} nilai berhasil diimport`;
+        }
+        setImportSuccess(successMsg);
+        // Auto close modal after 2 seconds
+        setTimeout(() => {
+          setShowImportModal(false);
+          setImportFile(null);
+          setImportedRows([]);
+          setImportError('');
+        }, 2000);
         // Refresh data
         fetchClassStudents();
         // Reload grades for all students
@@ -751,11 +817,13 @@ export default function WaliKelasStudentsPage() {
       <div className="flex gap-2 flex-wrap">
         <button
           onClick={() => {
-            setShowImportModal(true);
-            setImportError('');
-            setImportSuccess('');
             setImportFile(null);
             setImportedRows([]);
+            setImportError('');
+            setImportSuccess('');
+            setImportLoading(false);
+            setImportSubmitting(false);
+            setShowImportModal(true);
           }}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 font-medium"
         >
@@ -816,7 +884,7 @@ export default function WaliKelasStudentsPage() {
                                 <p className="font-semibold text-gray-900">{student.name}</p>
                               </div>
                             </div>
-                            <p className="text-sm text-gray-600 mt-1">{student.studentNo}</p>
+                            <p className="text-sm text-gray-600 mt-1">{student.nisn || student.studentNo || '-'}</p>
                           </div>
                           <div className="flex-1">
                             {/* Grades Column - Grid layout */}
@@ -1061,7 +1129,7 @@ export default function WaliKelasStudentsPage() {
               <div className="flex gap-2 mb-4 pb-4 border-b">
                 <button
                   onClick={() => handleNavigateStudent('prev')}
-                  disabled={getCurrentStudentIndex() === 0 && currentPage === 1}
+                  disabled={getCurrentStudentIndex() === 0}
                   className="flex-1 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed text-gray-700 px-3 py-2 rounded-lg transition-colors font-medium text-sm flex items-center justify-center gap-2"
                   title="Siswa Sebelumnya"
                 >
@@ -1070,7 +1138,7 @@ export default function WaliKelasStudentsPage() {
                 </button>
                 <button
                   onClick={() => handleNavigateStudent('next')}
-                  disabled={getCurrentStudentIndex() === students.length - 1 && currentPage === totalPages}
+                  disabled={getCurrentStudentIndex() === students.length - 1}
                   className="flex-1 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed text-gray-700 px-3 py-2 rounded-lg transition-colors font-medium text-sm flex items-center justify-center gap-2"
                   title="Siswa Selanjutnya"
                 >
@@ -1213,7 +1281,12 @@ export default function WaliKelasStudentsPage() {
           <div className="bg-white rounded-lg shadow-xl max-w-4xl max-h-[90vh] overflow-y-auto w-full">
             {/* Modal Header */}
             <div className="sticky top-0 bg-white border-b p-6 flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-gray-900">Import Nilai dari Excel</h2>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Import Nilai dari Excel</h2>
+                <p className="text-sm text-gray-600 mt-2">
+                  <span className="font-semibold">Kelas:</span> {className} | <span className="font-semibold">Mata Pelajaran:</span> {subjectName}
+                </p>
+              </div>
               <button
                 onClick={() => {
                   setShowImportModal(false);
@@ -1256,12 +1329,13 @@ export default function WaliKelasStudentsPage() {
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <p className="text-sm text-blue-800 font-medium mb-2">📋 Format Excel:</p>
                     <ul className="text-sm text-blue-800 space-y-1">
-                      <li>• Kolom 1: <strong>Nomor Stambuk</strong> (contoh: 387)</li>
-                      <li>• Kolom 2: <strong>Nama Siswa</strong> (contoh: Fulan)</li>
-                      <li>• Kolom 3: <strong>Nama Kompetensi</strong></li>
-                      <li>• Kolom 4: <strong>Nilai (1-10)</strong> (contoh: 8.5)</li>
-                      <li>• Kolom 5: <strong>Jenis Penilaian</strong> (UTS_1, UAS_1, UTS_2, UAS_2, FINAL_EXAM_1, FINAL_EXAM_2)</li>
-                      <li>• Kolom 6: <strong>Catatan</strong> (opsional)</li>
+                      <li>• Kolom 1: <strong>Kelas</strong> (contoh: X IPA 1)</li>
+                      <li>• Kolom 2: <strong>Mata Pelajaran</strong> (contoh: Matematika)</li>
+                      <li>• Kolom 3: <strong>Nomor Stambuk</strong> (contoh: 387)</li>
+                      <li>• Kolom 4: <strong>Nama Siswa</strong> (contoh: Fulan)</li>
+                      <li>• Kolom 5: <strong>Nilai (1-10)</strong> (contoh: 8.5)</li>
+                      <li>• Kolom 6: <strong>Jenis Penilaian</strong> (UTS_1, UAS_1, UTS_2, UAS_2, FINAL_EXAM_1, FINAL_EXAM_2)</li>
+                      <li>• Kolom 7: <strong>Catatan</strong> (opsional)</li>
                     </ul>
                   </div>
 

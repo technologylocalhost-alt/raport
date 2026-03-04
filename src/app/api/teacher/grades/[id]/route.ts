@@ -175,7 +175,11 @@ export async function PUT(
       where: { id },
       data: updateData,
       include: {
-        student: true,
+        student: {  
+          include: {
+            class: true,
+          },
+        },
         competency: {
           include: {
             subject: true,

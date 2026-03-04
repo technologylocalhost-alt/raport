@@ -160,11 +160,8 @@ export async function GET(request: NextRequest) {
       whereClause.studentId = studentId;
     }
 
-    if (subjectId) {
-      // Filter by subject: either through competency.subjectId OR through levelId
-      // (for grades without competency, we can't filter by subject directly)
-      // So we only apply subjectId filter if competency exists
-      // But we need to include grades without competency too if they're in the same assessment type
+    // Apply classId filter - data harus dari class yang dipilih
+    if (classId) {
       if (!whereClause.AND) {
         whereClause.AND = [];
       } else if (!Array.isArray(whereClause.AND)) {
@@ -172,12 +169,20 @@ export async function GET(request: NextRequest) {
       }
       
       whereClause.AND.push({
-        OR: [
-          { competency: { subjectId } },
-          // Also include grades without competency (competencyId is null)
-          // since they might be for the same subject
-          { competencyId: null }
-        ]
+        classId: classId
+      });
+    }
+
+    if (subjectId) {
+      // Filter by subject through competency.subjectId
+      if (!whereClause.AND) {
+        whereClause.AND = [];
+      } else if (!Array.isArray(whereClause.AND)) {
+        whereClause.AND = [whereClause.AND];
+      }
+      
+      whereClause.AND.push({
+        subjectId: subjectId
       });
     }
 
@@ -332,6 +337,14 @@ export async function POST(request: NextRequest) {
       if (!competency) {
         return errorResponse('Competency not found', 404);
       }
+
+      // If subjectId is provided, verify that competency belongs to that subject
+      if (validatedData.subjectId && competency.subjectId !== validatedData.subjectId) {
+        return errorResponse('Competency does not belong to the specified subject', 400);
+      }
+    } else {
+      // If no competency is provided but subjectId is, that's OK - it's optional
+      // No validation needed
     }
 
     // Check if grade already exists with same combination
@@ -344,6 +357,7 @@ export async function POST(request: NextRequest) {
           competencyId: validatedData.competencyId,
           teacherId: user.id,
           assessmentType: validatedData.assessmentType,
+          subjectId: validatedData.subjectId, // IMPORTANT: Filter by subjectId to prevent overwriting other subjects
         },
       });
     }
@@ -374,6 +388,7 @@ export async function POST(request: NextRequest) {
         data: {
           score: String(validatedData.score),
           notes: validatedData.notes,
+          subjectId: validatedData.subjectId, // Ensure subjectId is updated
         },
         include: {
           student: true,
@@ -390,6 +405,7 @@ export async function POST(request: NextRequest) {
       grade = await prisma.grade.create({
         data: {
           studentId: validatedData.studentId,
+          classId: student.classId, // Add classId from student's class
           competencyId: validatedData.competencyId && validatedData.competencyId !== '' ? validatedData.competencyId : null,
           subjectId: validatedData.subjectId,
           score: String(validatedData.score),

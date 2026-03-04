@@ -8,11 +8,13 @@ import * as XLSX from 'xlsx';
 interface Student {
   id: string;
   name: string;
-  studentNo: string;
+  nisn?: string;
+  studentNo?: string;
   nourut?: number;
   email?: string;
   phone?: string;
   classId?: string;
+  className?: string;
 }
 
 interface Competency {
@@ -122,7 +124,31 @@ export default function AdminPenilaianStudentsPage() {
   useEffect(() => {
     fetchClassStudents();
     fetchClassInfo();
-  }, [classId, currentPage]);
+  }, [classId, subjectId]);
+
+  // Clear form when subjectId changes
+  useEffect(() => {
+    setGradeFormData({
+      competencyId: '',
+      score: '',
+      assessmentType: 'UTS_1',
+      notes: '',
+    });
+    setGradeError('');
+    setGradeSuccess('');
+    setEditingGradeId(null);
+  }, [subjectId]);
+
+  // Clear import data when subjectId changes
+  useEffect(() => {
+    setShowImportModal(false);
+    setImportFile(null);
+    setImportedRows([]);
+    setImportError('');
+    setImportSuccess('');
+    setImportLoading(false);
+    setImportSubmitting(false);
+  }, [subjectId]);
 
   // Auto-load grades for all students
   useEffect(() => {
@@ -182,14 +208,18 @@ export default function AdminPenilaianStudentsPage() {
         return;
       }
       
-      const skip = (currentPage - 1) * itemsPerPage;
-      const response = await fetch(`/api/admin/classes/${classId}/students?page=${currentPage}&limit=${itemsPerPage}`, {
+      const response = await fetch(`/api/admin/classes/${classId}/students?limit=1000`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
 
       const data: any = await response.json();
+
+      if (response.status === 400) {
+        setError(`Permintaan tidak valid: ${data.message || 'Parameter limit harus antara 1-1000'}`);
+        return;
+      }
 
       if (response.status === 401) {
         setError('Anda tidak terautentikasi. Silakan login kembali');
@@ -205,13 +235,19 @@ export default function AdminPenilaianStudentsPage() {
         setError('Kelas tidak ditemukan');
         return;
       }
+
+      if (!response.ok) {
+        setError(`Gagal memuat data siswa: ${data.message || response.statusText}`);
+        return;
+      }
       
-      if (data.success && data.data) {
+      if (data.success && data.data && Array.isArray(data.data)) {
         setStudents(data.data);
-        const total = data.pagination?.total || 0;
+        const total = data.pagination?.total || data.data.length || 0;
         setTotalStudents(total);
-        setTotalPages(Math.ceil(total / itemsPerPage));
+        setTotalPages(1);
       } else {
+        setError('Format respons data tidak valid');
         setStudents([]);
       }
     } catch (err) {
@@ -281,6 +317,7 @@ export default function AdminPenilaianStudentsPage() {
       notes: '',
     });
     setGradeError('');
+    setGradeSuccess('');
     await fetchCompetencies(student.id);
   };
 
@@ -310,7 +347,8 @@ export default function AdminPenilaianStudentsPage() {
 
       const payload = {
         studentId: selectedStudent.id,
-        competencyId: gradeFormData.competencyId || null,
+        competencyId: gradeFormData.competencyId,
+        subjectId: subjectId, // Add subjectId to ensure data is for correct subject
         score: parseFloat(gradeFormData.score),
         assessmentType: gradeFormData.assessmentType,
         notes: gradeFormData.notes,
@@ -346,6 +384,10 @@ export default function AdminPenilaianStudentsPage() {
           assessmentType: 'UTS_1',
           notes: '',
         });
+        // Auto clear success message after 3 seconds
+        setTimeout(() => {
+          setGradeSuccess('');
+        }, 3000);
         await fetchStudentGrades(selectedStudent.id);
         if (expandedStudentId !== selectedStudent.id) {
           setExpandedStudentId(selectedStudent.id);
@@ -438,21 +480,7 @@ export default function AdminPenilaianStudentsPage() {
 
     let nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
     
-    // Check if we need to load next/previous page
-    if (nextIndex < 0 && currentPage > 1) {
-      // Go to previous page
-      const prevPage = currentPage - 1;
-      setCurrentPage(prevPage);
-      return;
-    }
-    
-    if (nextIndex >= students.length && currentPage < totalPages) {
-      // Go to next page
-      const nextPage = currentPage + 1;
-      setCurrentPage(nextPage);
-      return;
-    }
-
+    // Check boundary
     if (nextIndex < 0 || nextIndex >= students.length) return;
 
     const nextStudent = students[nextIndex];
@@ -469,25 +497,35 @@ export default function AdminPenilaianStudentsPage() {
   };
 
   const downloadTemplate = () => {
-    const ws = XLSX.utils.json_to_sheet([
-      {
-        'Nomor Siswa': '387',
-        'Nama Siswa': 'Faaiq Husain',
-        'Nilai (1-10)': 8.5,
-        'Jenis Penilaian': 'UTS_1',
-        'Catatan': 'Bagus',
-      },
-      {
-        'Nomor Siswa': '412',
-        'Nama Siswa': 'Rayyan Aryatama Karim',
-        'Nilai (1-10)': 7.0,
-        'Jenis Penilaian': 'UTS_1',
-        'Catatan': '',
-      },
-    ]);
+    // Create rows with actual student data
+    const templateRows = students.map((student) => ({
+      'Kelas': className,
+      'Mata Pelajaran': subjectName,
+      'Nomor Siswa': student.nisn || student.studentNo || '',
+      'Nama Siswa': student.name || '',
+      'Nama Kompetensi': '', // Empty for user to fill
+      'Nilai (1-10)': '', // Empty for user to fill
+      'Jenis Penilaian': 'UTS_1', // Default value
+      'Catatan': '', // Empty for user to fill
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(templateRows);
+    
+    // Set column widths for better readability
+    ws['!cols'] = [
+      { wch: 15 }, // Kelas
+      { wch: 20 }, // Mata Pelajaran
+      { wch: 12 }, // Nomor Siswa
+      { wch: 25 }, // Nama Siswa
+      { wch: 25 }, // Nama Kompetensi
+      { wch: 12 }, // Nilai
+      { wch: 18 }, // Jenis Penilaian
+      { wch: 20 }, // Catatan
+    ];
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Template Nilai');
-    XLSX.writeFile(wb, `Template_Nilai_${subjectName || 'Mata_Pelajaran'}.xlsx`);
+    XLSX.writeFile(wb, `Template_Nilai_${className}_${subjectName || 'Mata_Pelajaran'}.xlsx`);
   };
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -519,8 +557,17 @@ export default function AdminPenilaianStudentsPage() {
           score = scoreValue;
         }
 
+        // Validasi Kelas dan Mata Pelajaran
+        if (row['Kelas'] && row['Kelas'] !== className) {
+          errors.push(`Kelas tidak sesuai (harapan: ${className}, dapat: ${row['Kelas']})`);
+        }
+        if (row['Mata Pelajaran'] && row['Mata Pelajaran'] !== subjectName) {
+          errors.push(`Mata Pelajaran tidak sesuai (harapan: ${subjectName}, dapat: ${row['Mata Pelajaran']})`);
+        }
+
         if (!row['Nomor Siswa']) errors.push('Nomor Siswa kosong');
         if (!row['Nama Siswa']) errors.push('Nama Siswa kosong');
+        // Kompetensi adalah opsional
         if (!score || score < 1 || score > 10) errors.push('Nilai harus 1-10');
         if (!row['Jenis Penilaian']) errors.push('Jenis Penilaian kosong');
         if (!Object.keys(assessmentTypeLabels).includes(row['Jenis Penilaian'])) {
@@ -553,10 +600,15 @@ export default function AdminPenilaianStudentsPage() {
       setImportError('Tidak ada data untuk diimport');
       return;
     }
-
     const rowsWithErrors = importedRows.filter((row) => row.errors && row.errors.length > 0);
     if (rowsWithErrors.length > 0) {
       setImportError(`Ada ${rowsWithErrors.length} baris dengan error. Silakan perbaiki sebelum submit.`);
+      return;
+    }
+
+    // Validate that we still have the same subjectId
+    if (!subjectId) {
+      setImportError('ID Mata Pelajaran tidak valid. Silakan refresh halaman.');
       return;
     }
 
@@ -578,6 +630,9 @@ export default function AdminPenilaianStudentsPage() {
         notes: row.notes,
       }));
 
+      // Log untuk memastikan import gunakan subjectId yang benar
+      console.log('Submitting import with subjectId:', subjectId, 'classId:', classId);
+
       const response = await fetch(`/api/teacher/grades/import?subjectId=${subjectId}&classId=${classId}`, {
         method: 'POST',
         headers: {
@@ -590,11 +645,25 @@ export default function AdminPenilaianStudentsPage() {
       const data = await response.json();
 
       if (response.ok) {
-        setImportSuccess(`${data.successCount || importedRows.length} nilai berhasil diimport`);
-        setShowImportModal(false);
-        setImportFile(null);
-        setImportedRows([]);
-        setImportError('');
+        // Build success message with created/updated details
+        let successMsg = '';
+        if (data.createdCount && data.updatedCount) {
+          successMsg = `${data.createdCount} nilai baru dibuat, ${data.updatedCount} nilai diperbarui`;
+        } else if (data.createdCount) {
+          successMsg = `${data.createdCount} nilai baru berhasil diimport`;
+        } else if (data.updatedCount) {
+          successMsg = `${data.updatedCount} nilai berhasil diperbarui`;
+        } else {
+          successMsg = `${data.successCount || importedRows.length} nilai berhasil diimport`;
+        }
+        setImportSuccess(successMsg);
+        // Auto close modal after 2 seconds
+        setTimeout(() => {
+          setShowImportModal(false);
+          setImportFile(null);
+          setImportedRows([]);
+          setImportError('');
+        }, 2000);
         fetchClassStudents();
         students.forEach((student) => {
           fetchStudentGrades(student.id);
@@ -664,11 +733,13 @@ export default function AdminPenilaianStudentsPage() {
       <div className="flex gap-2 flex-wrap">
         <button
           onClick={() => {
-            setShowImportModal(true);
-            setImportError('');
-            setImportSuccess('');
             setImportFile(null);
             setImportedRows([]);
+            setImportError('');
+            setImportSuccess('');
+            setImportLoading(false);
+            setImportSubmitting(false);
+            setShowImportModal(true);
           }}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 font-medium"
         >
@@ -727,7 +798,7 @@ export default function AdminPenilaianStudentsPage() {
                             <p className="font-semibold text-gray-900">{student.name}</p>
                           </div>
                         </div>
-                        <p className="text-sm text-gray-600 mt-1">{student.studentNo}</p>
+                        <p className="text-sm text-gray-600 mt-1">{student.nisn || student.studentNo || '-'}</p>
                       </div>
                       <div className="flex-1">
                         {grades[student.id] && grades[student.id].length > 0 ? (
@@ -1057,7 +1128,12 @@ export default function AdminPenilaianStudentsPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b p-6 flex items-center justify-between">
-              <h2 className="text-xl font-bold">Import Nilai dari Excel</h2>
+              <div>
+                <h2 className="text-xl font-bold">Import Nilai dari Excel</h2>
+                <p className="text-sm text-gray-600 mt-2">
+                  <span className="font-semibold">Kelas:</span> {className} | <span className="font-semibold">Mata Pelajaran:</span> {subjectName}
+                </p>
+              </div>
               <button
                 onClick={() => {
                   setShowImportModal(false);

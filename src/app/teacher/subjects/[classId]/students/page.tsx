@@ -675,7 +675,18 @@ export default function TeacherStudentsPage() {
       const data = await response.json();
 
       if (response.ok) {
-        setImportSuccess(`${data.successCount || importedRows.length} nilai berhasil diimport`);
+        // Build success message with created/updated details
+        let successMsg = '';
+        if (data.createdCount && data.updatedCount) {
+          successMsg = `${data.createdCount} nilai baru dibuat, ${data.updatedCount} nilai diperbarui`;
+        } else if (data.createdCount) {
+          successMsg = `${data.createdCount} nilai baru berhasil diimport`;
+        } else if (data.updatedCount) {
+          successMsg = `${data.updatedCount} nilai berhasil diperbarui`;
+        } else {
+          successMsg = `${data.successCount || importedRows.length} nilai berhasil diimport`;
+        }
+        setImportSuccess(successMsg);
         setShowImportModal(false);
         setImportFile(null);
         setImportedRows([]);

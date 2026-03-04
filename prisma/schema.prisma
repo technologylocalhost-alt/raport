@@ -131,6 +131,8 @@ model Class {
   teachers     ClassTeacher[]
   students     Student[]
   studentNotes StudentNote[]
+  grades       Grade[]
+  nilaiApproves NilaiApprove[]
 
   @@unique([levelId, schoolYearId, semesterId, name])
   @@index([levelId])
@@ -238,6 +240,7 @@ model Competency {
 model Grade {
   id             String         @id @default(cuid())
   studentId      String
+  classId        String
   competencyId   String?
   subjectId      String?
   levelId        String
@@ -248,6 +251,7 @@ model Grade {
   notes          String?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
+  class          Class          @relation(fields: [classId], references: [id], onDelete: Cascade)
   competency     Competency?    @relation(fields: [competencyId], references: [id], onDelete: SetNull)
   level          Level          @relation(fields: [levelId], references: [id], onDelete: Cascade)
   student        Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -255,6 +259,7 @@ model Grade {
   teacher        User           @relation(fields: [teacherId], references: [id], onDelete: Cascade)
 
   @@index([studentId])
+  @@index([classId])
   @@index([competencyId])
   @@index([subjectId])
   @@index([levelId])
@@ -264,6 +269,7 @@ model Grade {
 model NilaiApprove {
   id             String         @id @default(cuid())
   studentId      String
+  classId        String
   competencyId   String?
   subjectId      String
   levelId        String
@@ -282,6 +288,7 @@ model NilaiApprove {
   mulahazoh      String?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
+  class          Class          @relation(fields: [classId], references: [id], onDelete: Cascade)
   competency     Competency?    @relation("CompetencyNilaiApprove", fields: [competencyId], references: [id], onDelete: SetNull)
   level          Level          @relation("LevelNilaiApprove", fields: [levelId], references: [id], onDelete: Cascade)
   student        Student        @relation("StudentNilaiApprove", fields: [studentId], references: [id], onDelete: Cascade)
@@ -289,6 +296,7 @@ model NilaiApprove {
   teacher        User           @relation("UserNilaiApprove", fields: [teacherId], references: [id], onDelete: Cascade)
 
   @@index([studentId])
+  @@index([classId])
   @@index([competencyId])
   @@index([subjectId])
   @@index([levelId])

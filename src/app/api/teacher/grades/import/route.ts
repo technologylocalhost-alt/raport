@@ -104,10 +104,14 @@ export async function POST(req: NextRequest) {
     const teacherId = user.id;
     const results: {
       success: number;
+      created: number;
+      updated: number;
       failed: number;
       errors: Array<{ row: number; error: string }>;
     } = {
       success: 0,
+      created: 0,
+      updated: 0,
       failed: 0,
       errors: [],
     };
@@ -134,11 +138,12 @@ export async function POST(req: NextRequest) {
         competency = competencies.find(
           (c) => c.name.toLowerCase() === row.competencyName!.toLowerCase()
         );
+        
         if (!competency) {
           results.failed++;
           results.errors.push({
             row: i + 2,
-            error: `Competency "${row.competencyName}" not found for this subject`,
+            error: `Kompetensi "${row.competencyName}" tidak ditemukan untuk mata pelajaran ini`,
           });
           continue;
         }
@@ -151,6 +156,7 @@ export async function POST(req: NextRequest) {
             studentId: student.id,
             competencyId: competency?.id || null,
             assessmentType: row.assessmentType,
+            subjectId: subjectId, // IMPORTANT: Filter by subjectId to prevent overwriting other subjects
           },
         });
 
@@ -161,14 +167,18 @@ export async function POST(req: NextRequest) {
             data: {
               score: String(row.score),
               notes: row.notes,
+              subjectId: subjectId, // Ensure subjectId is still correct
             },
           });
+          results.updated++;
         } else {
           // Create new grade
           await prisma.grade.create({
             data: {
               studentId: student.id,
-              competencyId: competency?.id || null,
+              classId: student.classId, // Add classId from student's class
+              competencyId: competency?.id || null, // Allow null if no competency
+              subjectId: subjectId, // Always set subjectId from import
               levelId: levelId,
               teacherId: teacherId,
               score: String(row.score),
@@ -179,6 +189,7 @@ export async function POST(req: NextRequest) {
               updatedAt: new Date(),
             },
           });
+          results.created++;
         }
 
         results.success++;
@@ -194,6 +205,8 @@ export async function POST(req: NextRequest) {
     return successResponse(
       {
         successCount: results.success,
+        createdCount: results.created,
+        updatedCount: results.updated,
         failedCount: results.failed,
         errors: results.errors.length > 0 ? results.errors : undefined,
       },

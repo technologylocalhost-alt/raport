@@ -259,6 +259,7 @@ export async function POST(request: NextRequest) {
           const approval = await prisma.nilaiApprove.create({
             data: {
               studentId: grade.studentId,
+              classId: grade.student.classId,
               competencyId: grade.competencyId,
               subjectId: validatedData.subjectId,
               levelId: levelId,
