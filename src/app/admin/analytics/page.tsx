@@ -11,6 +11,11 @@ interface Stats {
   totalClasses: number;
 }
 
+interface School {
+  id: string;
+  name: string;
+}
+
 interface SchoolYear {
   id: string;
   year: string;
@@ -62,10 +67,12 @@ export default function AnalyticsPage() {
   const router = useRouter();
   const [stats, setStats] = useState<Stats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [schools, setSchools] = useState<School[]>([]);
   const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
   const [levels, setLevels] = useState<Level[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   
+  const [filterSchool, setFilterSchool] = useState('');
   const [filterSchoolYear, setFilterSchoolYear] = useState('');
   const [filterLevel, setFilterLevel] = useState('');
   const [filterClass, setFilterClass] = useState('');
@@ -91,25 +98,26 @@ export default function AnalyticsPage() {
     fetchStats();
     fetchGradesPerClass();
     fetchGradesPerSubject();
-  }, [router, filterSchoolYear, filterLevel, filterClass, filterSemester]);
-
-  async function fetchFilterOptions() {
+  }, [router, filterSchool, filterSchoolYear, filterLevel, filterClass, filterSemester]); async function fetchFilterOptions() {
     try {
       const token = localStorage.getItem('accessToken');
       const headers = { 'Authorization': `Bearer ${token}` };
 
-      const [yearsRes, levelsRes, classesRes, semestersRes] = await Promise.all([
+      const [schoolsRes, yearsRes, levelsRes, classesRes, semestersRes] = await Promise.all([
+        fetch('/api/admin/schools?limit=1000', { headers }),
         fetch('/api/admin/school-years?limit=100', { headers }),
         fetch('/api/admin/levels?limit=100', { headers }),
         fetch('/api/admin/classes?limit=100', { headers }),
         fetch('/api/admin/semesters?limit=100', { headers }),
       ]);
 
+      const schoolsData = await schoolsRes.json();
       const yearsData = await yearsRes.json();
       const levelsData = await levelsRes.json();
       const classesData = await classesRes.json();
       const semestersData = await semestersRes.json();
 
+      setSchools(schoolsData.data || []);
       setSchoolYears(yearsData.data || []);
       setLevels(levelsData.data || []);
       setClasses(classesData.data || []);
@@ -147,6 +155,7 @@ export default function AnalyticsPage() {
 
       const params = new URLSearchParams();
       params.append('limit', '1000');
+      if (filterSchool) params.append('schoolId', filterSchool);
       if (filterSchoolYear) params.append('schoolYearId', filterSchoolYear);
       if (filterLevel) params.append('levelId', filterLevel);
       if (filterSemester) params.append('semesterId', filterSemester);
@@ -172,6 +181,7 @@ export default function AnalyticsPage() {
 
       const params = new URLSearchParams();
       params.append('limit', '1000');
+      if (filterSchool) params.append('schoolId', filterSchool);
       if (filterSchoolYear) params.append('schoolYearId', filterSchoolYear);
       if (filterLevel) params.append('levelId', filterLevel);
       if (filterSemester) params.append('semesterId', filterSemester);
@@ -201,6 +211,7 @@ export default function AnalyticsPage() {
       // Build query parameters
       const params = new URLSearchParams();
       params.append('limit', '1000');
+      if (filterSchool) params.append('schoolId', filterSchool);
       if (filterSchoolYear) params.append('schoolYearId', filterSchoolYear);
       if (filterLevel) params.append('levelId', filterLevel);
       if (filterClass) params.append('classId', filterClass);
@@ -256,7 +267,26 @@ export default function AnalyticsPage() {
           <Filter size={20} className="text-blue-600" />
           <h2 className="text-lg font-semibold text-gray-900">Filter Data</h2>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          {/* Filter Sekolah */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Sekolah
+            </label>
+            <select
+              value={filterSchool}
+              onChange={(e) => setFilterSchool(e.target.value)}
+              className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium text-sm sm:text-base text-gray-900 bg-white"
+            >
+              <option value="">-- Semua Sekolah --</option>
+              {schools.map((school) => (
+                <option key={school.id} value={school.id}>
+                  {school.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Filter Tahun Akademik */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -335,10 +365,11 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Reset Button */}
-        {(filterSchoolYear || filterLevel || filterClass || filterSemester) && (
+        {(filterSchool || filterSchoolYear || filterLevel || filterClass || filterSemester) && (
           <div className="pt-2">
             <button
               onClick={() => {
+                setFilterSchool('');
                 setFilterSchoolYear('');
                 setFilterLevel('');
                 setFilterClass('');

@@ -4,6 +4,17 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Filter, FileText } from 'lucide-react';
 
+interface School {
+  id: string;
+  name: string;
+}
+
+interface Level {
+  id: string;
+  name: string;
+  schoolId: string;
+}
+
 interface SchoolYear {
   id: string;
   year: string;
@@ -57,11 +68,16 @@ export default function RaportsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [filterSchool, setFilterSchool] = useState('');
   const [filterClass, setFilterClass] = useState('');
   const [selectedClassName, setSelectedClassName] = useState('');
   const [filterSubject, setFilterSubject] = useState('');
-  const [filterStudent, setFilterStudent] = useState('');  const [filterAssessmentType, setFilterAssessmentType] = useState('');  const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
-  const [classes, setClasses] = useState<Array<{ id: string; name: string }>>([]);
+  const [filterStudent, setFilterStudent] = useState('');
+  const [filterAssessmentType, setFilterAssessmentType] = useState('');
+  const [schools, setSchools] = useState<School[]>([]);
+  const [levels, setLevels] = useState<Level[]>([]);
+  const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
+  const [classes, setClasses] = useState<Array<{ id: string; name: string; levelId?: string }>>([]);
   const [subjects, setSubjects] = useState<Array<{ id: string; name: string }>>([]);
   const [students, setStudents] = useState<Array<{ id: string; name: string; no: string }>>([]);
   const [isClient, setIsClient] = useState(false);
@@ -135,7 +151,7 @@ export default function RaportsPage() {
       setPage(1);
       fetchRaports();
     }
-  }, [filterClass, filterSchoolYear, filterSubject, filterStudent, filterAssessmentType, search, page]);
+  }, [filterSchool, filterClass, filterSchoolYear, filterSubject, filterStudent, filterAssessmentType, search, page]);
 
   useEffect(() => {
     // Transform data to pivot table format when raports change
@@ -143,6 +159,13 @@ export default function RaportsPage() {
       transformToPivotTable();
     }
   }, [raports]);
+
+  const getSchoolIdForClass = (classId: string): string | undefined => {
+    const classObj = classes.find(c => c.id === classId);
+    if (!classObj?.levelId) return undefined;
+    const level = levels.find(l => l.id === classObj.levelId);
+    return level?.schoolId;
+  };
 
   async function fetchClasses() {
     try {
@@ -159,6 +182,20 @@ export default function RaportsPage() {
       });
       const yearsData = await yearsResponse.json();
       setSchoolYears(yearsData.data || []);
+
+      // Fetch schools
+      const schoolsResponse = await fetch('/api/admin/schools?limit=1000', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const schoolsData = await schoolsResponse.json();
+      setSchools(schoolsData.data || []);
+
+      // Fetch levels
+      const levelsResponse = await fetch('/api/admin/levels?limit=1000', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const levelsData = await levelsResponse.json();
+      setLevels(levelsData.data || []);
 
       const response = await fetch(`/api/admin/classes?limit=1000${filterSchoolYear ? `&schoolYearId=${filterSchoolYear}` : ''}`, {
         headers: {
@@ -182,7 +219,7 @@ export default function RaportsPage() {
 
       const data: any = await response.json();
       if (data.success && data.data) {
-        setClasses(data.data.map((c: any) => ({ id: c.id, name: c.name })));
+        setClasses(data.data.map((c: any) => ({ id: c.id, name: c.name, levelId: c.levelId })));
       }
     } catch (error) {
       console.error('Failed to fetch classes:', error);
@@ -326,7 +363,36 @@ export default function RaportsPage() {
           <h2 className="text-lg font-semibold text-gray-900">Filter Data</h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+          {/* Sekolah */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-900 mb-2">
+              Sekolah
+            </label>
+            <select
+              value={filterSchool}
+              onChange={(e) => {
+                setFilterSchool(e.target.value);
+                setFilterSchoolYear('');
+                setFilterClass('');
+                setSelectedClassName('');
+                setFilterSubject('');
+                setFilterStudent('');
+                setFilterAssessmentType('');
+                setSearch('');
+                setPage(1);
+              }}
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-gray-900 bg-white"
+            >
+              <option value="">-- Semua Sekolah --</option>
+              {schools.map((school) => (
+                <option key={school.id} value={school.id}>
+                  {school.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Tahun Ajaran */}
           <div>
             <label className="block text-sm font-semibold text-gray-900 mb-2">
@@ -378,7 +444,7 @@ export default function RaportsPage() {
               className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-gray-900 bg-white"
             >
               <option value="">-- Semua Kelas --</option>
-              {classes.map((cls) => (
+              {classes.filter(c => !filterSchool || getSchoolIdForClass(c.id) === filterSchool).map((cls) => (
                 <option key={cls.id} value={cls.id}>
                   {cls.name}
                 </option>

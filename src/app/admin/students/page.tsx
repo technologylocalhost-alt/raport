@@ -4,6 +4,17 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, Users, X, Filter } from 'lucide-react';
 
+interface School {
+  id: string;
+  name: string;
+}
+
+interface Level {
+  id: string;
+  name: string;
+  schoolId: string;
+}
+
 interface SchoolYear {
   id: string;
   year: string;
@@ -13,6 +24,7 @@ interface SchoolYear {
 interface Class {
   id: string;
   name: string;
+  levelId?: string;
 }
 
 interface Student {
@@ -44,6 +56,8 @@ interface PaginatedResponse {
 export default function StudentsPage() {
   const router = useRouter();
   const [students, setStudents] = useState<Student[]>([]);
+  const [schools, setSchools] = useState<School[]>([]);
+  const [levels, setLevels] = useState<Level[]>([]);
   const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -52,6 +66,7 @@ export default function StudentsPage() {
   const [total, setTotal] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [filterSchool, setFilterSchool] = useState('');
   const [filterSchoolYear, setFilterSchoolYear] = useState('');
   const [filterClass, setFilterClass] = useState('');
 
@@ -84,9 +99,9 @@ export default function StudentsPage() {
   }, []);
 
   useEffect(() => {
-    // Reset ke halaman 1 ketika filterSchoolYear, filterClass atau search berubah
+    // Reset ke halaman 1 ketika filterSchool, filterSchoolYear, filterClass atau search berubah
     setPage(1);
-  }, [filterSchoolYear, filterClass, search]);
+  }, [filterSchool, filterSchoolYear, filterClass, search]);
 
   useEffect(() => {
     // Fetch students ketika page, search, atau filterClass berubah
@@ -98,6 +113,13 @@ export default function StudentsPage() {
     }
   }, [page, filterClass]);
 
+  const getSchoolIdForClass = (classId: string): string | undefined => {
+    const classObj = classes.find(c => c.id === classId);
+    if (!classObj?.levelId) return undefined;
+    const level = levels.find(l => l.id === classObj.levelId);
+    return level?.schoolId;
+  };
+
   async function fetchClasses() {
     try {
       const token = localStorage.getItem('accessToken');
@@ -108,6 +130,20 @@ export default function StudentsPage() {
       });
       const yearsData = await yearsResponse.json();
       setSchoolYears(yearsData.data || []);
+
+      // Fetch schools
+      const schoolsResponse = await fetch('/api/admin/schools?limit=1000', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const schoolsData = await schoolsResponse.json();
+      setSchools(schoolsData.data || []);
+
+      // Fetch levels
+      const levelsResponse = await fetch('/api/admin/levels?limit=1000', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const levelsData = await levelsResponse.json();
+      setLevels(levelsData.data || []);
       
       const response = await fetch(`/api/admin/classes?limit=1000${filterSchoolYear ? `&schoolYearId=${filterSchoolYear}` : ''}`, {
         headers: {
@@ -117,7 +153,7 @@ export default function StudentsPage() {
 
       const data: any = await response.json();
       if (data.success && data.data) {
-        setClasses(data.data.map((c: any) => ({ id: c.id, name: c.name })));
+        setClasses(data.data.map((c: any) => ({ id: c.id, name: c.name, levelId: c.levelId })));
       }
     } catch (error) {
       console.error('Failed to fetch classes:', error);
@@ -298,7 +334,32 @@ export default function StudentsPage() {
           <Filter size={20} className="text-emerald-600" />
           <h2 className="text-lg font-semibold text-gray-900">Filter & Pencarian</h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* School Filter */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-900 mb-2">
+              Sekolah
+            </label>
+            <select
+              value={filterSchool}
+              onChange={(e) => {
+                setFilterSchool(e.target.value);
+                setFilterSchoolYear('');
+                setFilterClass('');
+                setPage(1);
+                fetchClasses();
+              }}
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-gray-900 bg-white"
+            >
+              <option value="">-- Semua Sekolah --</option>
+              {schools.map((school) => (
+                <option key={school.id} value={school.id}>
+                  {school.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* School Year Filter */}
           <div>
             <label className="block text-sm font-semibold text-gray-900 mb-2">
@@ -338,7 +399,7 @@ export default function StudentsPage() {
               className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-gray-900 bg-white"
             >
               <option value="">-- Semua Kelas --</option>
-              {classes.map((cls) => (
+              {classes.filter(c => !filterSchool || getSchoolIdForClass(c.id) === filterSchool).map((cls) => (
                 <option key={cls.id} value={cls.id}>
                   {cls.name}
                 </option>

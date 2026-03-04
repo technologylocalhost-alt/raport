@@ -4,6 +4,17 @@ import { useState, useEffect, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, AlertCircle, Filter, Users, BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
 
+interface School {
+  id: string;
+  name: string;
+}
+
+interface Level {
+  id: string;
+  name: string;
+  schoolId: string;
+}
+
 interface SchoolYear {
   id: string;
   year: string;
@@ -14,6 +25,7 @@ interface ClassItem {
   id: string;
   name: string;
   levelName?: string;
+  levelId?: string;
 }
 
 interface Student {
@@ -28,9 +40,12 @@ interface Student {
 export default function AdminRaportPage() {
   const router = useRouter();
 
+  const [schools, setSchools] = useState<School[]>([]);
+  const [levels, setLevels] = useState<Level[]>([]);
   const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
+  const [selectedSchool, setSelectedSchool] = useState('');
   const [selectedSchoolYear, setSelectedSchoolYear] = useState('');
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedClassName, setSelectedClassName] = useState('');
@@ -59,13 +74,20 @@ export default function AdminRaportPage() {
       setTotalStudents(0);
       setTotalPages(1);
     }
-  }, [selectedSchoolYear, selectedClassId]);
+  }, [selectedSchool, selectedSchoolYear, selectedClassId]);
 
   useEffect(() => {
     if (selectedClassId) {
       fetchStudents(selectedClassId, currentPage);
     }
   }, [currentPage]);
+
+  const getSchoolIdForClass = (classId: string): string | undefined => {
+    const classObj = classes.find(c => c.id === classId);
+    if (!classObj?.levelId) return undefined;
+    const level = levels.find(l => l.id === classObj.levelId);
+    return level?.schoolId;
+  };
 
   async function fetchClasses() {
     try {
@@ -82,6 +104,20 @@ export default function AdminRaportPage() {
       });
       const yearsData = await yearsResponse.json();
       setSchoolYears(yearsData.data || []);
+
+      // Fetch schools
+      const schoolsResponse = await fetch('/api/admin/schools?limit=1000', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const schoolsData = await schoolsResponse.json();
+      setSchools(schoolsData.data || []);
+
+      // Fetch levels
+      const levelsResponse = await fetch('/api/admin/levels?limit=1000', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const levelsData = await levelsResponse.json();
+      setLevels(levelsData.data || []);
 
       const response = await fetch(`/api/admin/classes?limit=1000${selectedSchoolYear ? `&schoolYearId=${selectedSchoolYear}` : ''}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -100,6 +136,7 @@ export default function AdminRaportPage() {
             id: c.id,
             name: c.name,
             levelName: c.level?.name || '',
+            levelId: c.levelId || c.level?.id || '',
           }))
         );
       }
@@ -188,7 +225,31 @@ export default function AdminRaportPage() {
           <Filter size={18} className="text-emerald-600" />
           <h2 className="text-base font-semibold text-gray-900">Filter</h2>
         </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          {/* Sekolah */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Sekolah</label>
+            <select
+              value={selectedSchool}
+              onChange={(e) => {
+                setSelectedSchool(e.target.value);
+                setSelectedSchoolYear('');
+                setSelectedClassId('');
+                setSelectedClassName('');
+                setSearch('');
+                setFilterAssessmentType('');
+              }}
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-gray-900 bg-white font-medium"
+            >
+              <option value="">-- Semua --</option>
+              {schools.map((school) => (
+                <option key={school.id} value={school.id}>
+                  {school.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Tahun Ajaran */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">Tahun Ajaran</label>
@@ -233,7 +294,7 @@ export default function AdminRaportPage() {
                 className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-gray-900 bg-white font-medium"
               >
                 <option value="">-- Pilih Kelas --</option>
-                {classes.map((cls) => (
+                {classes.filter(c => !selectedSchool || getSchoolIdForClass(c.id) === selectedSchool).map((cls) => (
                   <option key={cls.id} value={cls.id}>
                     {cls.name} {cls.levelName && `(${cls.levelName})`}
                   </option>

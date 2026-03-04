@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
     }
 
     const searchParams = request.nextUrl.searchParams;
+    const schoolId = searchParams.get('schoolId');
     const schoolYearId = searchParams.get('schoolYearId');
     const levelId = searchParams.get('levelId');
     const semesterId = searchParams.get('semesterId');
@@ -49,10 +50,10 @@ export async function GET(request: NextRequest) {
     if (semesterId) classWhere.semesterId = semesterId;
 
     // Get all classes matching filters with their subjects and grades
-    const classes = await prisma.class.findMany({
+    let classes = await prisma.class.findMany({
       where: classWhere,
       include: {
-        level: { select: { id: true, name: true } },
+        level: { select: { id: true, name: true, schoolId: true } },
         subjects: {
           include: {
             subject: { select: { id: true, name: true } },
@@ -71,6 +72,11 @@ export async function GET(request: NextRequest) {
       },
       orderBy: { name: 'asc' },
     });
+
+    // Filter by school if schoolId is provided
+    if (schoolId) {
+      classes = classes.filter((cls) => cls.level.schoolId === schoolId);
+    }
 
     // Process and format data
     const gradesPerSubject = classes.map((cls) => {

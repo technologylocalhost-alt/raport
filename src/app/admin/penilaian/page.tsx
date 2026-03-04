@@ -3,6 +3,17 @@
 import { useEffect, useState } from 'react';
 import { Library, AlertCircle, X, Search, RotateCw } from 'lucide-react';
 
+interface School {
+  id: string;
+  name: string;
+}
+
+interface Level {
+  id: string;
+  name: string;
+  schoolId: string;
+}
+
 interface SchoolYear {
   id: string;
   year: string;
@@ -16,6 +27,7 @@ interface Subject {
   nameArabic?: string;
   description?: string;
   creditHours?: number;
+  levelId?: string;
   classes: Array<{ id: string; name: string; schoolYearId?: string }>;
 }
 
@@ -26,12 +38,15 @@ interface Class {
 }
 
 export default function AdminPenilaianPage() {
+  const [schools, setSchools] = useState<School[]>([]);
+  const [levels, setLevels] = useState<Level[]>([]);
   const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedSchool, setSelectedSchool] = useState<string>('');
   const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>('');
   const [selectedClass, setSelectedClass] = useState<string>('');
   const [searchText, setSearchText] = useState('');
@@ -46,6 +61,16 @@ export default function AdminPenilaianPage() {
       setIsLoading(true);
       const token = localStorage.getItem('accessToken');
       const headers = { Authorization: `Bearer ${token}` };
+
+      // Fetch schools
+      const schoolsRes = await fetch('/api/admin/schools?limit=100', { headers });
+      const schoolsData = await schoolsRes.json();
+      setSchools(schoolsData.data || []);
+
+      // Fetch levels with their school info
+      const levelsRes = await fetch('/api/admin/levels?limit=1000', { headers });
+      const levelsData = await levelsRes.json();
+      setLevels(levelsData.data || []);
 
       // Fetch school years
       const yearsRes = await fetch('/api/admin/school-years?limit=100', { headers });
@@ -76,9 +101,20 @@ export default function AdminPenilaianPage() {
 
   const sortedSubjects = [...subjects].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' }));
 
-  // Get unique classes from all subjects, filtered by selected school year
+  // Helper function to get school ID for a subject
+  const getSchoolIdForSubject = (subject: Subject): string | undefined => {
+    if (!subject.levelId) return undefined;
+    const level = levels.find(l => l.id === subject.levelId);
+    return level?.schoolId;
+  };
+
+  // Get unique classes from all subjects, filtered by selected school and school year
   const classMap = new Map<string, { id: string; name: string; schoolYearId?: string }>();
   sortedSubjects.forEach(subject => {
+    const subjectSchoolId = getSchoolIdForSubject(subject);
+    // Skip if school filter is set and subject doesn't match
+    if (selectedSchool && subjectSchoolId !== selectedSchool) return;
+    
     subject.classes.forEach(cls => {
       // Only add classes that match the selected school year (if one is selected)
       if (!selectedSchoolYear || cls.schoolYearId === selectedSchoolYear) {
@@ -90,15 +126,17 @@ export default function AdminPenilaianPage() {
   });
   const allClasses = Array.from(classMap.values()).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
 
-  // Filter subjects based on class and search
+  // Filter subjects based on school, school year, class and search
   const filteredSubjects = sortedSubjects.filter((subject) => {
+    const subjectSchoolId = getSchoolIdForSubject(subject);
+    const matchesSchool = !selectedSchool || subjectSchoolId === selectedSchool;
     const matchesSchoolYear = !selectedSchoolYear || subject.classes.some(c => c.schoolYearId === selectedSchoolYear);
     const matchesClass = !selectedClass || subject.classes.some(c => c.id === selectedClass);
     const matchesSearch = !searchText || 
       subject.code.toLowerCase().includes(searchText.toLowerCase()) ||
       subject.name.toLowerCase().includes(searchText.toLowerCase()) ||
       (subject.nameArabic && subject.nameArabic.includes(searchText));
-    return matchesSchoolYear && matchesClass && matchesSearch;
+    return matchesSchool && matchesSchoolYear && matchesClass && matchesSearch;
   });
 
   const paginatedSubjects = filteredSubjects.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -107,7 +145,7 @@ export default function AdminPenilaianPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedSchoolYear, selectedClass, searchText]);
+  }, [selectedSchool, selectedSchoolYear, selectedClass, searchText]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -161,7 +199,30 @@ export default function AdminPenilaianPage() {
           {/* Filter and Search */}
           <div className="bg-white rounded-lg shadow p-6 space-y-4">
             <h2 className="text-lg font-semibold text-gray-900">Filter dan Pencarian</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* School Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Sekolah
+                </label>
+                <select
+                  value={selectedSchool}
+                  onChange={(e) => {
+                    setSelectedSchool(e.target.value);
+                    setSelectedSchoolYear('');
+                    setSelectedClass('');
+                  }}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors bg-white text-gray-900"
+                >
+                  <option value="">-- Semua Sekolah --</option>
+                  {schools.map((school) => (
+                    <option key={school.id} value={school.id}>
+                      {school.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* School Year Filter */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">

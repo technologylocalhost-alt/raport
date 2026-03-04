@@ -42,6 +42,7 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         name: true,
+        levelId: true,
         schoolYearId: true,
         subjects: {
           include: {
@@ -53,6 +54,7 @@ export async function GET(request: NextRequest) {
                 nameArabic: true,
                 description: true,
                 creditHours: true,
+                levelId: true,
               },
             },
           },
@@ -84,6 +86,7 @@ export async function GET(request: NextRequest) {
             nameArabic: cs.subject.nameArabic,
             description: cs.subject.description,
             creditHours: cs.subject.creditHours,
+            levelId: cs.subject.levelId,
             classes: [{
               id: cls.id,
               name: cls.name,
