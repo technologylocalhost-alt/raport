@@ -165,7 +165,7 @@ export async function PUT(
         studentId: grade.studentId,
         competencyId: grade.competencyId,
         assessmentType: grade.assessmentType,
-        subjectId: grade.subjectId,
+        ...(grade.subjectId ? { subjectId: grade.subjectId } : {}),
       },
     });
 

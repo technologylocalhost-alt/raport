@@ -82,22 +82,9 @@ export default function TeacherLayout({ children }: TeacherLayoutProps) {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
     
-    const token = localStorage.getItem('accessToken');
-    
-    // Clear storage FIRST
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('user');
-    
-    // Call logout API in background (fire and forget)
-    if (token && token !== 'null' && token !== 'undefined' && token.length > 20) {
-      fetch('/api/auth/logout', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-      }).catch(() => {});
-    }
-    
-    // Redirect immediately - do NOT use setTimeout or await
-    window.location.href = '/login';
+    console.log('[Logout] Navigating to logout page');
+    // Navigate to logout page which will handle the logout process
+    window.location.href = '/logout';
   }
 
   return (

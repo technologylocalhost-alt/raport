@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface LoginResponse {
   success: boolean;
@@ -17,9 +17,10 @@ interface LoginResponse {
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string>('');
 
   // Check if user is already logged in
@@ -32,22 +33,30 @@ export default function LoginPage() {
       try {
         const userData = JSON.parse(user);
         if (userData?.role) {
-          redirectAfterLogin(userData.role);
+          // Don't redirect if we just logged out (check for redirect param with logout marker)
+          const redirectParam = searchParams.get('redirect') as string;
+          const isComingFromLogout = searchParams.get('logout') === 'true' || redirectParam?.includes('logout');
+          
+          if (!isComingFromLogout) {
+            redirectAfterLogin(userData.role);
+            return;
+          }
         }
       } catch (error) {
         console.error('Error parsing user:', error);
         localStorage.clear();
       }
     }
-  }, []);
+    
+    setIsLoading(false);
+  }, [searchParams]);
 
   function redirectAfterLogin(role: string) {
     // Get redirect parameter from URL
-    const searchParams = new URLSearchParams(window.location.search);
-    const redirectTo = searchParams.get('redirect');
+    let redirectTo = searchParams.get('redirect') as string;
     
-    // If there's a redirect parameter and it's a valid internal route, use it
-    if (redirectTo && redirectTo.startsWith('/')) {
+    // Sanitize redirect param to prevent open redirect
+    if (redirectTo && redirectTo.startsWith('/') && !redirectTo.includes('logout')) {
       router.push(redirectTo);
       return;
     }
@@ -81,6 +90,7 @@ export default function LoginPage() {
 
       if (!response.ok) {
         setError(data.error || 'Login failed');
+        setIsLoading(false);
         return;
       }
 
@@ -95,9 +105,19 @@ export default function LoginPage() {
       redirectAfterLogin(data.user?.role || 'ADMIN');
     } catch (error) {
       setError(error instanceof Error ? error.message : 'An error occurred');
-    } finally {
       setIsLoading(false);
     }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   return (

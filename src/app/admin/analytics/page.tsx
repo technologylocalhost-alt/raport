@@ -98,32 +98,62 @@ export default function AnalyticsPage() {
     fetchStats();
     fetchGradesPerClass();
     fetchGradesPerSubject();
-  }, [router, filterSchool, filterSchoolYear, filterLevel, filterClass, filterSemester]); async function fetchFilterOptions() {
+  }, [router, filterSchool, filterSchoolYear, filterLevel, filterClass, filterSemester]);
+
+  // Fetch semesters when school year changes
+  useEffect(() => {
+    if (filterSchoolYear) {
+      fetchSemestersBySchoolYear(filterSchoolYear);
+      // Reset semester filter when school year changes
+      setFilterSemester('');
+    } else {
+      setSemesters([]);
+      setFilterSemester('');
+    }
+  }, [filterSchoolYear]);
+
+  async function fetchFilterOptions() {
     try {
       const token = localStorage.getItem('accessToken');
       const headers = { 'Authorization': `Bearer ${token}` };
 
-      const [schoolsRes, yearsRes, levelsRes, classesRes, semestersRes] = await Promise.all([
+      const [schoolsRes, yearsRes, levelsRes, classesRes] = await Promise.all([
         fetch('/api/admin/schools?limit=1000', { headers }),
         fetch('/api/admin/school-years?limit=100', { headers }),
         fetch('/api/admin/levels?limit=100', { headers }),
         fetch('/api/admin/classes?limit=100', { headers }),
-        fetch('/api/admin/semesters?limit=100', { headers }),
       ]);
 
       const schoolsData = await schoolsRes.json();
       const yearsData = await yearsRes.json();
       const levelsData = await levelsRes.json();
       const classesData = await classesRes.json();
-      const semestersData = await semestersRes.json();
 
       setSchools(schoolsData.data || []);
       setSchoolYears(yearsData.data || []);
       setLevels(levelsData.data || []);
       setClasses(classesData.data || []);
-      setSemesters(semestersData.data || []);
+      // Don't fetch semesters here - will fetch when school year is selected
     } catch (error) {
       console.error('Error fetching filter options:', error);
+    }
+  }
+
+  async function fetchSemestersBySchoolYear(schoolYearId: string) {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const headers = { 'Authorization': `Bearer ${token}` };
+
+      const semestersRes = await fetch(
+        `/api/admin/semesters?limit=100&schoolYearId=${schoolYearId}`,
+        { headers }
+      );
+
+      const semestersData = await semestersRes.json();
+      setSemesters(semestersData.data || []);
+    } catch (error) {
+      console.error('Error fetching semesters:', error);
+      setSemesters([]);
     }
   }
 
@@ -352,9 +382,12 @@ export default function AnalyticsPage() {
             <select
               value={filterSemester}
               onChange={(e) => setFilterSemester(e.target.value)}
-              className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium text-sm sm:text-base text-gray-900 bg-white"
+              disabled={!filterSchoolYear}
+              className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium text-sm sm:text-base text-gray-900 bg-white disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
             >
-              <option value="">-- Semua Semester --</option>
+              <option value="">
+                {filterSchoolYear ? '-- Semua Semester --' : '-- Pilih Tahun Ajaran Terlebih Dahulu --'}
+              </option>
               {semesters.map((sem) => (
                 <option key={sem.id} value={sem.id}>
                   Semester {sem.number}

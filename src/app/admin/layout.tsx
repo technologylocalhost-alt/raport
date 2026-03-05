@@ -109,40 +109,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     }
     
     setIsLoggingOut(true);
-    const token = localStorage.getItem('accessToken');
+    console.log('[Logout] Navigating to logout page');
     
-    console.log('[Logout] Token:', token ? `${token.substring(0, 20)}...` : 'null');
-    console.log('[Logout] Starting logout process...');
-    
-    // Call logout API immediately - don't clear cookies yet
-    const logoutPromise = fetch('/api/auth/logout', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token || ''}`,
-      },
-      credentials: 'include', // Send cookies with request
-    })
-    .then(res => {
-      console.log('[Logout] Response received, status:', res.status);
-      return res.json();
-    })
-    .then(data => {
-      console.log('[Logout] Response data:', data);
-    })
-    .catch((err) => {
-      console.error('[Logout] Fetch error:', err.message);
-    })
-    .finally(() => {
-      console.log('[Logout] Fetch complete, clearing storage...');
-      // Clear storage AFTER API attempt
-      localStorage.clear();
-      sessionStorage.clear();
-      
-      console.log('[Logout] Redirecting to /login');
-      // Use full page reload to ensure clean state
-      window.location.replace('/login');
-    });
+    // Navigate to logout page which will handle the logout process
+    window.location.href = '/logout';
   }
 
   return (

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // Public routes that don't require authentication
-const publicRoutes = ['/login', '/api/auth/login', '/api/auth/register', '/api/auth/refresh', '/api/auth/logout', '/api/health', '/api/debug'];
+const publicRoutes = ['/login', '/logout', '/api/auth/login', '/api/auth/register', '/api/auth/refresh', '/api/auth/logout', '/api/health', '/api/debug'];
 
 // Protected route prefixes that require authentication
 const protectedPrefixes = ['/admin', '/teacher', '/wali-kelas', '/api/admin', '/api/teacher', '/api/wali-kelas'];
