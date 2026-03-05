@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const studentId = searchParams.get('studentId');
     const subjectId = searchParams.get('subjectId');
+    const classId = searchParams.get('classId');
 
     if (!studentId || !subjectId) {
       return NextResponse.json(
@@ -30,6 +31,7 @@ export async function GET(request: NextRequest) {
       where: {
         studentId,
         subjectId,
+        ...(classId ? { classId } : {}),
       },
       select: {
         id: true,
@@ -39,6 +41,10 @@ export async function GET(request: NextRequest) {
         notes: true,
         createdAt: true,
       },
+      orderBy: [
+        { assessmentType: 'asc' },
+        { competencyId: 'asc' },
+      ],
     });
 
     return NextResponse.json({

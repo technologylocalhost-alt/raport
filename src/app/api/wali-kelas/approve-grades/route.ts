@@ -94,10 +94,16 @@ export async function POST(request: NextRequest) {
       return errorResponse('No grades found for this subject and class', 404);
     }
 
-    // Check if this subject+class combination has already been approved
+    // Get unique assessmentTypes from the grades being approved
+    const assessmentTypes = [...new Set(grades.map(g => g.assessmentType))];
+
+    // Check if this subject+class+assessmentType combination has already been approved
     const existingApprovals = await prisma.nilaiApprove.findMany({
       where: {
         subjectId: validatedData.subjectId,
+        assessmentType: {
+          in: assessmentTypes,
+        },
         student: {
           classId: validatedData.classId,
         },
@@ -105,6 +111,7 @@ export async function POST(request: NextRequest) {
       select: {
         id: true,
         studentId: true,
+        assessmentType: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -112,9 +119,10 @@ export async function POST(request: NextRequest) {
     });
 
     if (existingApprovals.length > 0) {
+      const firstApproval = existingApprovals[0];
       return errorResponse(
-        `Mata pelajaran ini sudah pernah disetujui pada ${new Date(
-          existingApprovals[0].updatedAt || existingApprovals[0].createdAt
+        `Penilaian ${firstApproval.assessmentType} untuk mata pelajaran ini sudah pernah disetujui pada ${new Date(
+          firstApproval.updatedAt || firstApproval.createdAt
         ).toLocaleString('id-ID')}. Tidak dapat disetujui ulang.`,
         409
       );

@@ -159,6 +159,23 @@ export async function PUT(
       return errorResponse('Unauthorized to update this grade', 403);
     }
 
+    // Check if grade has been approved - if so, prevent update
+    const approvedGrade = await prisma.nilaiApprove.findFirst({
+      where: {
+        studentId: grade.studentId,
+        competencyId: grade.competencyId,
+        assessmentType: grade.assessmentType,
+        subjectId: grade.subjectId,
+      },
+    });
+
+    if (approvedGrade) {
+      return errorResponse(
+        'Nilai ini sudah disetujui dan tidak dapat diubah. Hubungi Wali Kelas untuk perubahan lebih lanjut.',
+        409
+      );
+    }
+
     // Build update data, converting score to float if provided
     const updateData: any = {};
     if (validatedData.score !== undefined) {

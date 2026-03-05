@@ -137,6 +137,24 @@ export default function WaliKelasStudentsPage() {
   useEffect(() => {
     fetchClassStudents();
     fetchClassInfo();
+    
+    // Refresh data when page becomes visible (tab focus)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('Page visibility changed to visible, refreshing data...');
+        // Refresh all student grades and approved status
+        if (students.length > 0) {
+          students.forEach((student) => {
+            fetchStudentGrades(student.id);
+          });
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [classId, subjectId]);
 
   // Auto-select first student when page loads and student changes
@@ -169,6 +187,9 @@ export default function WaliKelasStudentsPage() {
     setGradeError('');
     setGradeSuccess('');
     setEditingGradeId(null);
+    // Reset grades and approved grades when subject changes
+    setGrades({});
+    setApprovedGrades({});
   }, [subjectId]);
 
   // Clear import data when subjectId changes
@@ -354,14 +375,23 @@ export default function WaliKelasStudentsPage() {
       if (!token) return;
 
       const response = await fetch(
-        `/api/wali-kelas/approved-grades?studentId=${studentId}&subjectId=${subjectId}`,
+        `/api/wali-kelas/approved-grades?studentId=${studentId}&subjectId=${subjectId}&classId=${classId}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
       const data = await response.json();
       if (data.success && data.data) {
         // Create a Set of approved grade IDs for this student
-        const approvedIds = new Set<string>(data.data.map((grade: any) => `${grade.competencyId}-${grade.assessmentType}`));
+        // Use only assessmentType as key if competencyId is null, else use both
+        const approvedIds = new Set<string>(
+          data.data.map((grade: any) => {
+            if (grade.competencyId === null || grade.competencyId === '') {
+              return `null-${grade.assessmentType}`;
+            }
+            return `${grade.competencyId}-${grade.assessmentType}`;
+          })
+        );
+        console.log(`Approved grades for student ${studentId}:`, approvedIds);
         setApprovedGrades((prev) => ({
           ...prev,
           [studentId]: approvedIds,
@@ -478,6 +508,23 @@ export default function WaliKelasStudentsPage() {
         
         console.error('Grade submission error:', errorResponse, 'Status:', response.status);
         
+        // Handle 409 Conflict - grade has been approved
+        if (response.status === 409) {
+          setGradeError(errorResponse.error || 'Nilai ini sudah disetujui dan tidak dapat diubah.');
+          setEditingGradeId(null);
+          setGradeFormData({
+            competencyId: '',
+            score: '',
+            assessmentType: 'UTS_1',
+            notes: '',
+          });
+          // Refresh grades to get updated approved status
+          if (selectedStudent) {
+            await fetchStudentGrades(selectedStudent.id);
+          }
+          return;
+        }
+        
         // Handle field errors from validation
         if (errorResponse.details && Array.isArray(errorResponse.details)) {
           const fieldErrorMessages = errorResponse.details
@@ -497,6 +544,13 @@ export default function WaliKelasStudentsPage() {
   };
 
   const handleEditGrade = (grade: Grade, student: Student) => {
+    const isApproved = isGradeApproved(grade, student.id);
+    
+    if (isApproved) {
+      setGradeError('Nilai ini sudah disetujui dan tidak dapat diubah. Hubungi Wali Kelas untuk perubahan lebih lanjut.');
+      return;
+    }
+
     setSelectedStudent(student);
     setEditingGradeId(grade.id);
     setGradeFormData({
@@ -536,7 +590,12 @@ export default function WaliKelasStudentsPage() {
   };
 
   const isGradeApproved = (grade: Grade, studentId: string): boolean => {
-    const key = `${grade.competencyId}-${grade.assessmentType}`;
+    let key: string;
+    if (grade.competencyId === null || grade.competencyId === '') {
+      key = `null-${grade.assessmentType}`;
+    } else {
+      key = `${grade.competencyId}-${grade.assessmentType}`;
+    }
     return Boolean(approvedGrades[studentId]?.has(key));
   };
 
