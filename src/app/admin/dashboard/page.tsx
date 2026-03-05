@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Building2, Users, BarChart3, BookOpen, Calendar, GraduationCap, ArrowRight, FileText, School, BookMarked } from 'lucide-react';
+import { Building2, Users, BarChart3, BookOpen, Calendar, GraduationCap, ArrowRight, FileText, School, BookMarked, TrendingUp } from 'lucide-react';
 
 interface User {
   id: string;
@@ -20,6 +20,13 @@ interface Statistics {
   subjects: number;
   students: number;
   teachers: number;
+}
+
+interface Stats {
+  totalUsers: number;
+  totalStudents: number;
+  totalSubjects: number;
+  totalClasses: number;
 }
 
 interface ActiveSchoolYear {
@@ -52,6 +59,7 @@ export default function AdminDashboard() {
     students: 0,
     teachers: 0,
   });
+  const [stats, setStats] = useState<Stats | null>(null);
 
   useEffect(() => {
     // Check after component mounts and localStorage is accessible
@@ -85,8 +93,43 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (user) {
       fetchStatistics();
+      fetchStats();
     }
   }, [user]);
+
+  async function fetchStats() {
+    try {
+      const token = localStorage.getItem('accessToken');
+      
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+      };
+
+      const params = new URLSearchParams();
+      params.append('limit', '1000');
+
+      const [usersRes, studentsRes, subjectsRes, classesRes] = await Promise.all([
+        fetch(`/api/admin/users?${params}`, { headers }),
+        fetch(`/api/admin/students?${params}`, { headers }).catch(() => null),
+        fetch(`/api/admin/subjects?${params}`, { headers }),
+        fetch(`/api/admin/classes?${params}`, { headers }),
+      ]);
+
+      const usersData = await usersRes.json();
+      const studentsData = studentsRes ? await studentsRes.json() : null;
+      const subjectsData = await subjectsRes.json();
+      const classesData = await classesRes.json();
+
+      setStats({
+        totalUsers: usersData.total || usersData.pagination?.total || 0,
+        totalStudents: studentsData?.total || studentsData?.pagination?.total || 0,
+        totalSubjects: subjectsData.total || subjectsData.pagination?.total || 0,
+        totalClasses: classesData.total || classesData.pagination?.total || 0,
+      });
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  }
 
   async function fetchStatistics() {
     try {
@@ -251,71 +294,218 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Statistics Section */}
-      <div>
-        <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 mb-3 sm:mb-4">Statistik</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
-          {/* Total Sekolah */}
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 sm:p-4 border border-blue-200">
-            <div className="flex items-center justify-between mb-2">
-              <Building2 size={18} className="sm:w-6 sm:h-6 text-blue-600" />
-              <span className="text-2xl sm:text-3xl font-bold text-blue-600">{statistics.schools}</span>
+      {/* Two Column Section: Statistics & Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column: Statistics Sekolah */}
+        <div className="lg:col-span-1">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4">Statistik Sekolah</h2>
+          <div className="space-y-3">
+            {/* Total Sekolah */}
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
+              <div className="flex items-center justify-between mb-2">
+                <Building2 size={20} className="text-blue-600" />
+                <span className="text-2xl font-bold text-blue-600">{statistics.schools}</span>
+              </div>
+              <p className="text-sm text-gray-700">Sekolah</p>
             </div>
-            <p className="text-xs sm:text-sm text-gray-700">Sekolah</p>
-          </div>
 
-          {/* Total Tahun Ajaran */}
-          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 sm:p-4 border border-green-200">
-            <div className="flex items-center justify-between mb-2">
-              <Calendar size={18} className="sm:w-6 sm:h-6 text-green-600" />
-              <span className="text-2xl sm:text-3xl font-bold text-green-600">{statistics.schoolYears}</span>
+            {/* Total Tahun Ajaran */}
+            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
+              <div className="flex items-center justify-between mb-2">
+                <Calendar size={20} className="text-green-600" />
+                <span className="text-2xl font-bold text-green-600">{statistics.schoolYears}</span>
+              </div>
+              <p className="text-sm text-gray-700">Tahun Ajaran</p>
             </div>
-            <p className="text-xs sm:text-sm text-gray-700">Tahun Ajaran</p>
-          </div>
 
-          {/* Total Jenjang */}
-          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-3 sm:p-4 border border-purple-200">
-            <div className="flex items-center justify-between mb-2">
-              <GraduationCap size={18} className="sm:w-6 sm:h-6 text-purple-600" />
-              <span className="text-2xl sm:text-3xl font-bold text-purple-600">{statistics.levels}</span>
+            {/* Total Jenjang */}
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
+              <div className="flex items-center justify-between mb-2">
+                <GraduationCap size={20} className="text-purple-600" />
+                <span className="text-2xl font-bold text-purple-600">{statistics.levels}</span>
+              </div>
+              <p className="text-sm text-gray-700">Jenjang</p>
             </div>
-            <p className="text-xs sm:text-sm text-gray-700">Jenjang</p>
-          </div>
 
-          {/* Total Kelas */}
-          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-3 sm:p-4 border border-orange-200">
-            <div className="flex items-center justify-between mb-2">
-              <School size={18} className="sm:w-6 sm:h-6 text-orange-600" />
-              <span className="text-2xl sm:text-3xl font-bold text-orange-600">{statistics.classes}</span>
+            {/* Total Kelas */}
+            <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 border border-orange-200">
+              <div className="flex items-center justify-between mb-2">
+                <School size={20} className="text-orange-600" />
+                <span className="text-2xl font-bold text-orange-600">{statistics.classes}</span>
+              </div>
+              <p className="text-sm text-gray-700">Kelas</p>
             </div>
-            <p className="text-xs sm:text-sm text-gray-700">Kelas</p>
-          </div>
 
-          {/* Total Mata Pelajaran */}
-          <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-3 sm:p-4 border border-indigo-200">
-            <div className="flex items-center justify-between mb-2">
-              <BookMarked size={18} className="sm:w-6 sm:h-6 text-indigo-600" />
-              <span className="text-2xl sm:text-3xl font-bold text-indigo-600">{statistics.subjects}</span>
+            {/* Total Mata Pelajaran */}
+            <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-4 border border-indigo-200">
+              <div className="flex items-center justify-between mb-2">
+                <BookMarked size={20} className="text-indigo-600" />
+                <span className="text-2xl font-bold text-indigo-600">{statistics.subjects}</span>
+              </div>
+              <p className="text-sm text-gray-700">Mata Pelajaran</p>
             </div>
-            <p className="text-xs sm:text-sm text-gray-700">Mata Pelajaran</p>
-          </div>
 
-          {/* Total Siswa */}
-          <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-3 sm:p-4 border border-red-200">
-            <div className="flex items-center justify-between mb-2">
-              <Users size={18} className="sm:w-6 sm:h-6 text-red-600" />
-              <span className="text-2xl sm:text-3xl font-bold text-red-600">{statistics.students}</span>
+            {/* Total Siswa */}
+            <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border border-red-200">
+              <div className="flex items-center justify-between mb-2">
+                <Users size={20} className="text-red-600" />
+                <span className="text-2xl font-bold text-red-600">{statistics.students}</span>
+              </div>
+              <p className="text-sm text-gray-700">Siswa</p>
             </div>
-            <p className="text-xs sm:text-sm text-gray-700">Siswa</p>
-          </div>
 
-          {/* Total Guru */}
-          <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded-lg p-3 sm:p-4 border border-teal-200">
-            <div className="flex items-center justify-between mb-2">
-              <Users size={18} className="sm:w-6 sm:h-6 text-teal-600" />
-              <span className="text-2xl sm:text-3xl font-bold text-teal-600">{statistics.teachers}</span>
+            {/* Total Guru */}
+            <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded-lg p-4 border border-teal-200">
+              <div className="flex items-center justify-between mb-2">
+                <Users size={20} className="text-teal-600" />
+                <span className="text-2xl font-bold text-teal-600">{statistics.teachers}</span>
+              </div>
+              <p className="text-sm text-gray-700">Guru</p>
             </div>
-            <p className="text-xs sm:text-sm text-gray-700">Guru</p>
+          </div>
+        </div>
+
+        {/* Right Column: Charts Section */}
+        <div className="lg:col-span-2">
+          <div className="space-y-6">
+            {/* Stats Distribution Chart */}
+            <div className="bg-white p-4 sm:p-6 rounded-lg shadow-sm border border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900 mb-6">Distribusi Data Sistem</h2>
+              
+              {/* Pie Chart Style Visualization */}
+              <div className="space-y-4">
+                {stats && (
+                  <>
+                    {/* Pengguna */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                          <span className="text-sm font-medium text-gray-700">Pengguna</span>
+                        </div>
+                        <span className="text-sm font-bold text-gray-900">{stats.totalUsers}</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-500 h-2 rounded-full" 
+                          style={{
+                            width: stats.totalUsers > 0 
+                              ? `${(stats.totalUsers / (stats.totalUsers + stats.totalStudents + stats.totalSubjects + stats.totalClasses || 1)) * 100}%`
+                              : '0%'
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    {/* Siswa */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                          <span className="text-sm font-medium text-gray-700">Siswa</span>
+                        </div>
+                        <span className="text-sm font-bold text-gray-900">{stats.totalStudents}</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-green-500 h-2 rounded-full" 
+                          style={{
+                            width: stats.totalStudents > 0 
+                              ? `${(stats.totalStudents / (stats.totalUsers + stats.totalStudents + stats.totalSubjects + stats.totalClasses || 1)) * 100}%`
+                              : '0%'
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    {/* Mata Pelajaran */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                          <span className="text-sm font-medium text-gray-700">Mata Pelajaran</span>
+                        </div>
+                        <span className="text-sm font-bold text-gray-900">{stats.totalSubjects}</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-purple-500 h-2 rounded-full" 
+                          style={{
+                            width: stats.totalSubjects > 0 
+                              ? `${(stats.totalSubjects / (stats.totalUsers + stats.totalStudents + stats.totalSubjects + stats.totalClasses || 1)) * 100}%`
+                              : '0%'
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    {/* Kelas */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                          <span className="text-sm font-medium text-gray-700">Kelas</span>
+                        </div>
+                        <span className="text-sm font-bold text-gray-900">{stats.totalClasses}</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-orange-500 h-2 rounded-full" 
+                          style={{
+                            width: stats.totalClasses > 0 
+                              ? `${(stats.totalClasses / (stats.totalUsers + stats.totalStudents + stats.totalSubjects + stats.totalClasses || 1)) * 100}%`
+                              : '0%'
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Summary Statistics */}
+            <div className="bg-white p-4 sm:p-6 rounded-lg shadow-sm border border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900 mb-6">Ringkasan Sistem</h2>
+              
+              <div className="space-y-4">
+                {stats && (
+                  <>
+                    <div className="flex items-start justify-between p-3 bg-blue-50 rounded-lg border border-blue-100">
+                      <div>
+                        <p className="text-xs sm:text-sm text-blue-600 font-medium">Total Pengguna</p>
+                        <p className="text-2xl sm:text-3xl font-bold text-blue-600 mt-1">{stats.totalUsers}</p>
+                      </div>
+                      <div className="text-3xl sm:text-4xl text-blue-200">👥</div>
+                    </div>
+
+                    <div className="flex items-start justify-between p-3 bg-green-50 rounded-lg border border-green-100">
+                      <div>
+                        <p className="text-xs sm:text-sm text-green-600 font-medium">Total Siswa Terdaftar</p>
+                        <p className="text-2xl sm:text-3xl font-bold text-green-600 mt-1">{stats.totalStudents}</p>
+                      </div>
+                      <div className="text-3xl sm:text-4xl text-green-200">🎓</div>
+                    </div>
+
+                    <div className="flex items-start justify-between p-3 bg-purple-50 rounded-lg border border-purple-100">
+                      <div>
+                        <p className="text-xs sm:text-sm text-purple-600 font-medium">Total Mata Pelajaran</p>
+                        <p className="text-2xl sm:text-3xl font-bold text-purple-600 mt-1">{stats.totalSubjects}</p>
+                      </div>
+                      <div className="text-3xl sm:text-4xl text-purple-200">📚</div>
+                    </div>
+
+                    <div className="flex items-start justify-between p-3 bg-orange-50 rounded-lg border border-orange-100">
+                      <div>
+                        <p className="text-xs sm:text-sm text-orange-600 font-medium">Total Kelas Aktif</p>
+                        <p className="text-2xl sm:text-3xl font-bold text-orange-600 mt-1">{stats.totalClasses}</p>
+                      </div>
+                      <div className="text-3xl sm:text-4xl text-orange-200">🏫</div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>

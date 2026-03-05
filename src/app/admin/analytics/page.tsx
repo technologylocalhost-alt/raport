@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Users, GraduationCap, BookOpen, TrendingUp, Filter, ChevronDown, ChevronUp } from 'lucide-react';
+import { Users, GraduationCap, BookOpen, TrendingUp, Filter, ChevronDown, ChevronUp, School } from 'lucide-react';
 
 interface Stats {
   totalUsers: number;
@@ -63,6 +63,22 @@ interface SubjectGradesPerClass {
   subjects: SubjectGrade[];
 }
 
+interface SchoolRankingRecap {
+  schoolId: string;
+  schoolName: string;
+  totalStudents: number;
+  averageScore: number;
+}
+
+interface StudentRanking {
+  studentId: string;
+  studentName: string;
+  studentNo: string;
+  className: string;
+  levelName: string;
+  averageScore: number;
+}
+
 export default function AnalyticsPage() {
   const router = useRouter();
   const [stats, setStats] = useState<Stats | null>(null);
@@ -87,6 +103,18 @@ export default function AnalyticsPage() {
   const [isLoadingSubjectGrades, setIsLoadingSubjectGrades] = useState(false);
   const [expandedSubjectClasses, setExpandedSubjectClasses] = useState<Set<string>>(new Set());
 
+  const [schoolRankings, setSchoolRankings] = useState<StudentRanking[]>([]);
+  const [isLoadingRankings, setIsLoadingRankings] = useState(false);
+
+  // Collapse/Expand states for main sections
+  const [isNilaiSiswaExpanded, setIsNilaiSiswaExpanded] = useState(false);
+  const [isMataAjaranExpanded, setIsMataAjaranExpanded] = useState(false);
+  const [isRankingExpanded, setIsRankingExpanded] = useState(false);
+
+  // Pagination for ranking
+  const [rankingCurrentPage, setRankingCurrentPage] = useState(1);
+  const rankingItemsPerPage = 50;
+
   useEffect(() => {
     const user = localStorage.getItem('user');
     if (!user) {
@@ -98,6 +126,7 @@ export default function AnalyticsPage() {
     fetchStats();
     fetchGradesPerClass();
     fetchGradesPerSubject();
+    fetchSchoolRankings();
   }, [router, filterSchool, filterSchoolYear, filterLevel, filterClass, filterSemester]);
 
   // Fetch semesters when school year changes
@@ -273,6 +302,51 @@ export default function AnalyticsPage() {
     }
   }
 
+  async function fetchSchoolRankings() {
+    try {
+      setIsLoadingRankings(true);
+      const token = localStorage.getItem('accessToken');
+      const headers = { 'Authorization': `Bearer ${token}` };
+
+      const params = new URLSearchParams();
+      params.append('limit', '10000');
+      if (filterSchoolYear) params.append('schoolYearId', filterSchoolYear);
+      if (filterLevel) params.append('levelId', filterLevel);
+      if (filterSemester) params.append('semesterId', filterSemester);
+
+      const res = await fetch(`/api/admin/grades/per-class?${params}`, { headers });
+      const data = await res.json();
+
+      if (data.success && data.data) {
+        // Collect all students from all classes
+        const allStudents: StudentRanking[] = [];
+
+        data.data.forEach((classData: GradePerClass) => {
+          classData.students.forEach((student) => {
+            allStudents.push({
+              studentId: student.id,
+              studentName: student.name,
+              studentNo: student.studentNo,
+              className: classData.className,
+              levelName: classData.levelName,
+              averageScore: student.averageScore,
+            });
+          });
+        });
+
+        // Sort by average score descending
+        const rankings = allStudents.sort((a, b) => b.averageScore - a.averageScore);
+
+        setSchoolRankings(rankings);
+        setRankingCurrentPage(1); // Reset to page 1 when data changes
+      }
+    } catch (error) {
+      console.error('Error fetching school rankings:', error);
+    } finally {
+      setIsLoadingRankings(false);
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -416,212 +490,41 @@ export default function AnalyticsPage() {
         )}
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
-        <div className="bg-white p-3 sm:p-6 rounded-lg shadow-sm border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 text-xs sm:text-sm font-medium">Total Pengguna</p>
-              <p className="text-xl sm:text-3xl font-bold text-gray-900 mt-2">{stats?.totalUsers || 0}</p>
-            </div>
-            <Users className="w-6 sm:w-10 h-6 sm:h-10 text-blue-500" />
-          </div>
-        </div>
 
-        <div className="bg-white p-3 sm:p-6 rounded-lg shadow-sm border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 text-xs sm:text-sm font-medium">Total Siswa</p>
-              <p className="text-xl sm:text-3xl font-bold text-gray-900 mt-2">{stats?.totalStudents || 0}</p>
-            </div>
-            <GraduationCap className="w-6 sm:w-10 h-6 sm:h-10 text-green-500" />
-          </div>
-        </div>
-
-        <div className="bg-white p-3 sm:p-6 rounded-lg shadow-sm border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 text-xs sm:text-sm font-medium">Total Mata Pelajaran</p>
-              <p className="text-xl sm:text-3xl font-bold text-gray-900 mt-2">{stats?.totalSubjects || 0}</p>
-            </div>
-            <BookOpen className="w-6 sm:w-10 h-6 sm:h-10 text-purple-500" />
-          </div>
-        </div>
-
-        <div className="bg-white p-3 sm:p-6 rounded-lg shadow-sm border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 text-xs sm:text-sm font-medium">Total Kelas</p>
-              <p className="text-xl sm:text-3xl font-bold text-gray-900 mt-2">{stats?.totalClasses || 0}</p>
-            </div>
-            <TrendingUp className="w-6 sm:w-10 h-6 sm:h-10 text-orange-500" />
-          </div>
-        </div>
-      </div>
-
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        {/* Stats Distribution Chart */}
-        <div className="bg-white p-4 sm:p-6 rounded-lg shadow-sm border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900 mb-6">Distribusi Data Sistem</h2>
-          
-          {/* Pie Chart Style Visualization */}
-          <div className="space-y-4">
-            {stats && (
-              <>
-                {/* Pengguna */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                      <span className="text-sm font-medium text-gray-700">Pengguna</span>
-                    </div>
-                    <span className="text-sm font-bold text-gray-900">{stats.totalUsers}</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-500 h-2 rounded-full" 
-                      style={{
-                        width: stats.totalUsers > 0 
-                          ? `${(stats.totalUsers / (stats.totalUsers + stats.totalStudents + stats.totalSubjects + stats.totalClasses || 1)) * 100}%`
-                          : '0%'
-                      }}
-                    ></div>
-                  </div>
-                </div>
-
-                {/* Siswa */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                      <span className="text-sm font-medium text-gray-700">Siswa</span>
-                    </div>
-                    <span className="text-sm font-bold text-gray-900">{stats.totalStudents}</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-green-500 h-2 rounded-full" 
-                      style={{
-                        width: stats.totalStudents > 0 
-                          ? `${(stats.totalStudents / (stats.totalUsers + stats.totalStudents + stats.totalSubjects + stats.totalClasses || 1)) * 100}%`
-                          : '0%'
-                      }}
-                    ></div>
-                  </div>
-                </div>
-
-                {/* Mata Pelajaran */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-                      <span className="text-sm font-medium text-gray-700">Mata Pelajaran</span>
-                    </div>
-                    <span className="text-sm font-bold text-gray-900">{stats.totalSubjects}</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-purple-500 h-2 rounded-full" 
-                      style={{
-                        width: stats.totalSubjects > 0 
-                          ? `${(stats.totalSubjects / (stats.totalUsers + stats.totalStudents + stats.totalSubjects + stats.totalClasses || 1)) * 100}%`
-                          : '0%'
-                      }}
-                    ></div>
-                  </div>
-                </div>
-
-                {/* Kelas */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-orange-500"></div>
-                      <span className="text-sm font-medium text-gray-700">Kelas</span>
-                    </div>
-                    <span className="text-sm font-bold text-gray-900">{stats.totalClasses}</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-orange-500 h-2 rounded-full" 
-                      style={{
-                        width: stats.totalClasses > 0 
-                          ? `${(stats.totalClasses / (stats.totalUsers + stats.totalStudents + stats.totalSubjects + stats.totalClasses || 1)) * 100}%`
-                          : '0%'
-                      }}
-                    ></div>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Summary Statistics */}
-        <div className="bg-white p-4 sm:p-6 rounded-lg shadow-sm border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900 mb-6">Ringkasan Sistem</h2>
-          
-          <div className="space-y-4">
-            {stats && (
-              <>
-                <div className="flex items-start justify-between p-3 bg-blue-50 rounded-lg border border-blue-100">
-                  <div>
-                    <p className="text-xs sm:text-sm text-blue-600 font-medium">Total Pengguna</p>
-                    <p className="text-2xl sm:text-3xl font-bold text-blue-600 mt-1">{stats.totalUsers}</p>
-                  </div>
-                  <div className="text-3xl sm:text-4xl text-blue-200">👥</div>
-                </div>
-
-                <div className="flex items-start justify-between p-3 bg-green-50 rounded-lg border border-green-100">
-                  <div>
-                    <p className="text-xs sm:text-sm text-green-600 font-medium">Total Siswa Terdaftar</p>
-                    <p className="text-2xl sm:text-3xl font-bold text-green-600 mt-1">{stats.totalStudents}</p>
-                  </div>
-                  <div className="text-3xl sm:text-4xl text-green-200">🎓</div>
-                </div>
-
-                <div className="flex items-start justify-between p-3 bg-purple-50 rounded-lg border border-purple-100">
-                  <div>
-                    <p className="text-xs sm:text-sm text-purple-600 font-medium">Total Mata Pelajaran</p>
-                    <p className="text-2xl sm:text-3xl font-bold text-purple-600 mt-1">{stats.totalSubjects}</p>
-                  </div>
-                  <div className="text-3xl sm:text-4xl text-purple-200">📚</div>
-                </div>
-
-                <div className="flex items-start justify-between p-3 bg-orange-50 rounded-lg border border-orange-100">
-                  <div>
-                    <p className="text-xs sm:text-sm text-orange-600 font-medium">Total Kelas Aktif</p>
-                    <p className="text-2xl sm:text-3xl font-bold text-orange-600 mt-1">{stats.totalClasses}</p>
-                  </div>
-                  <div className="text-3xl sm:text-4xl text-orange-200">🏫</div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
 
       {/* Nilai Siswa Per Kelas Section */}
-      <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-6">Nilai Siswa Per Kelas</h2>
-        
-        {isLoadingGrades ? (
-          <div className="py-10 text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
-            <p className="text-gray-600 text-sm">Memuat data nilai...</p>
-          </div>
-        ) : gradesPerClass.length === 0 ? (
-          <div className="py-10 text-center text-gray-500">
-            <p>Tidak ada data nilai untuk filter yang dipilih</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {gradesPerClass.map((classData) => (
-              <div key={classData.classId} className="border border-gray-200 rounded-lg overflow-hidden">
-                <button
-                  onClick={() => toggleStudentClassExpand(classData.classId)}
-                  className="w-full px-4 py-4 hover:bg-gray-50 flex items-center justify-between transition-colors"
-                >
+      <div className="bg-white rounded-lg shadow-md border border-gray-200">
+        <button
+          onClick={() => setIsNilaiSiswaExpanded(!isNilaiSiswaExpanded)}
+          className="w-full px-4 sm:p-6 py-4 hover:bg-gray-50 flex items-center justify-between transition-colors"
+        >
+          <h2 className="text-lg font-semibold text-gray-900">Nilai Siswa Per Kelas</h2>
+          {isNilaiSiswaExpanded ? (
+            <ChevronUp size={24} className="text-blue-600" />
+          ) : (
+            <ChevronDown size={24} className="text-blue-600" />
+          )}
+        </button>
+
+        {isNilaiSiswaExpanded && (
+          <div className="border-t border-gray-200 p-4 sm:p-6">
+            {isLoadingGrades ? (
+              <div className="py-10 text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+                <p className="text-gray-600 text-sm">Memuat data nilai...</p>
+              </div>
+            ) : gradesPerClass.length === 0 ? (
+              <div className="py-10 text-center text-gray-500">
+                <p>Tidak ada data nilai untuk filter yang dipilih</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {gradesPerClass.map((classData) => (
+                  <div key={classData.classId} className="border border-gray-200 rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => toggleStudentClassExpand(classData.classId)}
+                      className="w-full px-4 py-4 hover:bg-gray-50 flex items-center justify-between transition-colors"
+                    >
                   <div className="flex-1 text-left">
                     <h3 className="text-base font-semibold text-gray-900">{classData.className}</h3>
                     <p className="text-xs text-gray-500">{classData.levelName} • {classData.totalStudents} Siswa</p>
@@ -678,26 +581,40 @@ export default function AnalyticsPage() {
               </div>
             ))}
           </div>
+            )}
+            </div>
         )}
       </div>
 
       {/* Nilai Rata-rata Mata Pelajaran Per Kelas Section */}
-      <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-6">Nilai Rata-rata Mata Pelajaran Per Kelas</h2>
-        
-        {isLoadingSubjectGrades ? (
-          <div className="py-10 text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
-            <p className="text-gray-600 text-sm">Memuat data nilai mata pelajaran...</p>
-          </div>
-        ) : gradesPerSubject.length === 0 ? (
-          <div className="py-10 text-center text-gray-500">
-            <p>Tidak ada data nilai mata pelajaran untuk filter yang dipilih</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {gradesPerSubject.map((classData) => (
-              <div key={classData.classId} className="border border-gray-200 rounded-lg overflow-hidden">
+      <div className="bg-white rounded-lg shadow-md border border-gray-200">
+        <button
+          onClick={() => setIsMataAjaranExpanded(!isMataAjaranExpanded)}
+          className="w-full px-4 sm:p-6 py-4 hover:bg-gray-50 flex items-center justify-between transition-colors"
+        >
+          <h2 className="text-lg font-semibold text-gray-900">Nilai Rata-rata Mata Pelajaran Per Kelas</h2>
+          {isMataAjaranExpanded ? (
+            <ChevronUp size={24} className="text-blue-600" />
+          ) : (
+            <ChevronDown size={24} className="text-blue-600" />
+          )}
+        </button>
+
+        {isMataAjaranExpanded && (
+          <div className="border-t border-gray-200 p-4 sm:p-6">
+            {isLoadingSubjectGrades ? (
+              <div className="py-10 text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+                <p className="text-gray-600 text-sm">Memuat data nilai mata pelajaran...</p>
+              </div>
+            ) : gradesPerSubject.length === 0 ? (
+              <div className="py-10 text-center text-gray-500">
+                <p>Tidak ada data nilai mata pelajaran untuk filter yang dipilih</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {gradesPerSubject.map((classData) => (
+                  <div key={classData.classId} className="border border-gray-200 rounded-lg overflow-hidden">
                 <button
                   onClick={() => toggleSubjectClassExpand(classData.classId)}
                   className="w-full px-4 py-4 hover:bg-gray-50 flex items-center justify-between transition-colors"
@@ -748,6 +665,144 @@ export default function AnalyticsPage() {
               </div>
             ))}
           </div>
+            )}
+            </div>
+        )}
+      </div>
+
+      {/* Rekapan Ranking Siswa Berdasarkan Sekolah Section */}
+      <div className="bg-white rounded-lg shadow-md border border-gray-200">
+        <button
+          onClick={() => setIsRankingExpanded(!isRankingExpanded)}
+          className="w-full px-4 sm:p-6 py-4 hover:bg-gray-50 flex items-center justify-between transition-colors"
+        >
+          <h2 className="text-lg font-semibold text-gray-900">Rekapan Ranking Siswa (Semua Siswa)</h2>
+          {isRankingExpanded ? (
+            <ChevronUp size={24} className="text-blue-600" />
+          ) : (
+            <ChevronDown size={24} className="text-blue-600" />
+          )}
+        </button>
+
+        {isRankingExpanded && (
+          <div className="border-t border-gray-200 p-4 sm:p-6">
+        
+        {isLoadingRankings ? (
+          <div className="py-10 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+            <p className="text-gray-600 text-sm">Memuat data ranking...</p>
+          </div>
+        ) : schoolRankings.length === 0 ? (
+          <div className="py-10 text-center text-gray-500">
+            <p>Tidak ada data ranking untuk filter yang dipilih</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs sm:text-sm border border-gray-300">
+              <thead>
+                <tr className="bg-gray-100 border-b-2 border-gray-300">
+                  <th className="px-3 py-3 text-center font-bold text-gray-800 border-r border-gray-300">NO</th>
+                  <th className="px-3 py-3 text-center font-bold text-gray-800 border-r border-gray-300">RANKING</th>
+                  <th className="px-3 py-3 text-center font-bold text-gray-800 border-r border-gray-300">NO. SISWA</th>
+                  <th className="px-3 py-3 text-left font-bold text-gray-800 border-r border-gray-300">NAMA SISWA</th>
+                  <th className="px-3 py-3 text-center font-bold text-gray-800 border-r border-gray-300">KELAS</th>
+                  <th className="px-3 py-3 text-center font-bold text-gray-800 border-r border-gray-300">JENJANG</th>
+                  <th className="px-3 py-3 text-center font-bold text-white bg-green-600 border-r border-gray-300">RATA-RATA</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const startIdx = (rankingCurrentPage - 1) * rankingItemsPerPage;
+                  const endIdx = startIdx + rankingItemsPerPage;
+                  const paginatedRankings = schoolRankings.slice(startIdx, endIdx);
+                  
+                  return paginatedRankings.map((ranking, idx) => {
+                    const globalIdx = startIdx + idx;
+                    const rankingLabel = globalIdx < 10 ? `RANKING ${(globalIdx + 1).toString().padStart(2, '0')}` : `RANKING ${globalIdx + 1}`;
+                    const medalColor = 
+                      globalIdx === 0 ? 'bg-yellow-300 text-gray-900' :
+                      globalIdx === 1 ? 'bg-gray-300 text-gray-900' :
+                      globalIdx === 2 ? 'bg-orange-300 text-gray-900' :
+                      'bg-blue-100 text-gray-900';
+                    
+                    return (
+                      <tr key={ranking.studentId} className="border-b border-gray-200 hover:bg-gray-50">
+                        <td className="px-3 py-2 text-center font-bold text-gray-800 border-r border-gray-300">{globalIdx + 1}</td>
+                        <td className="px-3 py-2 text-center font-semibold text-gray-800 border-r border-gray-300">
+                          <span className={`inline-block px-2 py-1 rounded ${medalColor} font-bold`}>
+                            {rankingLabel}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center text-gray-700 border-r border-gray-300 font-semibold">{ranking.studentNo}</td>
+                        <td className="px-3 py-2 text-gray-900 font-medium border-r border-gray-300">{ranking.studentName}</td>
+                        <td className="px-3 py-2 text-center text-gray-700 border-r border-gray-300 font-semibold">{ranking.className}</td>
+                        <td className="px-3 py-2 text-center text-gray-700 border-r border-gray-300 font-semibold">{ranking.levelName}</td>
+                        <td className={`px-3 py-2 text-center font-bold text-lg ${
+                          ranking.averageScore >= 85 ? 'bg-green-500 text-white' :
+                          ranking.averageScore >= 75 ? 'bg-green-400 text-white' :
+                          ranking.averageScore >= 65 ? 'bg-yellow-400 text-white' :
+                          'bg-red-400 text-white'
+                        }`}>
+                          {ranking.averageScore.toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
+              </tbody>
+            </table>
+            
+            {/* Pagination Controls */}
+            {schoolRankings.length > rankingItemsPerPage && (
+              <div className="mt-6 flex items-center justify-between">
+                <div className="text-sm text-gray-600">
+                  <p>Menampilkan {((rankingCurrentPage - 1) * rankingItemsPerPage) + 1}-{Math.min(rankingCurrentPage * rankingItemsPerPage, schoolRankings.length)} dari {schoolRankings.length} siswa</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setRankingCurrentPage(Math.max(1, rankingCurrentPage - 1))}
+                    disabled={rankingCurrentPage === 1}
+                    className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Sebelumnya
+                  </button>
+                  
+                  <div className="flex gap-1 items-center px-2">
+                    {(() => {
+                      const totalPages = Math.ceil(schoolRankings.length / rankingItemsPerPage);
+                      const pages = [];
+                      for (let i = Math.max(1, rankingCurrentPage - 2); i <= Math.min(totalPages, rankingCurrentPage + 2); i++) {
+                        pages.push(i);
+                      }
+                      return pages.map((page) => (
+                        <button
+                          key={page}
+                          onClick={() => setRankingCurrentPage(page)}
+                          className={`px-2 py-1 text-sm rounded ${
+                            rankingCurrentPage === page
+                              ? 'bg-blue-600 text-white font-bold'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      ));
+                    })()}
+                  </div>
+
+                  <button
+                    onClick={() => setRankingCurrentPage(rankingCurrentPage + 1)}
+                    disabled={rankingCurrentPage >= Math.ceil(schoolRankings.length / rankingItemsPerPage)}
+                    className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Selanjutnya
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+            </div>
         )}
       </div>
     </div>
