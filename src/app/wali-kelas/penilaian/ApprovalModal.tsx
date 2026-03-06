@@ -181,6 +181,8 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
         ...(formData.nazofah && { nazofah: formData.nazofah }),
       };
 
+      console.log('[ApprovalModal] Sending approve request - Payload:', JSON.stringify(payload, null, 2));
+
       const response = await fetch('/api/wali-kelas/approve-grades', {
         method: 'POST',
         headers: {
@@ -190,8 +192,12 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
         body: JSON.stringify(payload),
       });
 
+      console.log('[ApprovalModal] Approve response status:', response.status);
+      console.log('[ApprovalModal] Response OK?:', response.ok);
+
       if (!response.ok) {
         const errorData = await response.json();
+        console.log('[ApprovalModal] Error response data:', errorData);
         const errorMessage = errorData.error || errorData.data?.message || 'Gagal menyetujui penilaian';
         
         // Handle 409 Conflict specifically
@@ -203,7 +209,19 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
       }
 
       const result = await response.json();
-      const approvedCount = result.data?.count || 0;
+      console.log('[ApprovalModal] Success response data:', JSON.stringify(result, null, 2));
+      const approvedCount = result.data?.count ?? 0;
+      const totalGrades = result.data?.totalGrades ?? 0;
+      const message = result.data?.message || 'Unknown';
+      console.log('[ApprovalModal] Approved count:', approvedCount, 'out of', totalGrades);
+      console.log('[ApprovalModal] Server message:', message);
+      
+      if (approvedCount === 0 && totalGrades > 0) {
+        setError(`⚠️ API returned success but created 0 records! Total grades: ${totalGrades}. Message: ${message}`);
+        console.error('[ApprovalModal] WARNING: Zero records created despite API success!');
+        return;
+      }
+      
       setSuccess(`${approvedCount} penilaian telah disetujui dan disimpan`);
       setSelectedSubject(null);
       setFormData({ suluk: '', muazobah: '', nazofah: '' });
@@ -215,6 +233,7 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
       // Clear success message after 3 seconds
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
+      console.error('[ApprovalModal] Error during approval:', err);
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
     } finally {
       setApproving(null);

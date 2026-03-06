@@ -59,6 +59,7 @@ interface ReportData {
   suluk?: string;
   muazobah?: string;
   nazofah?: string;
+  semesterEndDate?: Date | string;
 }
 
 function RaportArabDetailContent() {
@@ -100,6 +101,26 @@ function RaportArabDetailContent() {
       }
       return digit;
     }).join('');
+  };
+
+  // Helper: Format date to Arabic format (e.g., "في 21 يونيو 2026")
+  const formatDateToArabic = (date: Date | string | undefined): string => {
+    if (!date) return 'في ٢١ يونيو ٢٠٢٦'; // fallback to original
+    
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    const day = dateObj.getDate();
+    const month = dateObj.getMonth();
+    const year = dateObj.getFullYear();
+    
+    const monthsArabic = [
+      'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+      'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+    ];
+    
+    const arabicDay = toArabicNumerals(day);
+    const arabicYear = toArabicNumerals(year);
+    
+    return `في ${arabicDay} ${monthsArabic[month]} ${arabicYear}`;
   };
 
   // Helper: Convert numeric score to Arabic text
@@ -333,6 +354,11 @@ function RaportArabDetailContent() {
         classId: classObj.id,
         className: classObj.name,
         levelId: classObj.levelId,
+        semesterId: classObj.semesterId,
+        schoolYearId: classObj.schoolYearId,
+        semester: classObj.semester,
+        schoolYear: classObj.schoolYear,
+        semesterEndDate: classObj.semester?.endDate,
         allProps: Object.keys(classObj),
       });
 
@@ -586,7 +612,7 @@ function RaportArabDetailContent() {
       if (approvedGrades.length > 0) {
         const firstGrade = approvedGrades[0];
         console.log('[Raport] First approved grade:', firstGrade);
-        console.log('[Raport] First grade mulahazoh:', firstGrade.mulahazoh);
+        console.log('[Raport] First grade mulahazoh from DB:', firstGrade.mulahazoh);
         console.log('[Raport] First grade nomorRaport:', firstGrade.nomorRaport);
         console.log('[Raport] First grade suluk:', firstGrade.suluk);
         console.log('[Raport] First grade muazobah:', firstGrade.muazobah);
@@ -609,7 +635,12 @@ function RaportArabDetailContent() {
         }
       }
       
-      console.log('[Raport] Final mulahazoh:', mulahazoh);
+      const fallbackMulahazoh = 'ضعيف جدًا';
+      const finalMulahazoh = mulahazoh || fallbackMulahazoh;
+      
+      console.log('[Raport] Mulahazoh from DB:', mulahazoh);
+      console.log('[Raport] Fallback mulahazoh:', fallbackMulahazoh);
+      console.log('[Raport] Final mulahazoh used:', finalMulahazoh);
       console.log('[Raport] Final nomorRaport:', nomorRaport);
       console.log('[Raport] Final suluk:', suluk);
       console.log('[Raport] Final muazobah:', muazobah);
@@ -629,11 +660,12 @@ function RaportArabDetailContent() {
           email: school.email || '',
           principal: school.principal || '',
         },
-        mulahazoh,
+        mulahazoh: finalMulahazoh,
         nomorRaport,
         suluk,
         muazobah,
         nazofah,
+        semesterEndDate: classObj?.semester?.endDate,
       });
       setIsLoading(false);
     } catch (err) {
@@ -1277,7 +1309,7 @@ function RaportArabDetailContent() {
               {/* Kolom kanan (tanggal laporan) */}
               <td style={{ width: '33%', textAlign: 'right', padding: '8px', fontSize: '12px', fontFamily: "'Amiri', 'Traditional Arabic', serif", verticalAlign: 'top', border: 'none' }}>
               <div style={{ marginBottom: '50px', paddingTop: '8px' }}>
-                تقرير بدار السلام لاهات، في 21 يونيو 2026
+                تقرير بدار السلام لاهات، {formatDateToArabic(reportData?.semesterEndDate)}
               </div>
               </td>
 
@@ -1287,7 +1319,11 @@ function RaportArabDetailContent() {
               مدير المعهد دار السلام لاهات
               </div>
               
-              <div style={{ borderTop: '1px solid #000', marginTop: '45px', paddingTop: '8px' }}></div>
+              <div style={{ margin: '5px auto', textAlign: 'center', display: 'flex', justifyContent: 'center', position: 'relative', zIndex: 10 }}>
+                <img src="/ttd.png" alt="TTD" style={{ width: '200px', height: 'auto' }} />
+              </div>
+              
+              <div style={{ borderTop: '1px solid #000', marginTop: '5px', paddingTop: '8px' }}></div>
               <div style={{ marginTop: '2px', fontSize: '12px' }}>
               الأستاذ محمد رومي أوكتاريوس،
               </div>

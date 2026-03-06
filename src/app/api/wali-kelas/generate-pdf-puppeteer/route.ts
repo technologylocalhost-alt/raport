@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
   let browser = null;
   try {
     const data = await request.json();
-    const { student, subjectScores, semester, schoolYear, suluk, muazobah, nazofah, mulahazoh, nomorRaport } = data;
+    const { student, subjectScores, semester, schoolYear, suluk, muazobah, nazofah, mulahazoh, nomorRaport, semesterEndDate } = data;
 
     if (!student || !subjectScores) {
       return NextResponse.json(
@@ -26,6 +26,25 @@ export async function POST(request: NextRequest) {
         }
         return digit;
       }).join('');
+    };
+
+    const formatDateToArabic = (date: any): string => {
+      if (!date) return 'في ٢١ يونيو ٢٠٢٦'; // fallback
+      
+      const dateObj = typeof date === 'string' ? new Date(date) : date;
+      const day = dateObj.getDate();
+      const month = dateObj.getMonth();
+      const year = dateObj.getFullYear();
+      
+      const monthsArabic = [
+        'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+        'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+      ];
+      
+      const arabicDay = toArabicNumerals(day);
+      const arabicYear = toArabicNumerals(year);
+      
+      return `في ${arabicDay} ${monthsArabic[month]} ${arabicYear}`;
     };
 
     const scoreToArabicText = (score: number): string => {
@@ -124,6 +143,7 @@ export async function POST(request: NextRequest) {
     let mahadLogoBase64 = '';
     let kasyfuImageBase64 = '';
     let bingkaiImageBase64 = '';
+    let ttdBase64 = '';
     try {
       const imagePath = join(process.cwd(), 'public', 'namapondok.png');
       const imageBuffer = readFileSync(imagePath);
@@ -146,6 +166,14 @@ export async function POST(request: NextRequest) {
       mahadLogoBase64 = mahadImageBuffer.toString('base64');
     } catch (err) {
       console.log('Mahad logo not found, continuing without it');
+    }
+
+    try {
+      const ttdImagePath = join(process.cwd(), 'public', 'ttd.png');
+      const ttdImageBuffer = readFileSync(ttdImagePath);
+      ttdBase64 = ttdImageBuffer.toString('base64');
+    } catch (err) {
+      console.log('TTD image not found, continuing without it');
     }
 
     try {
@@ -562,14 +590,15 @@ export async function POST(request: NextRequest) {
                         <tr style="height: auto;">
                             <td style="width: 33%; text-align: right; padding: 8px; border: 1px solid #000; font-size: 12px; vertical-align: top;">
                                 <div style="margin-bottom: 50px; padding-top: 8px;">
-                                    تقرير بدار السلام لاهات، في 21 يونيو 2026
+                                    تقرير بدار السلام لاهات، ${formatDateToArabic(semesterEndDate)}
                                 </div>
                             </td>
                             <td style="width: 34%; text-align: center; padding: 8px; border: 1px solid #000; font-size: 12px; vertical-align: top;">
                                 <div style="margin-bottom: 8px; font-weight: bold;">
                                     مدير المعهد دار السلام لاهات
                                 </div>
-                                <div style="border-top: 1px solid #000; margin-top: 45px; padding-top: 8px;"></div>
+                                ${ttdBase64 ? `<div style="margin: 5px auto; text-align: center; display: flex; justify-content: center; position: relative; z-index: 10;"><img src="data:image/png;base64,${ttdBase64}" style="width: 200px; height: auto;" /></div>` : ''}
+                                <div style="border-top: 1px solid #000; margin-top: 5px; padding-top: 8px;"></div>
                                 <div style="margin-top: 8px; font-size: 12px;">
                                     الأستاذ محمد رومي أوكتاريوس،
                                 </div>
