@@ -353,8 +353,8 @@ export async function POST(request: NextRequest) {
       args: launchArgs,
       defaultViewport: chromium.defaultViewport,
       executablePath,
-      headless: true,
-    });
+      headless: true,      timeout: 60000,
+      protocolTimeout: 60000,    });
 
     const page = await browser.newPage();
 
@@ -367,7 +367,7 @@ export async function POST(request: NextRequest) {
 
     console.log('[GenerateCoverPDF] Setting page content...');
     // Set content
-    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+    await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 60000 });
 
     console.log('[GenerateCoverPDF] Generating PDF...');
     const pdfBuffer = await page.pdf({

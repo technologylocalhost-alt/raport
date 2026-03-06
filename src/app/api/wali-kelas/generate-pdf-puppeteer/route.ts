@@ -607,6 +607,8 @@ export async function POST(request: NextRequest) {
       defaultViewport: chromium.defaultViewport,
       executablePath,
       headless: true,
+      timeout: 60000,
+      protocolTimeout: 60000,
     }).catch((launchErr) => {
       console.error('Launch error details:', {
         message: launchErr.message,
@@ -627,7 +629,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Set content
-    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+    await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 60000 });
 
     // Generate PDF
     const pdfBuffer = await page.pdf({

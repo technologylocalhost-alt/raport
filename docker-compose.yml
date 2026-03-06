@@ -17,22 +17,22 @@ services:
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-your-secret-key}
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:25000}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:25000}
-      # Memory optimization for Node.js
-      NODE_OPTIONS: "--max-old-space-size=384"
+      # Memory optimization for Node.js and Puppeteer
+      NODE_OPTIONS: "--max-old-space-size=512"
     ports:
       - "${APP_PORT:-25000}:3000"
     volumes:
       - ./.env:/app/.env
     restart: unless-stopped
-    # Resource limits for 1GB RAM VPS
+    # Resource limits for 1GB RAM VPS (increased for Puppeteer)
     deploy:
       resources:
         limits:
-          cpus: '0.75'
-          memory: 512M
+          cpus: '1'
+          memory: 768M
         reservations:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '0.5'
+          memory: 384M
     # Optimized health check
     healthcheck:
       test: ["CMD", "bun", "run", "-e", "fetch('http://localhost:3000/api/health').catch(() => process.exit(1))"]
