@@ -26,6 +26,7 @@ function RaportArabPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [classes, setClasses] = useState<ClassWithStudents[]>([]);
+  const [approvedStudents, setApprovedStudents] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -41,18 +42,47 @@ function RaportArabPageContent() {
     { value: 'FINAL_EXAM_2', label: 'Ujian Akhir Gel 2' },
   ];
 
-  // Set initial values from URL params
+  // Fetch approved students when assessment type is selected
   useEffect(() => {
-    const classIdParam = searchParams.get('classId');
-    const assessmentTypeParam = searchParams.get('assessmentType');
-    
-    if (classIdParam) {
-      setSelectedClass(classIdParam);
+    if (selectedClass && selectedAssessmentType) {
+      fetchApprovedStudents(selectedClass, selectedAssessmentType);
+    } else {
+      setApprovedStudents(new Set());
     }
-    if (assessmentTypeParam) {
-      setSelectedAssessmentType(assessmentTypeParam);
+  }, [selectedClass, selectedAssessmentType]);
+
+  const fetchApprovedStudents = async (classId: string, assessmentType: string) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) return;
+
+      const response = await fetch(
+        `/api/wali-kelas/nilai-approve?classId=${classId}&limit=1000`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const nilaiApproves = data.data?.data || [];
+        
+        // Filter by assessment type and get unique student IDs
+        const studentIds: Set<string> = new Set(
+          nilaiApproves
+            .filter((n: any) => n.assessmentType === assessmentType)
+            .map((n: any) => n.studentId)
+        );
+        
+        setApprovedStudents(studentIds);
+        console.log(`[RaportArab] Found ${studentIds.size} approved students for ${assessmentType}`);
+      }
+    } catch (err) {
+      console.error('Error fetching approved students:', err);
     }
-  }, [searchParams]);
+  };
 
   useEffect(() => {
     fetchClasses();
@@ -162,7 +192,10 @@ function RaportArabPageContent() {
         student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.studentNo.toLowerCase().includes(searchQuery.toLowerCase());
 
-      return matchSearch;
+      // If assessment type is selected, only show students who are approved for that assessment type
+      const matchAssessment = !selectedAssessmentType || approvedStudents.has(student.id);
+
+      return matchSearch && matchAssessment;
     });
 
     // Sort by noUrut (ordinal number)
