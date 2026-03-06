@@ -193,23 +193,63 @@ export async function POST(request: NextRequest) {
       ],
     });
 
-    // For each unique (assessmentType, gender) combo, assign numbers
+    // Get unique assessment types from grades
+    const uniqueAssessmentTypesInGrades = [...new Set(grades.map((g) => g.assessmentType))];
+
+    // Helper function to extract number from nomorRaport (e.g., "UTS1-25/26-PA-0021" → 21)
+    const extractNomorFromRaport = (nomorRaport: string | null | undefined): number => {
+      if (!nomorRaport) return 0;
+      const parts = nomorRaport.split('-');
+      const lastPart = parts[parts.length - 1];
+      const num = parseInt(lastPart, 10);
+      return isNaN(num) ? 0 : num;
+    };
+
+    // Initialize counters by querying existing max nomorRaport for each (assessmentType, gender) combo
+    // This ensures continuous numbering across classes
     const genderCounters: { [key: string]: number } = {}; // key = `${assessmentType}-${gender}`
 
+    for (const assessmentType of uniqueAssessmentTypesInGrades) {
+      for (const genderCode of ['PA', 'PI']) {
+        const counterKey = `${assessmentType}-${genderCode}`;
+
+        // Query max existing nomorRaport for this (assessmentType, gender) combo
+        const maxExisting = await prisma.nilaiApprove.findFirst({
+          where: {
+            assessmentType: assessmentType,
+            nomorRaport: {
+              contains: `-${genderCode}-`,
+            },
+          },
+          select: { nomorRaport: true },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        // Extract the number and start from max + 1
+        const maxNumber = extractNomorFromRaport(maxExisting?.nomorRaport);
+        genderCounters[counterKey] = maxNumber + 1;
+
+        console.log(`[ApproveGrades] Counter ${counterKey}: starting from ${genderCounters[counterKey]} (max existing was ${maxNumber})`);
+      }
+    }
+
+    // Now process students and assign nomorRaport
+    // IMPORTANT: Only assign nomorRaport for students who actually have grades in this subject
     for (const student of studentsInClass) {
       // Get unique assessmentTypes for this student in the grades
       const studentGrades = grades.filter((g) => g.studentId === student.id);
+      
+      // Skip if student has no grades in this subject
+      if (studentGrades.length === 0) {
+        console.log(`[ApproveGrades] Skipping nomorRaport assignment for student ${student.id} (no grades in this subject)`);
+        continue;
+      }
+      
       const uniqueAssessmentTypes = [...new Set(studentGrades.map((g) => g.assessmentType))];
 
       for (const assessmentType of uniqueAssessmentTypes) {
         const genderCode = student.gender === 'MALE' ? 'PA' : 'PI';
         const counterKey = `${assessmentType}-${genderCode}`;
-
-        if (!genderCounters[counterKey]) {
-          genderCounters[counterKey] = 1;
-        } else {
-          genderCounters[counterKey]++;
-        }
 
         const assessmentCode = getAssessmentTypeCode(assessmentType);
         const nomorUrut = String(genderCounters[counterKey]).padStart(4, '0');
@@ -218,6 +258,9 @@ export async function POST(request: NextRequest) {
 
         const nomorRaport = `${assessmentCode}-${tahunAjaranFormatted}-${genderCode}-${nomorUrut}`;
         nomorRaportMap[`${assessmentType}-${student.id}`] = nomorRaport;
+
+        // Increment counter for next student
+        genderCounters[counterKey]++;
       }
     }
 
@@ -232,26 +275,56 @@ export async function POST(request: NextRequest) {
       const grade = grades[i];
       
       try {
-        // Check if already approved (avoid duplicates)
-        // Use subjectId AND classId to match the initial duplicate check logic
-        const existingApproval = await prisma.nilaiApprove.findFirst({
+        // Check if this exact subject+student+assessmentType combination already exists
+        // (to avoid duplicates for the same subject)
+        const existingForThisSubject = await prisma.nilaiApprove.findFirst({
           where: {
             studentId: grade.studentId,
             subjectId: validatedData.subjectId,
             assessmentType: grade.assessmentType,
             classId: validatedData.classId,
           },
+          select: {
+            id: true,
+            nomorRaport: true,
+          },
         });
 
-        if (existingApproval) {
-          skippedGrades.push(grade.studentId);
-          continue;
+        // Check if student already has a nomorRaport for this assessment type (from ANY subject)
+        // This is to reuse the same nomorRaport across different subjects for same assessment type
+        const existingNomorRaportForAssessment = await prisma.nilaiApprove.findFirst({
+          where: {
+            studentId: grade.studentId,
+            assessmentType: grade.assessmentType,
+            classId: validatedData.classId,
+            // NO subjectId filter - we want to find from ANY subject
+          },
+          select: {
+            nomorRaport: true,
+          },
+        });
+
+        // Determine nomorRaport: reuse if exists for this assessmentType, or generate new
+        let finalNomorRaport: string;
+        if (existingNomorRaportForAssessment?.nomorRaport) {
+          // Reuse existing nomorRaport from same assessment type (different subject OK)
+          finalNomorRaport = existingNomorRaportForAssessment.nomorRaport;
+          console.log(`[ApproveGrades] Reusing nomorRaport for student ${grade.studentId} (assessment ${grade.assessmentType}): ${finalNomorRaport}`);
+        } else {
+          // Generate new nomorRaport only if no approval for this assessmentType exists
+          const mapKey = `${grade.assessmentType}-${grade.studentId}`;
+          const autoGeneratedNomorRaport = nomorRaportMap[mapKey] || '';
+          finalNomorRaport = validatedData.nomorRaport || autoGeneratedNomorRaport;
+          console.log(`[ApproveGrades] Generated new nomorRaport for student ${grade.studentId}: ${finalNomorRaport}`);
         }
-        
-        // Get nomorRaport from map or use provided one
-        const mapKey = `${grade.assessmentType}-${grade.studentId}`;
-        const autoGeneratedNomorRaport = nomorRaportMap[mapKey] || '';
-        const finalNomorRaport = validatedData.nomorRaport || autoGeneratedNomorRaport;
+
+        // If this exact subject+student combo was already approved, delete old record
+        if (existingForThisSubject) {
+          await prisma.nilaiApprove.delete({
+            where: { id: existingForThisSubject.id },
+          });
+          console.log(`[ApproveGrades] Deleted old approval record for student ${grade.studentId} (subject: ${validatedData.subjectId})`);
+        }
 
         // Calculate averageStudent - rata-rata nilai siswa across all subjects
         const studentAllGrades = await prisma.grade.findMany({
