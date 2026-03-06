@@ -444,62 +444,6 @@ export async function POST(request: NextRequest) {
         </style>
     </head>
     <body>
-        <!-- COVER PAGE -->
-        <div class="cover-page">
-            <!-- Frame Background -->
-            <div class="cover-frame">
-                ${bingkaiImageBase64 ? `<img src="data:image/png;base64,${bingkaiImageBase64}" alt="Frame" />` : ''}
-            </div>
-            
-            <!-- Cover Content -->
-            <div class="cover-content">
-                <!-- Logo Section -->
-                <div class="cover-logo-section">
-                    ${kmiLogoBase64 ? `<img src="data:image/jpeg;base64,${kmiLogoBase64}" alt="KMI Logo" />` : ''}
-                    ${mahadLogoBase64 ? `<img src="data:image/png;base64,${mahadLogoBase64}" alt="Mahad Logo" />` : ''}
-                </div>
-
-                <!-- Institution Header -->
-                <div class="cover-header-section">
-                    <div class="cover-institution-location">لاهات – سومطرة الجنوبية – اندونيسيا</div>
-                </div>
-
-                <!-- Title Section -->
-                <div class="cover-title-section">
-                    ${kasyfuImageBase64 ? `<img src="data:image/jpeg;base64,${kasyfuImageBase64}" alt="Kasyfu Title" class="cover-title-image" />` : '<div style="font-size: 32px; font-weight: bold; color: #1a1a1a; margin-bottom: 12px;">كشف الدرجات</div>'}
-                    <div class="cover-semester-info">للفصل الدراسي الثاني</div>
-                    <div class="cover-year-info">
-                        <div>عام ٢٠٢٥-٢٠٢٤ | ١٤٤٦ – ١٤٤٥</div>
-                    </div>
-                </div>
-
-                <!-- Student Information -->
-                <div class="cover-student-info">
-                    <div class="cover-info-row">
-                        <span class="cover-info-value"><strong>${student.name || '-'}</strong></span>
-                        <span class="cover-info-label">اسم الطالب</span>
-                    </div>
-                    <div class="cover-info-row">
-                        <span class="cover-info-value"><strong>${student.class || 'الفصل الأول'}</strong></span>
-                        <span class="cover-info-label">الفصل</span>
-                    </div>
-                    <div class="cover-info-row">
-                        <span class="cover-info-value"><strong>${student.studentNo || '-'}</strong></span>
-                        <span class="cover-info-label">رقم دفتر القيد</span>
-                    </div>
-                    <div class="cover-info-row">
-                        <span class="cover-info-value"><strong>LAHAT</strong></span>
-                        <span class="cover-info-label">البرنامج</span>
-                    </div>
-                </div>
-
-                <!-- Serial Number -->
-                <div class="cover-serial-section">
-                    <div class="cover-serial-box">${nomorRaport || '-'}</div>
-                </div>
-            </div>
-        </div>
-
         <!-- REPORT PAGE -->
         <div class="a4-page">
             <div class="watermark-bg">

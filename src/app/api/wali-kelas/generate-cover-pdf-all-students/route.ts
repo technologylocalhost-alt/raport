@@ -3,66 +3,167 @@ import puppeteer from 'puppeteer';
 import chromium from '@sparticuz/chromium';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { prisma } from '@/lib/db';
 
 export async function POST(request: NextRequest) {
   let browser = null;
   try {
-    console.log('[GenerateCoverPDF] Request received');
     const data = await request.json();
-    const { studentName, className, studentNo, raportNo, semesterLabel, schoolYear, schoolYearGregorian } = data;
+    const { classId, className, semesterLabel, schoolYear, schoolYearGregorian } = data;
 
-    console.log('[GenerateCoverPDF] Data received:', { studentName, className, studentNo, raportNo });
-
-    if (!studentName || !className) {
+    if (!classId) {
       return NextResponse.json(
-        { success: false, error: 'Data siswa atau kelas tidak lengkap' },
+        { success: false, error: 'Class ID tidak tersedia' },
         { status: 400 }
       );
     }
 
-    // Read images as base64
+    // Fetch all students in the class
+    const students = await prisma.student.findMany({
+      where: { classId },
+      orderBy: { studentNo: 'asc' },
+    });
+
+    if (students.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Tidak ada siswa dalam kelas ini' },
+        { status: 400 }
+      );
+    }
+
+    // Load images
     const publicPath = join(process.cwd(), 'public');
     let bingkaiBase64 = '';
-    let kmiBase64 = '';
-    let mahadBase64 = '';
-    let kashfuBase64 = '';
+    let kmiLogoBase64 = '';
+    let mahadLogoBase64 = '';
+    let kasyfuImageBase64 = '';
 
     try {
       const bingkaiPath = join(publicPath, 'bingkai.png');
-      bingkaiBase64 = readFileSync(bingkaiPath).toString('base64');
+      const bingkaiBuffer = readFileSync(bingkaiPath);
+      bingkaiBase64 = bingkaiBuffer.toString('base64');
     } catch (err) {
-      console.log('Bingkai image not found, continuing without it');
+      console.log('Bingkai not found');
     }
 
     try {
       const kmiPath = join(publicPath, 'KMI.jpg');
-      kmiBase64 = readFileSync(kmiPath).toString('base64');
+      const kmiBuffer = readFileSync(kmiPath);
+      kmiLogoBase64 = kmiBuffer.toString('base64');
     } catch (err) {
-      console.log('KMI image not found, continuing without it');
+      console.log('KMI logo not found');
     }
 
     try {
       const mahadPath = join(publicPath, 'mahad.png');
-      mahadBase64 = readFileSync(mahadPath).toString('base64');
+      const mahadBuffer = readFileSync(mahadPath);
+      mahadLogoBase64 = mahadBuffer.toString('base64');
     } catch (err) {
-      console.log('Mahad image not found, continuing without it');
+      console.log('Mahad logo not found');
     }
 
     try {
-      const kashfuPath = join(publicPath, 'kasyfu.jpg');
-      kashfuBase64 = readFileSync(kashfuPath).toString('base64');
+      const kasyfuPath = join(publicPath, 'kasyfu.jpg');
+      const kasyfuBuffer = readFileSync(kasyfuPath);
+      kasyfuImageBase64 = kasyfuBuffer.toString('base64');
     } catch (err) {
-      console.log('Kasyfu image not found, continuing without it');
+      console.log('Kasyfu image not found');
     }
 
-    // Generate HTML matching the preview page
+    // Generate HTML with all student covers
+    let allCoversHTML = '';
+
+    for (const student of students) {
+      // Fetch nomorRaport from database for this student
+      let nomorRaport = '-';
+      try {
+        const nilaiApprove = await prisma.nilaiApprove.findFirst({
+          where: {
+            studentId: student.id,
+            classId: classId,
+          },
+          select: {
+            nomorRaport: true,
+          },
+        });
+        
+        if (nilaiApprove?.nomorRaport) {
+          nomorRaport = nilaiApprove.nomorRaport;
+        }
+      } catch (err) {
+        console.log(`Could not fetch nomorRaport for student ${student.id}:`, err);
+      }
+      allCoversHTML += `
+        <div class="cover-page">
+          <!-- Frame Background -->
+          <div class="cover-frame">
+            ${bingkaiBase64 ? `<img src="data:image/png;base64,${bingkaiBase64}" alt="Frame" />` : ''}
+          </div>
+
+          <!-- Cover Content -->
+          <div class="cover-content">
+            <!-- Logo Section -->
+            <div class="cover-logo-section">
+              ${kmiLogoBase64 ? `<img src="data:image/jpeg;base64,${kmiLogoBase64}" alt="KMI Logo" class="cover-logo-kmi" />` : ''}
+              ${mahadLogoBase64 ? `<img src="data:image/png;base64,${mahadLogoBase64}" alt="Mahad Logo" class="cover-logo-mahad" />` : ''}
+            </div>
+
+            <!-- Institution Header -->
+            <div class="cover-header-section">
+              <div class="cover-institution-location">لاهات – سومطرة الجنوبية – اندونيسيا</div>
+            </div>
+
+            <!-- Title Section -->
+            <div class="cover-title-section">
+              <div style="display: flex; justify-content: center;">
+                ${kasyfuImageBase64 ? `<img src="data:image/jpeg;base64,${kasyfuImageBase64}" alt="Kasyfu Title" class="cover-title-image" />` : ''}
+              </div>
+              <div class="cover-semester-info">${semesterLabel || 'للفصل الدراسي الثاني'}</div>
+              <div class="cover-year-info">
+                <div>${schoolYear || 'عام ٢٠٢٥-٢٠٢٤'} ${schoolYearGregorian ? `| ${schoolYearGregorian}` : '| ١٤٤٦ – ١٤٤٥'}</div>
+              </div>
+            </div>
+
+            <!-- Student Information -->
+            <div class="cover-student-info">
+              <div class="cover-info-row">
+                <span class="cover-info-value"><strong>${student.name}</strong></span>
+                <span class="cover-separator">:</span>
+                <span class="cover-info-label">اسم الطالب</span>
+              </div>
+              <div class="cover-info-row">
+                <span class="cover-info-value"><strong>${className}</strong></span>
+                <span class="cover-separator">:</span>
+                <span class="cover-info-label">الفصل</span>
+              </div>
+              <div class="cover-info-row">
+                <span class="cover-info-value"><strong>${student.studentNo}</strong></span>
+                <span class="cover-separator">:</span>
+                <span class="cover-info-label">رقم دفتر القيد</span>
+              </div>
+              <div class="cover-info-row">
+                <span class="cover-info-value"><strong>LAHAT</strong></span>
+                <span class="cover-separator">:</span>
+                <span class="cover-info-label">الدائرة</span>
+              </div>
+            </div>
+
+            <!-- Serial Number -->
+            <div class="cover-serial-section">
+              <div class="cover-serial-box">${nomorRaport}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     const htmlContent = `
       <!DOCTYPE html>
       <html lang="en">
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Sampul Raport</title>
+        <title>Sampul Raport - Semua Siswa</title>
         <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Noto+Naskh+Arabic:wght@400;700&display=swap" rel="stylesheet">
         <style>
           @import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Noto+Naskh+Arabic:wght@400;700&display=swap');
@@ -89,6 +190,7 @@ export async function POST(request: NextRequest) {
             position: relative;
             overflow: hidden;
             font-family: 'Traditional Arabic', 'Noto Naskh Arabic', 'Amiri', 'Arabic Typesetting', 'Arial Unicode MS', serif;
+            page-break-after: always;
           }
 
           .cover-frame {
@@ -262,66 +364,7 @@ export async function POST(request: NextRequest) {
         </style>
       </head>
       <body>
-        <div class="cover-page">
-          <!-- Frame Background -->
-          <div class="cover-frame">
-            ${bingkaiBase64 ? `<img src="data:image/png;base64,${bingkaiBase64}" alt="Frame" />` : ''}
-          </div>
-
-          <!-- Cover Content -->
-          <div class="cover-content">
-            <!-- Logo Section -->
-            <div class="cover-logo-section">
-              ${kmiBase64 ? `<img src="data:image/jpeg;base64,${kmiBase64}" alt="KMI Logo" class="cover-logo-kmi" />` : ''}
-              ${mahadBase64 ? `<img src="data:image/png;base64,${mahadBase64}" alt="Mahad Logo" class="cover-logo-mahad" />` : ''}
-            </div>
-
-            <!-- Institution Header -->
-            <div class="cover-header-section">
-              <div class="cover-institution-location">لاهات – سومطرة الجنوبية – اندونيسيا</div>
-            </div>
-
-            <!-- Title Section -->
-            <div class="cover-title-section">
-              <div style="display: flex; justify-content: center;">
-                ${kashfuBase64 ? `<img src="data:image/jpeg;base64,${kashfuBase64}" alt="Kasyfu Title" class="cover-title-image" />` : ''}
-              </div>
-              <div class="cover-semester-info">${semesterLabel || 'للفصل الدراسي الثاني'}</div>
-              <div class="cover-year-info">
-                <div>${schoolYear || 'عام ٢٠٢٥-٢٠٢٤'} ${schoolYearGregorian ? `| ${schoolYearGregorian}` : '| ١٤٤٦ – ١٤٤٥'}</div>
-              </div>
-            </div>
-
-            <!-- Student Information -->
-            <div class="cover-student-info">
-              <div class="cover-info-row">
-                <span class="cover-info-value"><strong>${studentName}</strong></span>
-                <span class="cover-separator">:</span>
-                <span class="cover-info-label">اسم الطالب</span>
-              </div>
-              <div class="cover-info-row">
-                <span class="cover-info-value"><strong>${className}</strong></span>
-                <span class="cover-separator">:</span>
-                <span class="cover-info-label">الفصل</span>
-              </div>
-              <div class="cover-info-row">
-                <span class="cover-info-value"><strong>${studentNo}</strong></span>
-                <span class="cover-separator">:</span>
-                <span class="cover-info-label">رقم دفتر القيد</span>
-              </div>
-              <div class="cover-info-row">
-                <span class="cover-info-value"><strong>LAHAT</strong></span>
-                <span class="cover-separator">:</span>
-                <span class="cover-info-label">الدائرة</span>
-              </div>
-            </div>
-
-            <!-- Serial Number -->
-            <div class="cover-serial-section">
-              <div class="cover-serial-box">${raportNo || '-'}</div>
-            </div>
-          </div>
-        </div>
+        ${allCoversHTML}
       </body>
       </html>
     `;
@@ -347,7 +390,7 @@ export async function POST(request: NextRequest) {
       '--disable-default-apps',
     ];
 
-    console.log('Launching browser for cover PDF');
+    console.log('Launching browser for all covers PDF');
     
     browser = await puppeteer.launch({
       args: launchArgs,
@@ -360,16 +403,15 @@ export async function POST(request: NextRequest) {
 
     // Set viewport for F4
     await page.setViewport({
-      width: 2480, // 215mm at 300 DPI
-      height: 3508, // 330mm at 300 DPI
+      width: 2480,
+      height: 3508,
       deviceScaleFactor: 1,
     });
 
-    console.log('[GenerateCoverPDF] Setting page content...');
-    // Set content
+    console.log('Setting page content...');
     await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
 
-    console.log('[GenerateCoverPDF] Generating PDF...');
+    console.log('Generating PDF...');
     const pdfBuffer = await page.pdf({
       width: '215mm',
       height: '330mm',
@@ -383,29 +425,29 @@ export async function POST(request: NextRequest) {
     });
 
     await browser.close();
-    console.log('[GenerateCoverPDF] PDF buffer size:', pdfBuffer.length);
+    console.log('PDF buffer size:', pdfBuffer.length);
 
     // Convert to base64
     const pdfBase64 = Buffer.from(pdfBuffer).toString('base64');
     const pdfDataUrl = `data:application/pdf;base64,${pdfBase64}`;
 
-    console.log('[GenerateCoverPDF] PDF generated successfully');
+    console.log('All covers PDF generated successfully');
     return NextResponse.json({
       success: true,
       pdf: pdfDataUrl,
-      fileName: `cover-${studentName.replace(/\s+/g, '-')}-${Date.now()}.pdf`,
+      fileName: `Sampul_Semua_${className.replace(/\s+/g, '_')}.pdf`,
     });
   } catch (error) {
-    console.error('[GenerateCoverPDF] Error:', error);
+    console.error('Error generating all covers PDF:', error);
     if (browser) {
       try {
         await browser.close();
       } catch (e) {
-        console.error('[GenerateCoverPDF] Error closing browser:', e);
+        console.error('Error closing browser:', e);
       }
     }
-    const errorMessage = error instanceof Error ? error.message : 'Gagal membuat PDF cover';
-    console.error('[GenerateCoverPDF] Returning error:', errorMessage);
+    const errorMessage = error instanceof Error ? error.message : 'Gagal membuat PDF sampul semua siswa';
+    console.error('Returning error:', errorMessage);
     return NextResponse.json(
       { success: false, error: errorMessage },
       { status: 500 }

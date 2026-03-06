@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Printer, Download, Eye } from 'lucide-react';
+import { ArrowLeft, Download } from 'lucide-react';
 
 interface Student {
   id: string;
@@ -85,27 +85,39 @@ function CoverPreviewContent() {
             
             // Fetch semester data if semesterId exists
             if (classDataJson.data.semesterId) {
-              const semesterResponse = await fetch(`/api/admin/semesters/${classDataJson.data.semesterId}`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (semesterResponse.ok) {
-                const semesterDataJson = await semesterResponse.json();
-                if (semesterDataJson.success) {
-                  setSemesterData(semesterDataJson.data);
+              try {
+                const semesterResponse = await fetch(`/api/admin/semesters/${classDataJson.data.semesterId}`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                if (semesterResponse.ok) {
+                  const semesterDataJson = await semesterResponse.json();
+                  if (semesterDataJson.success) {
+                    setSemesterData(semesterDataJson.data);
+                  }
+                } else {
+                  console.log('Semester fetch returned:', semesterResponse.status);
                 }
+              } catch (semErr) {
+                console.error('Error fetching semester:', semErr);
               }
             }
             
             // Fetch school year data if schoolYearId exists
             if (classDataJson.data.schoolYearId) {
-              const schoolYearResponse = await fetch(`/api/admin/school-years/${classDataJson.data.schoolYearId}`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (schoolYearResponse.ok) {
-                const schoolYearDataJson = await schoolYearResponse.json();
-                if (schoolYearDataJson.success) {
-                  setSchoolYearData(schoolYearDataJson.data);
+              try {
+                const schoolYearResponse = await fetch(`/api/admin/school-years/${classDataJson.data.schoolYearId}`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                if (schoolYearResponse.ok) {
+                  const schoolYearDataJson = await schoolYearResponse.json();
+                  if (schoolYearDataJson.success) {
+                    setSchoolYearData(schoolYearDataJson.data);
+                  }
+                } else {
+                  console.log('School year fetch returned:', schoolYearResponse.status);
                 }
+              } catch (syErr) {
+                console.error('Error fetching school year:', syErr);
               }
             }
           }
@@ -175,17 +187,6 @@ function CoverPreviewContent() {
     }
   };
 
-  const handleViewDetail = () => {
-    const params = new URLSearchParams({
-      classId: classId || '',
-      studentId: studentId || '',
-    });
-    if (assessmentType) {
-      params.append('assessmentType', assessmentType);
-    }
-    router.push(`/wali-kelas/raport-arab/detail?${params.toString()}`);
-  };
-
   const handleSeeAllStudents = () => {
     const params = new URLSearchParams();
     if (classId) {
@@ -205,11 +206,12 @@ function CoverPreviewContent() {
         return;
       }
 
-      const coverElement = document.querySelector('.cover-page');
-      if (!coverElement) {
-        alert('Elemen cover tidak ditemukan');
-        return;
-      }
+      console.log('Generate PDF dengan data:', {
+        student: student.name,
+        className: classData.name,
+        semester: semesterData?.semesterLabelArabic,
+        schoolYear: schoolYearData?.tahunAkademikArabic,
+      });
 
       const response = await fetch('/api/wali-kelas/generate-cover-pdf', {
         method: 'POST',
@@ -222,26 +224,92 @@ function CoverPreviewContent() {
           className: classData.name,
           studentNo: student.studentNo,
           raportNo: student.raportNo,
+          semesterLabel: semesterData?.semesterLabelArabic || 'للفصل الدراسي الثاني',
+          schoolYear: schoolYearData?.tahunAkademikArabic || 'عام ٢٠٢٥-٢٠٢٤',
+          schoolYearGregorian: schoolYearData?.year || '',
+        }),
+      });
+
+      console.log('[handleGeneratePDF] Response status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('[handleGeneratePDF] Error response:', errorData);
+        throw new Error(errorData.error || 'Gagal membuat PDF cover');
+      }
+
+      const result = await response.json();
+      console.log('[handleGeneratePDF] PDF generated successfully');
+      
+      if (!result.pdf) {
+        throw new Error('PDF data tidak diterima dari server');
+      }
+
+      // Download PDF
+      const link = document.createElement('a');
+      link.href = result.pdf;
+      link.download = result.fileName || 'cover.pdf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      console.log('[handleGeneratePDF] PDF downloaded successfully');
+    } catch (error) {
+      console.error('Error generating cover PDF:', error);
+      alert(`Gagal membuat PDF cover: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleDownloadAllCovers = async () => {
+    try {
+      if (!classId || !classData) {
+        alert('Data kelas tidak lengkap');
+        return;
+      }
+
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        alert('Sesi Anda telah berakhir. Silakan login kembali');
+        router.push('/login');
+        return;
+      }
+
+      const response = await fetch('/api/wali-kelas/generate-cover-pdf-all-students', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          classId,
+          className: classData.name,
+          semesterLabel: semesterData?.semesterLabelArabic || 'للفصل الدراسي الثاني',
+          schoolYear: schoolYearData?.tahunAkademikArabic || 'عام ٢٠٢٥-٢٠٢٤',
+          schoolYearGregorian: schoolYearData?.year || '',
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Gagal membuat PDF cover');
+        throw new Error(errorData.error || 'Gagal membuat PDF cover untuk semua siswa');
       }
 
-      const { pdf, fileName } = await response.json();
+      const result = await response.json();
+
+      if (!result.pdf) {
+        throw new Error('PDF data tidak diterima dari server');
+      }
 
       // Download PDF
       const link = document.createElement('a');
-      link.href = pdf;
-      link.download = fileName;
+      link.href = result.pdf;
+      link.download = result.fileName || 'cover-semua.pdf';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     } catch (error) {
-      console.error('Error generating cover PDF:', error);
-      alert(`Gagal membuat PDF cover: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Error downloading all covers:', error);
+      alert(`Gagal download cover semua siswa: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -440,57 +508,50 @@ function CoverPreviewContent() {
           background: transparent;
           padding: 0;
           width: 100%;
-          font-size: 13px;
-          margin: 0 auto 14mm auto;
+          font-family: 'Times New Roman', serif;
+          margin: 0 auto 8mm auto;
           max-width: 100%;
-          border: none;
-          border-radius: 0;
+          border-collapse: collapse;
+          direction: ltr;
+          display: grid;
+          grid-template-columns: auto 50px auto;
+          align-items: center;
+          justify-items: center;
+          gap: 0;
         }
 
         .cover-info-row {
-          display: flex;
-          width: 100%;
-          margin: 0;
-          padding: 8px 0;
-          border-bottom: none;
-          align-items: center;
-          direction: rtl;
-          justify-content: space-between;
+          display: contents;
         }
 
         .cover-info-label {
-          flex: 0 0 auto;
-          font-weight: 500;
-          text-align: left;
+          font-weight: bold;
+          text-align: right;
           color: #333;
-          font-size: 13px;
+          font-size: 22px;
+          padding: 10px;
           direction: rtl;
-          padding: 0;
-          vertical-align: middle;
-          margin-left: 16px;
-        }
-
-        .cover-info-row:last-child {
-          border-bottom: none;
+          justify-self: end;
         }
 
         .cover-info-value {
-          flex: 1;
           text-align: right;
-          font-weight: 600;
+          font-weight: bold;
           color: #1a1a1a;
-          font-size: 13px;
-          padding: 0;
-          vertical-align: middle;
-          white-space: normal;
-          direction: ltr;
+          font-size: 22px;
+          padding: 10px;
+          justify-self: end;
         }
-        
-        .cover-info-value::after {
-          content: ':';
-          margin: 0 8px;
+
+        .cover-separator {
+          text-align: center;
+          font-weight: 400;
           color: #333;
-          font-weight: 600;
+          font-size: 22px;
+          padding: 10px;
+          width: 100%;
+          direction: ltr;
+          justify-self: center;
         }
 
         .cover-serial-section {
@@ -669,17 +730,7 @@ function CoverPreviewContent() {
           </span>
         </div>
 
-        <div className="hidden md:block h-6 w-px bg-gray-300 ml-4"></div>
-        
-        <button
-          onClick={handleViewDetail}
-          className="flex items-center gap-1 md:gap-2 px-2 md:px-4 py-1 md:py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 md:ml-4 text-sm md:text-base whitespace-nowrap"
-          title="Lihat detail raport"
-        >
-          <Eye size={18} className="md:w-5 md:h-5" />
-          <span className="hidden md:inline">Detail</span>
-        </button>
-        
+
         <button
           onClick={handleGeneratePDF}
           className="flex items-center gap-1 md:gap-2 px-2 md:px-4 py-1 md:py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm md:text-base whitespace-nowrap"
@@ -688,14 +739,17 @@ function CoverPreviewContent() {
           <Download size={18} className="md:w-5 md:h-5" />
           <span className="hidden md:inline">PDF</span>
         </button>
-        
+
         <button
-          onClick={() => window.print()}
+          onClick={handleDownloadAllCovers}
           className="flex items-center gap-1 md:gap-2 px-2 md:px-4 py-1 md:py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm md:text-base whitespace-nowrap"
+          title="Download cover semua siswa sebagai PDF"
         >
-          <Printer size={18} className="md:w-5 md:h-5" />
-          <span className="hidden md:inline">Cetak</span>
+          <Download size={18} className="md:w-5 md:h-5" />
+          <span className="hidden md:inline">PDF Semua</span>
         </button>
+        
+
       </div>
 
       <div className="w-full" style={{ paddingTop: '20px' }}>
@@ -738,18 +792,22 @@ function CoverPreviewContent() {
               <div className="cover-student-info">
                 <div className="cover-info-row">
                   <span className="cover-info-value"><strong>{student.name}</strong></span>
+                  <span className="cover-separator">:</span>
                   <span className="cover-info-label">اسم الطالب</span>
                 </div>
                 <div className="cover-info-row">
                   <span className="cover-info-value"><strong>{classData?.name || 'الفصل الأول'}</strong></span>
+                  <span className="cover-separator">:</span>
                   <span className="cover-info-label">الفصل</span>
                 </div>
                 <div className="cover-info-row">
                   <span className="cover-info-value"><strong>{student.studentNo}</strong></span>
+                  <span className="cover-separator">:</span>
                   <span className="cover-info-label">رقم دفتر القيد</span>
                 </div>
                 <div className="cover-info-row">
                   <span className="cover-info-value"><strong>LAHAT</strong></span>
+                  <span className="cover-separator">:</span>
                   <span className="cover-info-label">الدائرة</span>
                 </div>
               </div>

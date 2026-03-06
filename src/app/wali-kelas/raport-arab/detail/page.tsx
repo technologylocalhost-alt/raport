@@ -717,6 +717,54 @@ function RaportArabDetailContent() {
     }
   };
 
+  const handleDownloadAllPDF = async () => {
+    try {
+      if (!classId || !reportData) {
+        alert('Data kelas tidak tersedia');
+        return;
+      }
+
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        alert('Sesi Anda telah berakhir');
+        return;
+      }
+
+      const response = await fetch('/api/wali-kelas/generate-pdf-all-students', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          classId,
+          semester: reportData.semester,
+          schoolYear: reportData.schoolYear,
+          assessmentType,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('API Error:', errorData);
+        throw new Error(errorData.error || 'Gagal membuat PDF semua siswa');
+      }
+
+      const { pdf, fileName } = await response.json();
+
+      // Download PDF
+      const link = document.createElement('a');
+      link.href = pdf;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error downloading all PDF:', error);
+      alert(`Gagal membuat PDF semua: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   const handlePreviousStudent = () => {
     if (currentStudentIndex > 0) {
       const previousStudent = allStudents[currentStudentIndex - 1];
@@ -1164,6 +1212,15 @@ function RaportArabDetailContent() {
             >
               <Download size={14} className="flex-shrink-0" />
               <span className="hidden sm:inline">PDF</span>
+            </button>
+
+            <button
+              onClick={handleDownloadAllPDF}
+              className="flex items-center gap-1 px-2 sm:px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium"
+              title="Download PDF semua siswa"
+            >
+              <Download size={14} className="flex-shrink-0" />
+              <span className="hidden sm:inline">PDF Semua</span>
             </button>
           </div>
         </div>
