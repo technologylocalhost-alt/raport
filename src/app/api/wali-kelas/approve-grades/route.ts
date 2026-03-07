@@ -9,9 +9,6 @@ const approveGradesSchema = z.object({
   subjectId: z.string().min(1, 'Subject ID is required'),
   classId: z.string().min(1, 'Class ID is required'),
   nomorRaport: z.string().optional(),
-  suluk: z.string().optional(),
-  muazobah: z.string().optional(),
-  nazofah: z.string().optional(),
 });
 
 type ApproveGradesInput = z.infer<typeof approveGradesSchema>;
@@ -385,9 +382,6 @@ export async function POST(request: NextRequest) {
             assessmentType: grade.assessmentType,
             notes: grade.notes,
             nomorRaport: finalNomorRaport,
-            suluk: validatedData.suluk || '',
-            muazobah: validatedData.muazobah || '',
-            nazofah: validatedData.nazofah || '',
             averageStudent: averageStudent > 0 ? averageStudent : null,
             averageSubject: averageSubject > 0 ? averageSubject : null,
             jumlahNilai: jumlahNilai > 0 ? jumlahNilai : null,

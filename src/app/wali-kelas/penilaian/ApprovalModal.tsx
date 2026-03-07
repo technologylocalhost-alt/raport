@@ -34,16 +34,10 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
   const [success, setSuccess] = useState('');
   const [selectedSubject, setSelectedSubject] = useState<SubjectApproval | null>(null);
   const [selectedClassName, setSelectedClassName] = useState<string>('');
-  const [formData, setFormData] = useState({
-    suluk: '',
-    muazobah: '',
-    nazofah: '',
-  });
 
   useEffect(() => {
     if (isOpen) {
       setSelectedSubject(null);
-      setFormData({ suluk: '', muazobah: '', nazofah: '' });
       // Jika ada selectedClass dari props, langsung set ke modal
       if (selectedClass) {
         setSelectedClassName(selectedClass);
@@ -176,9 +170,6 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
       const payload = {
         subjectId: subject.subjectId,
         classId: subject.classId,
-        ...(formData.suluk && { suluk: formData.suluk }),
-        ...(formData.muazobah && { muazobah: formData.muazobah }),
-        ...(formData.nazofah && { nazofah: formData.nazofah }),
       };
 
       console.log('[ApprovalModal] Sending approve request - Payload:', JSON.stringify(payload, null, 2));
@@ -224,7 +215,6 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
       
       setSuccess(`${approvedCount} penilaian telah disetujui dan disimpan`);
       setSelectedSubject(null);
-      setFormData({ suluk: '', muazobah: '', nazofah: '' });
       
       // Refresh list
       await fetchApprovableSubjects();
@@ -244,7 +234,6 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
 
   const handleClose = () => {
     setSelectedSubject(null);
-    setFormData({ suluk: '', muazobah: '', nazofah: '' });
     onClose();
   };
 
@@ -524,50 +513,7 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
                   </div>
                 ) : (
                   <>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-900 mb-2">
-                        Suluk (Perilaku)
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.suluk}
-                        onChange={(e) =>
-                          setFormData({ ...formData, suluk: e.target.value })
-                        }
-                        placeholder="Opsional"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm text-gray-900 placeholder-gray-500 bg-white"
-                      />
-                    </div>
 
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-900 mb-2">
-                        Muazobah
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.muazobah}
-                        onChange={(e) =>
-                          setFormData({ ...formData, muazobah: e.target.value })
-                        }
-                        placeholder="Opsional"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm text-gray-900 placeholder-gray-500 bg-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-900 mb-2">
-                        Nazofah
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.nazofah}
-                        onChange={(e) =>
-                          setFormData({ ...formData, nazofah: e.target.value })
-                        }
-                        placeholder="Opsional"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm text-gray-900 placeholder-gray-500 bg-white"
-                      />
-                    </div>
                   </>
                 )}
 
