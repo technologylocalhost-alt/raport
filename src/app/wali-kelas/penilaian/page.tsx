@@ -17,6 +17,9 @@ interface Grade {
   assessmentType: string;
   teacherName: string;
   isApproved?: boolean;
+  suluk?: string;
+  muazobah?: string;
+  nazofah?: string;
 }
 
 interface GradesSummary {
@@ -25,6 +28,9 @@ interface GradesSummary {
   studentNourut?: number;
   className: string;
   subject: string;
+  suluk?: string;
+  muazobah?: string;
+  nazofah?: string;
   [key: string]: string | number | undefined; // For dynamic assessment type columns
 }
 
@@ -235,8 +241,9 @@ export default function PenilaianPage() {
         classNameMap[c.id] = c.name || 'N/A';
       });
 
-      // Fetch approval data from NilaiApprove
+      // Fetch approval data from NilaiApprove - untuk mengetahui grade mana yang sudah di-approve
       const approvalSet = new Set<string>();
+      
       for (const classId of classIds) {
         try {
           const approvalResponse = await fetch(
@@ -250,9 +257,11 @@ export default function PenilaianPage() {
 
           if (approvalResponse.ok) {
             const approvalData = await approvalResponse.json();
-            const approvals = approvalData.data?.data || [];
+            const approvals = approvalData.data?.data || []; // Get the nested array
+            console.log(`[fetchGrades] Class approval status: ${approvals.length} records`);
+            
             approvals.forEach((approval: any) => {
-              // Create a key to identify approved grades: studentId-subjectId-assessmentType
+              // Create a key to identify approved grades: studentId-subjectId
               const key = `${approval.studentId}-${approval.subjectId}`;
               approvalSet.add(key);
             });
@@ -293,8 +302,15 @@ export default function PenilaianPage() {
               assessmentType: grade.assessmentType || 'UTS_1',
               teacherName: grade.teacherName || 'N/A',
               isApproved: approvalSet.has(key),
+              suluk: '', // Will be extracted from grades with subjectName 'AS-SULUK' in createSummary()
+              muazobah: '', // Will be extracted from grades with subjectName 'MUWAZOBAH' in createSummary()
+              nazofah: '', // Will be extracted from grades with subjectName 'NAZOFAH' in createSummary()
             };
           });
+          console.log(`[fetchGrades] Mapped ${mappedGrades.length} grades for class "${classNameMap[classId]}"`);
+          if (mappedGrades.length > 0) {
+            console.log('[fetchGrades] First mapped grade:', mappedGrades[0]);
+          }
           gradesList.push(...mappedGrades);
         }
       }
@@ -397,6 +413,44 @@ export default function PenilaianPage() {
       summaryMap[key][columnKey] = grade.score;
     });
 
+    // Extract suluk, muazobah, nazofah values from grades array (look for specific subject names)
+    Object.values(summaryMap).forEach((student) => {
+      // Find suluk from grades with subjectName 'AS-SULUK'
+      if (!student.suluk) {
+        const sulukGrades = grades.filter((g) => g.studentNo === student.studentNo);
+        const sulukGrade = sulukGrades.find(g => g.subjectName === 'AS-SULUK') || 
+                           sulukGrades.find(g => g.subjectName?.includes('SULUK'));
+        if (sulukGrade) {
+          student.suluk = sulukGrade.score;
+          console.log(`[createSummary] ✅ SULUK ${student.studentNo}: ${sulukGrade.score} (${sulukGrade.subjectName})`);
+        } else {
+          console.log(`[createSummary] ⚠️  No SULUK for ${student.studentNo}`);
+        }
+      }
+
+      // Find muazobah from grades with subjectName 'MUWAZOBAH'
+      if (!student.muazobah) {
+        const muazobahGrades = grades.filter((g) => g.studentNo === student.studentNo);
+        const muazobahGrade = muazobahGrades.find(g => g.subjectName === 'MUWAZOBAH') || 
+                              muazobahGrades.find(g => g.subjectName?.includes('MUAZOBAH'));
+        if (muazobahGrade) {
+          student.muazobah = muazobahGrade.score;
+          console.log(`[createSummary] ✅ MUAZOBAH ${student.studentNo}: ${muazobahGrade.score} (${muazobahGrade.subjectName})`);
+        }
+      }
+
+      // Find nazofah from grades with subjectName 'NAZOFAH'
+      if (!student.nazofah) {
+        const nazfahGrades = grades.filter((g) => g.studentNo === student.studentNo);
+        const nazfahGrade = nazfahGrades.find(g => g.subjectName === 'NAZOFAH') || 
+                            nazfahGrades.find(g => g.subjectName?.includes('NAZOFAH'));
+        if (nazfahGrade) {
+          student.nazofah = nazfahGrade.score;
+          console.log(`[createSummary] ✅ NAZOFAH ${student.studentNo}: ${nazfahGrade.score} (${nazfahGrade.subjectName})`);
+        }
+      }
+    });
+
     const result = Object.values(summaryMap).sort((a, b) => {
       // Sort by nomor urut first, null values at the end
       if (a.studentNourut && b.studentNourut) {
@@ -428,7 +482,7 @@ export default function PenilaianPage() {
     const allKeys = new Set<string>();
     gradesSummary.forEach((s) => {
       Object.keys(s).forEach((k) => {
-        if (!['studentName', 'studentNo', 'studentNourut', 'className', 'subject', 'average'].includes(k)) {
+        if (!['studentName', 'studentNo', 'studentNourut', 'className', 'subject', 'suluk', 'muazobah', 'nazofah', 'average'].includes(k)) {
           allKeys.add(k);
         }
       });
@@ -680,13 +734,21 @@ export default function PenilaianPage() {
                     <th className="sticky left-32 z-10 px-4 py-3 text-left font-semibold text-gray-700 text-sm bg-gray-50">NAMA</th>
                     <th className="sticky left-56 z-10 px-4 py-3 text-left font-semibold text-gray-700 text-sm bg-gray-50">KELAS</th>
                     <th className="sticky left-80 z-10 px-4 py-3 text-center font-semibold text-gray-700 text-sm bg-gray-50">STATUS</th>
-                    {/* Dynamic subject + assessment type columns */}
+                    {/* Dynamic subject + assessment type columns - exclude SULUK, MUAZOBAH, NAZOFAH subjects */}
                     {Array.from(
                       new Set(
                         gradesSummary.flatMap((s) =>
-                          Object.keys(s).filter(
-                            (k) => !['studentName', 'studentNo', 'studentNourut', 'className', 'subject'].includes(k)
-                          )
+                          Object.keys(s).filter((k) => {
+                            // Exclude special field names
+                            if (['studentName', 'studentNo', 'studentNourut', 'className', 'subject', 'suluk', 'muazobah', 'nazofah'].includes(k)) {
+                              return false;
+                            }
+                            // Exclude SULUK, MUAZOBAH, NAZOFAH subjects from dynamic columns
+                            if (k.includes('AS-SULUK') || k.includes('MUWAZOBAH') || k.includes('NAZOFAH')) {
+                              return false;
+                            }
+                            return true;
+                          })
                         )
                       )
                     )
@@ -699,6 +761,9 @@ export default function PenilaianPage() {
                     <th className="px-4 py-3 text-center font-semibold text-gray-700 text-sm bg-purple-50">JUMLAH NILAI</th>
                     <th className="px-4 py-3 text-center font-semibold text-gray-700 text-sm bg-blue-50">RATA-RATA SISWA</th>
                     <th className="px-4 py-3 text-center font-semibold text-gray-700 text-sm bg-green-50">MULAHAZOH</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700 text-sm bg-red-50">SULUK</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700 text-sm bg-orange-50">MUAZOBAH</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700 text-sm bg-yellow-50">NAZOFAH</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -737,13 +802,21 @@ export default function PenilaianPage() {
                             <span className="text-xs font-semibold text-amber-600">Menunggu</span>
                           )}
                         </td>
-                    {/* Dynamic score columns */}
+                    {/* Dynamic score columns - exclude SULUK, MUAZOBAH, NAZOFAH subjects */}
                     {Array.from(
                       new Set(
                         gradesSummary.flatMap((s) =>
-                          Object.keys(s).filter(
-                            (k) => !['studentName', 'studentNo', 'studentNourut', 'className', 'subject'].includes(k)
-                          )
+                          Object.keys(s).filter((k) => {
+                            // Exclude special field names
+                            if (['studentName', 'studentNo', 'studentNourut', 'className', 'subject', 'suluk', 'muazobah', 'nazofah'].includes(k)) {
+                              return false;
+                            }
+                            // Exclude SULUK, MUAZOBAH, NAZOFAH subjects from dynamic columns
+                            if (k.includes('AS-SULUK') || k.includes('MUWAZOBAH') || k.includes('NAZOFAH')) {
+                              return false;
+                            }
+                            return true;
+                          })
                         )
                       )
                     )
@@ -765,6 +838,15 @@ export default function PenilaianPage() {
                     <td className="px-4 py-3 text-center font-semibold text-gray-900 text-sm bg-green-50">
                       {getMulahazoh(getStudentAverage(row))}
                     </td>
+                    <td className="px-4 py-3 text-center text-gray-900 text-sm bg-red-50">
+                      {row.suluk || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-center text-gray-900 text-sm bg-orange-50">
+                      {row.muazobah || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-center text-gray-900 text-sm bg-yellow-50">
+                      {row.nazofah || '—'}
+                    </td>
                     </tr>
                   );
                 })}
@@ -774,13 +856,19 @@ export default function PenilaianPage() {
                     RATA-RATA MATA PELAJARAN:
                   </td>
                   {(() => {
-                    // Get all unique columns
+                    // Get all unique columns - exclude SULUK, MUAZOBAH, NAZOFAH subjects
                     const allColumns = Array.from(
                       new Set(
                         gradesSummary.flatMap((s) =>
-                          Object.keys(s).filter(
-                            (k) => !['studentName', 'studentNo', 'studentNourut', 'className', 'subject'].includes(k)
-                          )
+                          Object.keys(s).filter((k) => {
+                            if (['studentName', 'studentNo', 'studentNourut', 'className', 'subject', 'suluk', 'muazobah', 'nazofah'].includes(k)) {
+                              return false;
+                            }
+                            if (k.includes('AS-SULUK') || k.includes('MUWAZOBAH') || k.includes('NAZOFAH')) {
+                              return false;
+                            }
+                            return true;
+                          })
                         )
                       )
                     ).sort();
@@ -829,9 +917,15 @@ export default function PenilaianPage() {
                       const allColumns = Array.from(
                         new Set(
                           gradesSummary.flatMap((s) =>
-                            Object.keys(s).filter(
-                              (k) => !['studentName', 'studentNo', 'studentNourut', 'className', 'subject'].includes(k)
-                            )
+                            Object.keys(s).filter((k) => {
+                              if (['studentName', 'studentNo', 'studentNourut', 'className', 'subject', 'suluk', 'muazobah', 'nazofah'].includes(k)) {
+                                return false;
+                              }
+                              if (k.includes('AS-SULUK') || k.includes('MUWAZOBAH') || k.includes('NAZOFAH')) {
+                                return false;
+                              }
+                              return true;
+                            })
                           )
                         )
                       );
@@ -887,9 +981,15 @@ export default function PenilaianPage() {
                         {Array.from(
                           new Set(
                             gradesSummary.flatMap((s) =>
-                              Object.keys(s).filter(
-                                (k) => !['studentName', 'studentNo', 'studentNourut', 'className', 'subject'].includes(k)
-                              )
+                              Object.keys(s).filter((k) => {
+                                if (['studentName', 'studentNo', 'studentNourut', 'className', 'subject', 'suluk', 'muazobah', 'nazofah'].includes(k)) {
+                                  return false;
+                                }
+                                if (k.includes('AS-SULUK') || k.includes('MUWAZOBAH') || k.includes('NAZOFAH')) {
+                                  return false;
+                                }
+                                return true;
+                              })
                             )
                           )
                         )
@@ -915,6 +1015,18 @@ export default function PenilaianPage() {
                         <div className="flex justify-between items-center">
                           <span className="text-sm font-semibold text-gray-700">Mulahazoh</span>
                           <span className="text-lg font-bold text-gray-900">{getMulahazoh(getStudentAverage(row))}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-semibold text-gray-700">Suluk</span>
+                          <span className="text-lg font-bold text-gray-900">{row.suluk || '—'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-semibold text-gray-700">Muazobah</span>
+                          <span className="text-lg font-bold text-gray-900">{row.muazobah || '—'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-semibold text-gray-700">Nazofah</span>
+                          <span className="text-lg font-bold text-gray-900">{row.nazofah || '—'}</span>
                         </div>
                       </div>
                     </div>
