@@ -324,6 +324,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Calculate averageStudent - rata-rata nilai siswa across all subjects
+        // EXCLUDING suluk, muazobah, nazofah
         const studentAllGrades = await prisma.grade.findMany({
           where: {
             studentId: grade.studentId,
@@ -331,13 +332,21 @@ export async function POST(request: NextRequest) {
           },
           include: {
             competency: true,
+            subject: true,
           },
         });
 
         let averageStudent = 0;
         let jumlahNilai = 0;
         if (studentAllGrades.length > 0) {
-          const numericScores = studentAllGrades
+          // Filter out suluk, muazobah, nazofah from calculation
+          const excludedSubjects = ['SULUK', 'AS-SULUK', 'MUAZOBAH', 'MUWAZOBAH', 'NAZOFAH', 'NAZOFOH'];
+          const filteredGrades = studentAllGrades.filter((g) => {
+            const subjectName = g.subject?.name || '';
+            return !excludedSubjects.some(excluded => subjectName.toUpperCase().includes(excluded));
+          });
+
+          const numericScores = filteredGrades
             .map((g) => {
               const numScore = parseFloat(g.score);
               return isNaN(numScore) ? 0 : numScore;
