@@ -548,7 +548,7 @@ export async function POST(request: NextRequest) {
                                 ${ttdBase64 ? `<div style="margin: 5px auto; text-align: center; display: flex; justify-content: center; position: relative; z-index: 10;"><img src="data:image/png;base64,${ttdBase64}" style="width: 200px; height: auto;" /></div>` : ''}
                                 <div style="border-top: 1px solid #000; margin-top: 5px; padding-top: 8px;"></div>
                                 <div style="margin-top: 8px; font-size: 12px;">
-                                    الأستاذ محمد رومي أوكتاريوس،
+                                    الأستاذ محمد رومي أوكتاريوس، LC
                                 </div>
                             </td>
                             <td style="width: 33%; text-align: center; padding: 8px; border: 1px solid #000; font-size: 12px; vertical-align: top;">

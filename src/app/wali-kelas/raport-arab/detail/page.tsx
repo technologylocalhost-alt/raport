@@ -1396,7 +1396,7 @@ function RaportArabDetailContent() {
               
               <div style={{ borderTop: '1px solid #000', marginTop: '5px', paddingTop: '8px' }}></div>
               <div style={{ marginTop: '2px', fontSize: '12px' }}>
-              الأستاذ محمد رومي أوكتاريوس،
+              الأستاذ محمد رومي أوكتاريوس، LC
               </div>
               </td>
 
