@@ -194,9 +194,18 @@ export async function POST(request: NextRequest) {
         const firstGrade = nilaiApproves[0];
         if (firstGrade.mulahazoh) mulahazoh = firstGrade.mulahazoh;
         if (firstGrade.nomorRaport) nomorRaport = firstGrade.nomorRaport;
-        if (firstGrade.suluk) suluk = firstGrade.suluk;
-        if (firstGrade.muazobah) muazobah = firstGrade.muazobah;
-        if (firstGrade.nazofah) nazofah = firstGrade.nazofah;
+        
+        // Get suluk, muazobah, nazofah from specific subject codes
+        nilaiApproves.forEach((nilai: any) => {
+          const subjectCode = nilai.subject?.code || '';
+          if ((subjectCode === 'SLK_A' || subjectCode === 'SLK_B') && nilai.score) {
+            suluk = String(nilai.score);
+          } else if ((subjectCode === 'MWZ_A' || subjectCode === 'MWZ_B') && nilai.score) {
+            muazobah = String(nilai.score);
+          } else if ((subjectCode === 'NZF_A' || subjectCode === 'NZF_B') && nilai.score) {
+            nazofah = String(nilai.score);
+          }
+        });
       }
 
       // Build subject scores from NilaiApprove
@@ -215,6 +224,7 @@ export async function POST(request: NextRequest) {
           
           return {
             subject: subject.name,
+            subjectCode: subject.code,
             subjectArabicName: subject.nameArabic || subject.name,
             averageScore,
             rawScore,
@@ -223,6 +233,7 @@ export async function POST(request: NextRequest) {
         } else {
           return {
             subject: subject.name,
+            subjectCode: subject.code,
             subjectArabicName: subject.nameArabic || subject.name,
             averageScore: 0,
             rawScore: 0,
@@ -231,9 +242,13 @@ export async function POST(request: NextRequest) {
         }
       });
 
+      // Filter out excluded subject codes
+      const excludedSubjectCodes = ['MWZ_A', 'NZF_A', 'SLK_A', 'MWZ_B', 'NZF_B', 'SLK_B'];
+      const filteredSubjectScores = subjectScores.filter((s: any) => !excludedSubjectCodes.includes(s.subjectCode));
+
       // Build subjects table HTML
-      const rightColumn = subjectScores.slice(0, Math.ceil(subjectScores.length / 2));
-      const leftColumn = subjectScores.slice(Math.ceil(subjectScores.length / 2));
+      const rightColumn = filteredSubjectScores.slice(0, Math.ceil(filteredSubjectScores.length / 2));
+      const leftColumn = filteredSubjectScores.slice(Math.ceil(filteredSubjectScores.length / 2));
       const maxRows = Math.max(rightColumn.length, leftColumn.length);
 
       let subjectsHTML = '';
@@ -281,7 +296,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Calculate totals
-      const approvedScores = subjectScores.filter(s => s.hasApproval);
+      const approvedScores = filteredSubjectScores.filter(s => s.hasApproval);
       const avgScore = approvedScores.length > 0 
         ? (approvedScores.reduce((sum, s) => sum + s.averageScore, 0) / approvedScores.length).toFixed(1)
         : 0;

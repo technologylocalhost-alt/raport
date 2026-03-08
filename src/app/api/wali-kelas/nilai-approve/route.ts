@@ -146,6 +146,7 @@ export async function GET(request: NextRequest) {
       studentNo: grade.student.studentNo,
       subjectId: grade.subjectId,
       subjectName: grade.subject.name,
+      subjectCode: grade.subject.code,
       competencyId: grade.competencyId || '',
       competencyName: grade.competency?.name || '',
       levelId: grade.levelId,

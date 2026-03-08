@@ -203,6 +203,8 @@ function RaportArabDetailContent() {
 
   // Helper: Process subject scores with approved grades
   const processSubjectScores = (approvedGrades: any[], subjects: any[]): SubjectScore[] => {
+    // Subject codes to exclude from the report
+    const excludedSubjectCodes = ['MWZ_A', 'NZF_A', 'SLK_A', 'MWZ_B', 'NZF_B', 'SLK_B'];
     
     // Create a map of approved grades by subject ID
     const gradesMap: { [key: string]: any } = {};
@@ -216,6 +218,12 @@ function RaportArabDetailContent() {
     subjects.forEach((subject: any) => {
       const subjectId = subject.subjectId || subject.id;
       const subjectCode = subject.subject?.code || subject.code || '';
+      
+      // Skip excluded subject codes
+      if (excludedSubjectCodes.includes(subjectCode)) {
+        return;
+      }
+      
       const approved = gradesMap[subjectId];
       
       // Handle both master subjects (flat) and nested subjects
@@ -603,20 +611,18 @@ function RaportArabDetailContent() {
         subjectScoresCount: subjectScores.length,
       });
 
-      // Get mulahazoh, nomorRaport, suluk, muazobah, nazofah from first approved grade (should be consistent across all subjects for same student)
+      // Get mulahazoh, nomorRaport, suluk, muazobah, nazofah from approved grades
       let mulahazoh = '';
       let nomorRaport = '';
       let suluk = '';
       let muazobah = '';
       let nazofah = '';
+      
       if (approvedGrades.length > 0) {
         const firstGrade = approvedGrades[0];
         console.log('[Raport] First approved grade:', firstGrade);
         console.log('[Raport] First grade mulahazoh from DB:', firstGrade.mulahazoh);
         console.log('[Raport] First grade nomorRaport:', firstGrade.nomorRaport);
-        console.log('[Raport] First grade suluk:', firstGrade.suluk);
-        console.log('[Raport] First grade muazobah:', firstGrade.muazobah);
-        console.log('[Raport] First grade nazofah:', firstGrade.nazofah);
         
         if (firstGrade.mulahazoh) {
           mulahazoh = firstGrade.mulahazoh;
@@ -624,15 +630,23 @@ function RaportArabDetailContent() {
         if (firstGrade.nomorRaport) {
           nomorRaport = firstGrade.nomorRaport;
         }
-        if (firstGrade.suluk) {
-          suluk = firstGrade.suluk;
-        }
-        if (firstGrade.muazobah) {
-          muazobah = firstGrade.muazobah;
-        }
-        if (firstGrade.nazofah) {
-          nazofah = firstGrade.nazofah;
-        }
+        
+        // Get suluk, muazobah, nazofah from specific subject codes
+        approvedGrades.forEach((grade: any) => {
+          const subjectCode = grade.subjectCode || grade.subject?.code || '';
+          console.log('[Raport] Processing grade with subject code:', subjectCode, 'score:', grade.score);
+          
+          if ((subjectCode === 'SLK_A' || subjectCode === 'SLK_B') && grade.score) {
+            suluk = String(grade.score);
+            console.log('[Raport] Suluk from subject code:', suluk);
+          } else if ((subjectCode === 'MWZ_A' || subjectCode === 'MWZ_B') && grade.score) {
+            muazobah = String(grade.score);
+            console.log('[Raport] Muazobah from subject code:', muazobah);
+          } else if ((subjectCode === 'NZF_A' || subjectCode === 'NZF_B') && grade.score) {
+            nazofah = String(grade.score);
+            console.log('[Raport] Nazofah from subject code:', nazofah);
+          }
+        });
       }
       
       const fallbackMulahazoh = 'ضعيف جدًا';

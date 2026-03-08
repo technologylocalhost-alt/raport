@@ -82,9 +82,13 @@ export async function POST(request: NextRequest) {
       return score.toFixed(1);
     };
 
+    // Filter out excluded subject codes
+    const excludedSubjectCodes = ['MWZ_A', 'NZF_A', 'SLK_A', 'MWZ_B', 'NZF_B', 'SLK_B'];
+    const filteredSubjectScores = subjectScores.filter((s: any) => !excludedSubjectCodes.includes(s.subjectCode));
+
     // Generate HTML content
-    const rightColumn = subjectScores.slice(0, Math.ceil(subjectScores.length / 2));
-    const leftColumn = subjectScores.slice(Math.ceil(subjectScores.length / 2));
+    const rightColumn = filteredSubjectScores.slice(0, Math.ceil(filteredSubjectScores.length / 2));
+    const leftColumn = filteredSubjectScores.slice(Math.ceil(filteredSubjectScores.length / 2));
     const maxRows = Math.max(rightColumn.length, leftColumn.length);
 
     let subjectsHTML = '';
@@ -131,9 +135,9 @@ export async function POST(request: NextRequest) {
       subjectsHTML += '</tr>';
     }
 
-    const avgScore = (subjectScores.reduce((sum: number, s: any) => sum + (s.hasApproval ? s.averageScore : 0), 0) / subjectScores.filter((s: any) => s.hasApproval).length).toFixed(1);
-    const totalScoreValue = subjectScores.filter((s: any) => s.hasApproval).reduce((sum: number, s: any) => sum + s.rawScore, 0);
-    const averageRawScoreValue = (subjectScores.filter((s: any) => s.hasApproval).reduce((sum: number, s: any) => sum + s.rawScore, 0) / subjectScores.filter((s: any) => s.hasApproval).length);
+    const avgScore = (filteredSubjectScores.reduce((sum: number, s: any) => sum + (s.hasApproval ? s.averageScore : 0), 0) / filteredSubjectScores.filter((s: any) => s.hasApproval).length).toFixed(1);
+    const totalScoreValue = filteredSubjectScores.filter((s: any) => s.hasApproval).reduce((sum: number, s: any) => sum + s.rawScore, 0);
+    const averageRawScoreValue = (filteredSubjectScores.filter((s: any) => s.hasApproval).reduce((sum: number, s: any) => sum + s.rawScore, 0) / filteredSubjectScores.filter((s: any) => s.hasApproval).length);
     const totalScore = formatScore(totalScoreValue);
     const averageRawScore = formatScore(averageRawScoreValue);
 
