@@ -12,6 +12,7 @@ interface NormalizedRow {
   studentNo?: string;
   name?: string;
   nourut?: number | string;
+  gender?: string;
   email?: string;
   phone?: string;
   address?: string;
@@ -36,6 +37,7 @@ function normalizeRow(row: ImportRow): NormalizedRow {
   normalized.studentNo = columnMap['nomorinduk'] || columnMap['studentno'] || columnMap['nomor'];
   normalized.name = columnMap['nama'] || columnMap['name'];
   normalized.nourut = columnMap['nourut'] || columnMap['nomourut'] || columnMap['urut'];
+  normalized.gender = columnMap['jeniskelamin'] || columnMap['gender'] || 'MALE';
   normalized.email = columnMap['email'] || columnMap['surel'];
   normalized.phone = columnMap['telepon'] || columnMap['phone'] || columnMap['notelepon'];
   normalized.address = columnMap['alamat'] || columnMap['address'];
@@ -141,6 +143,16 @@ export async function POST(request: NextRequest) {
         const studentNo = row.studentNo?.toString().trim() || '';
         const name = row.name?.toString().trim() || '';
         const nourut = row.nourut ? parseInt(row.nourut.toString().trim()) : null;
+        let gender = row.gender?.toString().trim() || 'MALE';
+        // Normalize gender values - handle both English and Indonesian formats
+        const genderLower = gender.toLowerCase();
+        if (genderLower === 'perempuan' || gender === 'FEMALE') {
+          gender = 'FEMALE';
+        } else if (genderLower === 'laki-laki' || gender === 'MALE' || gender.toUpperCase() === 'MALE') {
+          gender = 'MALE';
+        } else {
+          gender = 'MALE'; // Default to MALE if unclear
+        }
         const email = row.email?.toString().trim() || '';
         const phone = row.phone?.toString().trim() || '';
         const address = row.address?.toString().trim() || '';
@@ -208,7 +220,7 @@ export async function POST(request: NextRequest) {
             birthDate,
             parentPhoneNo: parentPhoneNo || null,
             classId,
-            gender: 'MALE', // Default gender
+            gender,
           },
         });
 

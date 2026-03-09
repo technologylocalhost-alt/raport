@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
         'Nomor Induk': 'STD001',
         Nama: 'Contoh: Ahmad Riyandi',
         'No Urut': 1,
+        'Jenis Kelamin': 'Laki-laki',
         Email: 'ahmad@email.com',
         Telepon: '082123456789',
         Alamat: 'Jl. Contoh No. 123',
@@ -50,6 +51,7 @@ export async function GET(request: NextRequest) {
         'Nomor Induk': 'STD002',
         Nama: 'Contoh: Siti Nur Azizah',
         'No Urut': 2,
+        'Jenis Kelamin': 'Perempuan',
         Email: 'siti@email.com',
         Telepon: '082223456789',
         Alamat: 'Jl. Pendidikan No. 456',
@@ -67,6 +69,7 @@ export async function GET(request: NextRequest) {
       { wch: 15 }, // Nomor Induk
       { wch: 25 }, // Nama
       { wch: 10 }, // No Urut
+      { wch: 15 }, // Jenis Kelamin
       { wch: 20 }, // Email
       { wch: 15 }, // Telepon
       { wch: 30 }, // Alamat

@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
       'Nomor Induk': student.studentNo,
       Nama: student.name,
       'No Urut': student.nourut || '',
+      'Jenis Kelamin': student.gender === 'MALE' ? 'Laki-laki' : 'Perempuan',
       Email: student.email || '',
       Telepon: student.phone || '',
       Alamat: student.address || '',
@@ -88,6 +89,7 @@ export async function GET(request: NextRequest) {
       { wch: 15 }, // Nomor Induk
       { wch: 25 }, // Nama
       { wch: 10 }, // No Urut
+      { wch: 15 }, // Jenis Kelamin
       { wch: 20 }, // Email
       { wch: 15 }, // Telepon
       { wch: 30 }, // Alamat
