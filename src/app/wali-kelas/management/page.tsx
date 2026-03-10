@@ -643,7 +643,7 @@ export default function WaliKelasClassManagementPage() {
                 <Upload size={20} /> <span className="hidden sm:inline">Impor Data</span><span className="sm:hidden">Impor</span>
                 <input
                   type="file"
-                  accept=".csv"
+                  accept=".csv,.xlsx,.xls"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
@@ -892,7 +892,7 @@ export default function WaliKelasClassManagementPage() {
                 <Upload size={20} /> <span className="hidden sm:inline">Impor Data</span><span className="sm:hidden">Impor</span>
                 <input
                   type="file"
-                  accept=".csv"
+                  accept=".csv,.xlsx,.xls"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {

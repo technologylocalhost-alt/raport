@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import * as XLSX from 'xlsx';
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -27,7 +28,7 @@ async function verifyAdmin(req: NextRequest) {
 
 /**
  * GET /api/admin/classes/[id]/teachers/export
- * Export teachers as CSV
+ * Export teachers as Excel
  */
 export async function GET(
   request: NextRequest,
@@ -75,23 +76,36 @@ export async function GET(
       orderBy: [{ teacher: { name: 'asc' } }, { subject: { code: 'asc' } }],
     });
 
-    // Build CSV
-    const csv = [
-      'Nama Guru,Email,Kode Mata Pelajaran,Mata Pelajaran',
-      ...teachers.map(ct => [
-        ct.teacher.name,
-        ct.teacher.email,
-        ct.subject.code,
-        ct.subject.name,
-      ].join(',')),
-    ].join('\n');
+    // Create export data
+    const exportData = teachers.map(ct => ({
+      'Nama Guru': ct.teacher.name,
+      'Email': ct.teacher.email,
+      'Kode Mata Pelajaran': ct.subject.code,
+      'Mata Pelajaran': ct.subject.name,
+    }));
 
-    const fileName = `guru-pengajar-${classData.name}-${new Date().toISOString().split('T')[0]}.csv`;
+    // Create workbook
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Guru Pengajar');
 
-    return new NextResponse(csv, {
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 25 },
+      { wch: 25 },
+      { wch: 20 },
+      { wch: 25 },
+    ];
+
+    // Generate buffer
+    const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+
+    const fileName = `guru-pengajar-${classData.name}-${new Date().toISOString().split('T')[0]}.xlsx`;
+
+    return new NextResponse(buffer, {
       status: 200,
       headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': `attachment; filename="${fileName}"`,
       },
     });

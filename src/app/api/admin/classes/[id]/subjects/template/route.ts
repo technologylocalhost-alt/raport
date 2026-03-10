@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import * as XLSX from 'xlsx';
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -69,24 +70,69 @@ export async function GET(
       orderBy: { code: 'asc' },
     });
 
-    // Build CSV with template and examples
-    const csv = [
-      'Kode,Nama,Nama Arab,Jam Kredit,Deskripsi',
-      ...subjects.map(s => [
-        s.code,
-        s.name,
-        s.nameArabic || '',
-        s.creditHours || '',
-        s.description || '',
-      ].join(',')),
-    ].join('\n');
+    // Create template data
+    const templateData = [
+      {
+        'Kode': 'MTH01',
+        'Nama': 'Matematika',
+        'Nama Arab': 'الرياضيات',
+        'Jam Kredit': 4,
+        'Deskripsi': 'Pelajaran Matematika',
+      },
+      ...subjects.map(s => ({
+        'Kode': s.code,
+        'Nama': s.name,
+        'Nama Arab': s.nameArabic || '',
+        'Jam Kredit': s.creditHours || '',
+        'Deskripsi': s.description || '',
+      })),
+    ];
 
-    const fileName = `template-mata-pelajaran-${new Date().toISOString().split('T')[0]}.csv`;
+    // Create workbook
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Mata Pelajaran');
 
-    return new NextResponse(csv, {
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 12 },
+      { wch: 25 },
+      { wch: 25 },
+      { wch: 12 },
+      { wch: 30 },
+    ];
+
+    // Create a second sheet for instructions
+    const instructionData = [
+      ['PANDUAN IMPOR DATA MATA PELAJARAN'],
+      [''],
+      ['Kolom yang Wajib Diisi:'],
+      ['1. Kode - Kode unik untuk mata pelajaran'],
+      ['2. Nama - Nama lengkap mata pelajaran'],
+      [''],
+      ['Kolom Opsional:'],
+      ['1. Nama Arab - Nama mata pelajaran dalam bahasa Arab'],
+      ['2. Jam Kredit - Jumlah jam pelajaran (angka)'],
+      ['3. Deskripsi - Deskripsi singkat mata pelajaran'],
+      [''],
+      ['Catatan:'],
+      ['- Jangan menghapus baris header'],
+      ['- Kode harus unik untuk setiap mata pelajaran'],
+      ['- Gunakan format Excel (.xlsx) untuk impor'],
+    ];
+
+    const wsInstructions = XLSX.utils.aoa_to_sheet(instructionData);
+    XLSX.utils.book_append_sheet(wb, wsInstructions, 'Panduan');
+
+    // Generate buffer
+    const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+
+    const fileName = `template-mata-pelajaran-${new Date().toISOString().split('T')[0]}.xlsx`;
+
+    return new NextResponse(buffer, {
       status: 200,
       headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': `attachment; filename="${fileName}"`,
       },
     });

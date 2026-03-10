@@ -3,6 +3,7 @@ import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { verifyAccessToken } from '@/lib/auth/jwt';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import * as XLSX from 'xlsx';
 
 // Helper function to parse CSV row properly (handle quoted fields)
 function parseCSVRow(row: string): string[] {
@@ -33,6 +34,25 @@ function parseCSVRow(row: string): string[] {
   return result;
 }
 
+// Helper function to normalize column names
+function normalizeColumnName(name: string): string {
+  return name.toLowerCase().trim().replace(/\s+/g, '');
+}
+
+// Helper function to parse Excel file and return array of rows
+async function parseExcelFile(
+  file: File
+): Promise<{ data: Record<string, any>[], headers: string[] }> {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer);
+  const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+  const data = XLSX.utils.sheet_to_json(worksheet) as Record<string, any>[];
+
+  const headers = Object.keys(data[0] || {}).map(h => normalizeColumnName(h));
+
+  return { data, headers };
+}
+
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
   if (!authHeader?.startsWith('Bearer ')) {
@@ -58,7 +78,7 @@ async function verifyAdmin(req: NextRequest) {
 
 /**
  * POST /api/admin/classes/[id]/teachers/import
- * Import teachers from CSV
+ * Import teachers from Excel or CSV
  */
 export async function POST(
   request: NextRequest,
@@ -95,20 +115,52 @@ export async function POST(
       return errorResponse('No file provided', 400);
     }
 
-    const text = await file.text();
-    const lines = text.trim().split('\n');
+    const fileName = file.name.toLowerCase();
+    const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
 
-    if (lines.length < 2) {
-      return errorResponse('CSV file must contain at least a header row and one data row', 400);
+    let rows: any[] = [];
+
+    if (isExcel) {
+      // Parse Excel file
+      const { data, headers } = await parseExcelFile(file);
+      rows = data;
+
+      const emailHeaderIdx = headers.findIndex(h => h === 'email');
+      const subjectCodeHeaderIdx = headers.findIndex(h => h === 'kodematapalajaran' || h === 'kodematapelajaran');
+
+      if (emailHeaderIdx === -1 || subjectCodeHeaderIdx === -1) {
+        return errorResponse('Excel must contain "Email" and "Kode Mata Pelajaran" columns', 400);
+      }
+    } else {
+      // Parse CSV file
+      const text = await file.text();
+      const lines = text.trim().split('\n');
+
+      if (lines.length < 2) {
+        return errorResponse('CSV file must contain at least a header row and one data row', 400);
+      }
+
+      // Parse CSV header properly
+      const headers = parseCSVRow(lines[0]).map(h => h.toLowerCase());
+      const emailIndex = headers.indexOf('email');
+      const subjectCodeIndex = headers.indexOf('kode mata pelajaran');
+
+      if (emailIndex === -1 || subjectCodeIndex === -1) {
+        return errorResponse('CSV must contain "Email" and "Kode Mata Pelajaran" columns', 400);
+      }
+
+      // Convert CSV to array of objects
+      for (let i = 1; i < lines.length; i++) {
+        const values = parseCSVRow(lines[i]);
+        rows.push({
+          email: values[emailIndex],
+          kodematapalajaran: values[subjectCodeIndex],
+        });
+      }
     }
 
-    // Parse CSV header properly
-    const headers = parseCSVRow(lines[0]).map(h => h.toLowerCase());
-    const emailIndex = headers.indexOf('email');
-    const subjectCodeIndex = headers.indexOf('kode mata pelajaran');
-
-    if (emailIndex === -1 || subjectCodeIndex === -1) {
-      return errorResponse('CSV must contain "Email" and "Kode Mata Pelajaran" columns', 400);
+    if (rows.length === 0) {
+      return errorResponse('File must contain at least one data row', 400);
     }
 
     const results = {
@@ -118,10 +170,23 @@ export async function POST(
     };
 
     // Process each row
-    for (let i = 1; i < lines.length; i++) {
-      const values = parseCSVRow(lines[i]);
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      
+      let email = '';
+      let subjectCode = '';
 
-      if (!values[emailIndex] || !values[subjectCodeIndex]) {
+      if (isExcel) {
+        // Find email and subject code from row data
+        const keys = Object.keys(row);
+        email = row[keys.find(k => normalizeColumnName(k) === 'email') || ''];
+        subjectCode = row[keys.find(k => normalizeColumnName(k) === 'kodematapalajaran' || normalizeColumnName(k) === 'kodematapelajaran') || ''];
+      } else {
+        email = row.email;
+        subjectCode = row.kodematapalajaran;
+      }
+
+      if (!email || !subjectCode) {
         results.skipped++;
         continue;
       }
@@ -130,24 +195,24 @@ export async function POST(
         // Find teacher by email
         const teacher = await prisma.user.findFirst({
           where: {
-            email: values[emailIndex],
+            email: email.toString(),
           },
         });
 
         if (!teacher) {
-          results.errors.push(`Row ${i + 1}: Teacher with email "${values[emailIndex]}" not found`);
+          results.errors.push(`Row ${i + 2}: Teacher with email "${email}" not found`);
           continue;
         }
 
         // Find subject by code
         const subject = await prisma.subject.findFirst({
           where: {
-            code: values[subjectCodeIndex],
+            code: subjectCode.toString(),
           },
         });
 
         if (!subject) {
-          results.errors.push(`Row ${i + 1}: Subject with code "${values[subjectCodeIndex]}" not found`);
+          results.errors.push(`Row ${i + 2}: Subject with code "${subjectCode}" not found`);
           continue;
         }
 
@@ -162,7 +227,7 @@ export async function POST(
         });
 
         if (!classSubject) {
-          results.errors.push(`Row ${i + 1}: Subject "${values[subjectCodeIndex]}" not assigned to this class`);
+          results.errors.push(`Row ${i + 2}: Subject "${subjectCode}" not assigned to this class`);
           continue;
         }
 
@@ -193,7 +258,7 @@ export async function POST(
 
         results.imported++;
       } catch (error: any) {
-        results.errors.push(`Row ${i + 1}: ${error.message}`);
+        results.errors.push(`Row ${i + 2}: ${error.message}`);
       }
     }
 
@@ -203,7 +268,7 @@ export async function POST(
       resourceType: 'ClassTeacher',
       resourceId: id,
       resourceName: `Imported ${results.imported} teachers`,
-      description: `Imported teachers to class from CSV file`,
+      description: `Imported teachers to class from ${isExcel ? 'Excel' : 'CSV'} file`,
       newValue: results,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),

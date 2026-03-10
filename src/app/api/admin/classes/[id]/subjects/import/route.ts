@@ -3,6 +3,7 @@ import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { verifyAccessToken } from '@/lib/auth/jwt';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import * as XLSX from 'xlsx';
 
 // Helper function to parse CSV row properly (handle quoted fields)
 function parseCSVRow(row: string): string[] {
@@ -33,6 +34,25 @@ function parseCSVRow(row: string): string[] {
   return result;
 }
 
+// Helper function to normalize column names
+function normalizeColumnName(name: string): string {
+  return name.toLowerCase().trim().replace(/\s+/g, '');
+}
+
+// Helper function to parse Excel file and return array of rows
+async function parseExcelFile(
+  file: File
+): Promise<{ data: Record<string, any>[], headers: string[] }> {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer);
+  const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+  const data = XLSX.utils.sheet_to_json(worksheet) as Record<string, any>[];
+
+  const headers = Object.keys(data[0] || {}).map(h => normalizeColumnName(h));
+
+  return { data, headers };
+}
+
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
   if (!authHeader?.startsWith('Bearer ')) {
@@ -58,7 +78,7 @@ async function verifyAdmin(req: NextRequest) {
 
 /**
  * POST /api/admin/classes/[id]/subjects/import
- * Import subjects from CSV
+ * Import subjects from Excel or CSV
  */
 export async function POST(
   request: NextRequest,
@@ -95,20 +115,62 @@ export async function POST(
       return errorResponse('No file provided', 400);
     }
 
-    const text = await file.text();
-    const lines = text.trim().split('\n');
+    const fileName = file.name.toLowerCase();
+    const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
 
-    if (lines.length < 2) {
-      return errorResponse('CSV file must contain at least a header row and one data row', 400);
+    let rows: any[] = [];
+    let headerMap: Record<string, number> = {};
+
+    if (isExcel) {
+      // Parse Excel file
+      const { data, headers } = await parseExcelFile(file);
+      rows = data;
+
+      const codeHeaderIdx = headers.findIndex(h => h === 'kode');
+      const nameHeaderIdx = headers.findIndex(h => h === 'nama');
+
+      if (codeHeaderIdx === -1 || nameHeaderIdx === -1) {
+        return errorResponse('Excel must contain "Kode" and "Nama" columns', 400);
+      }
+
+      // Create map from original headers to data keys
+      const originalHeaders = Object.keys(data[0] || {});
+      headerMap = {
+        kode: codeHeaderIdx,
+        nama: nameHeaderIdx,
+      };
+    } else {
+      // Parse CSV file
+      const text = await file.text();
+      const lines = text.trim().split('\n');
+
+      if (lines.length < 2) {
+        return errorResponse('CSV file must contain at least a header row and one data row', 400);
+      }
+
+      // Parse CSV header properly
+      const headers = parseCSVRow(lines[0]).map(h => h.toLowerCase());
+      const codeIndex = headers.indexOf('kode');
+      const nameIndex = headers.indexOf('nama');
+
+      if (codeIndex === -1 || nameIndex === -1) {
+        return errorResponse('CSV must contain "Kode" and "Nama" columns', 400);
+      }
+
+      // Convert CSV to array of objects
+      for (let i = 1; i < lines.length; i++) {
+        const values = parseCSVRow(lines[i]);
+        rows.push({
+          kode: values[codeIndex],
+          nama: values[nameIndex],
+        });
+      }
+
+      headerMap = { kode: 0, nama: 1 };
     }
 
-    // Parse CSV header properly
-    const headers = parseCSVRow(lines[0]).map(h => h.toLowerCase());
-    const codeIndex = headers.indexOf('kode');
-    const nameIndex = headers.indexOf('nama');
-
-    if (codeIndex === -1 || nameIndex === -1) {
-      return errorResponse('CSV must contain "Kode" and "Nama" columns', 400);
+    if (rows.length === 0) {
+      return errorResponse('File must contain at least one data row', 400);
     }
 
     const results = {
@@ -118,10 +180,16 @@ export async function POST(
     };
 
     // Process each row
-    for (let i = 1; i < lines.length; i++) {
-      const values = parseCSVRow(lines[i]);
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const code = isExcel
+        ? row[Object.keys(row)[Object.keys(row).findIndex(k => normalizeColumnName(k) === 'kode')]]
+        : row.kode;
+      const name = isExcel
+        ? row[Object.keys(row)[Object.keys(row).findIndex(k => normalizeColumnName(k) === 'nama')]]
+        : row.nama;
 
-      if (!values[codeIndex] || !values[nameIndex]) {
+      if (!code || !name) {
         results.skipped++;
         continue;
       }
@@ -130,12 +198,12 @@ export async function POST(
         // Find subject by code
         const subject = await prisma.subject.findFirst({
           where: {
-            code: values[codeIndex],
+            code: code.toString(),
           },
         });
 
         if (!subject) {
-          results.errors.push(`Row ${i + 1}: Subject with code "${values[codeIndex]}" not found`);
+          results.errors.push(`Row ${i + 2}: Subject with code "${code}" not found`);
           continue;
         }
 
@@ -164,7 +232,7 @@ export async function POST(
 
         results.imported++;
       } catch (error: any) {
-        results.errors.push(`Row ${i + 1}: ${error.message}`);
+        results.errors.push(`Row ${i + 2}: ${error.message}`);
       }
     }
 
@@ -174,7 +242,7 @@ export async function POST(
       resourceType: 'ClassSubject',
       resourceId: id,
       resourceName: `Imported ${results.imported} subjects`,
-      description: `Imported subjects to class from CSV file`,
+      description: `Imported subjects to class from ${isExcel ? 'Excel' : 'CSV'} file`,
       newValue: results,
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),

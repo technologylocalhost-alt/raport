@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import * as XLSX from 'xlsx';
 
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -27,7 +28,7 @@ async function verifyAdmin(req: NextRequest) {
 
 /**
  * GET /api/admin/classes/[id]/subjects/export
- * Export subjects as CSV
+ * Export subjects as Excel
  */
 export async function GET(
   request: NextRequest,
@@ -72,24 +73,38 @@ export async function GET(
       orderBy: { subject: { code: 'asc' } },
     });
 
-    // Build CSV
-    const csv = [
-      'Kode,Nama,Nama Arab,Jam Kredit,Deskripsi',
-      ...subjects.map(cs => [
-        cs.subject.code,
-        cs.subject.name,
-        cs.subject.nameArabic || '',
-        cs.subject.creditHours || '',
-        cs.subject.description || '',
-      ].join(',')),
-    ].join('\n');
+    // Create export data
+    const exportData = subjects.map(cs => ({
+      'Kode': cs.subject.code,
+      'Nama': cs.subject.name,
+      'Nama Arab': cs.subject.nameArabic || '',
+      'Jam Kredit': cs.subject.creditHours || '',
+      'Deskripsi': cs.subject.description || '',
+    }));
 
-    const fileName = `mata-pelajaran-${classData.name}-${new Date().toISOString().split('T')[0]}.csv`;
+    // Create workbook
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Mata Pelajaran');
 
-    return new NextResponse(csv, {
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 12 },
+      { wch: 25 },
+      { wch: 25 },
+      { wch: 12 },
+      { wch: 30 },
+    ];
+
+    // Generate buffer
+    const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+
+    const fileName = `mata-pelajaran-${classData.name}-${new Date().toISOString().split('T')[0]}.xlsx`;
+
+    return new NextResponse(buffer, {
       status: 200,
       headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': `attachment; filename="${fileName}"`,
       },
     });
