@@ -9,6 +9,7 @@ interface Student {
   name: string;
   studentNo: string;
   raportNo?: string;
+  gender?: string;
 }
 
 interface ClassData {
@@ -136,6 +137,7 @@ function CoverPreviewContent() {
               name: s.name || 'N/A',
               studentNo: s.studentNo || 'N/A',
               raportNo: s.raportNo || null,
+              gender: s.gender || 'MALE',
             }));
             setAllStudents(students);
             
@@ -224,6 +226,7 @@ function CoverPreviewContent() {
           className: classData.name,
           studentNo: student.studentNo,
           raportNo: student.raportNo,
+          gender: student.gender,
           semesterLabel: semesterData?.semesterLabelArabic || 'للفصل الدراسي الثاني',
           schoolYear: schoolYearData?.tahunAkademikArabic || 'عام ٢٠٢٥-٢٠٢٤',
           schoolYearGregorian: schoolYearData?.year || '',
@@ -459,6 +462,13 @@ function CoverPreviewContent() {
 
         .cover-logo-kmi {
           max-width: 600px;
+          height: auto;
+          object-fit: contain;
+          margin-top: 14mm;
+        }
+
+        .cover-logo-kmi-putri {
+          max-width: 450px;
           height: auto;
           object-fit: contain;
           margin-top: 14mm;
@@ -766,7 +776,11 @@ function CoverPreviewContent() {
             <div className="cover-content">
               {/* Logo Section */}
               <div className="cover-logo-section">
-                <img src="/KMI.jpg" alt="KMI Logo" className="cover-logo-kmi" />
+                <img 
+                  src={student?.gender === 'FEMALE' ? '/kmi_putri.png' : '/KMI.jpg'} 
+                  alt="KMI Logo" 
+                  className={student?.gender === 'FEMALE' ? 'cover-logo-kmi-putri' : 'cover-logo-kmi'} 
+                />
                 <img src="/mahad.png" alt="Mahad Logo" className="cover-logo-mahad" />
               </div>
 

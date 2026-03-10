@@ -9,9 +9,9 @@ export async function POST(request: NextRequest) {
   try {
     console.log('[GenerateCoverPDF] Request received');
     const data = await request.json();
-    const { studentName, className, studentNo, raportNo, semesterLabel, schoolYear, schoolYearGregorian } = data;
+    const { studentName, className, studentNo, raportNo, gender, semesterLabel, schoolYear, schoolYearGregorian } = data;
 
-    console.log('[GenerateCoverPDF] Data received:', { studentName, className, studentNo, raportNo });
+    console.log('[GenerateCoverPDF] Data received:', { studentName, className, studentNo, raportNo, gender });
 
     if (!studentName || !className) {
       return NextResponse.json(
@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
     const publicPath = join(process.cwd(), 'public');
     let bingkaiBase64 = '';
     let kmiBase64 = '';
+    let kmiPutriBase64 = '';
     let mahadBase64 = '';
     let kashfuBase64 = '';
 
@@ -39,6 +40,13 @@ export async function POST(request: NextRequest) {
       kmiBase64 = readFileSync(kmiPath).toString('base64');
     } catch (err) {
       console.log('KMI image not found, continuing without it');
+    }
+
+    try {
+      const kmiPutriPath = join(publicPath, 'kmi_putri.png');
+      kmiPutriBase64 = readFileSync(kmiPutriPath).toString('base64');
+    } catch (err) {
+      console.log('KMI Putri image not found, continuing without it');
     }
 
     try {
@@ -131,6 +139,13 @@ export async function POST(request: NextRequest) {
 
           .cover-logo-kmi {
             max-width: 600px;
+            height: auto;
+            object-fit: contain;
+            margin-top: 14mm;
+          }
+
+          .cover-logo-kmi-putri {
+            max-width: 450px;
             height: auto;
             object-fit: contain;
             margin-top: 14mm;
@@ -272,7 +287,7 @@ export async function POST(request: NextRequest) {
           <div class="cover-content">
             <!-- Logo Section -->
             <div class="cover-logo-section">
-              ${kmiBase64 ? `<img src="data:image/jpeg;base64,${kmiBase64}" alt="KMI Logo" class="cover-logo-kmi" />` : ''}
+              ${gender === 'FEMALE' && kmiPutriBase64 ? `<img src="data:image/png;base64,${kmiPutriBase64}" alt="KMI Logo" class="cover-logo-kmi-putri" />` : kmiBase64 ? `<img src="data:image/jpeg;base64,${kmiBase64}" alt="KMI Logo" class="cover-logo-kmi" />` : ''}
               ${mahadBase64 ? `<img src="data:image/png;base64,${mahadBase64}" alt="Mahad Logo" class="cover-logo-mahad" />` : ''}
             </div>
 

@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
     const publicPath = join(process.cwd(), 'public');
     let bingkaiBase64 = '';
     let kmiLogoBase64 = '';
+    let kmiPutriLogoBase64 = '';
     let mahadLogoBase64 = '';
     let kasyfuImageBase64 = '';
 
@@ -52,6 +53,14 @@ export async function POST(request: NextRequest) {
       kmiLogoBase64 = kmiBuffer.toString('base64');
     } catch (err) {
       console.log('KMI logo not found');
+    }
+
+    try {
+      const kmiPutriPath = join(publicPath, 'kmi_putri.png');
+      const kmiPutriBuffer = readFileSync(kmiPutriPath);
+      kmiPutriLogoBase64 = kmiPutriBuffer.toString('base64');
+    } catch (err) {
+      console.log('KMI Putri logo not found');
     }
 
     try {
@@ -104,7 +113,7 @@ export async function POST(request: NextRequest) {
           <div class="cover-content">
             <!-- Logo Section -->
             <div class="cover-logo-section">
-              ${kmiLogoBase64 ? `<img src="data:image/jpeg;base64,${kmiLogoBase64}" alt="KMI Logo" class="cover-logo-kmi" />` : ''}
+              ${student.gender === 'FEMALE' && kmiPutriLogoBase64 ? `<img src="data:image/png;base64,${kmiPutriLogoBase64}" alt="KMI Logo" class="cover-logo-kmi-putri" />` : kmiLogoBase64 ? `<img src="data:image/jpeg;base64,${kmiLogoBase64}" alt="KMI Logo" class="cover-logo-kmi" />` : ''}
               ${mahadLogoBase64 ? `<img src="data:image/png;base64,${mahadLogoBase64}" alt="Mahad Logo" class="cover-logo-mahad" />` : ''}
             </div>
 
@@ -233,6 +242,13 @@ export async function POST(request: NextRequest) {
 
           .cover-logo-kmi {
             max-width: 600px;
+            height: auto;
+            object-fit: contain;
+            margin-top: 14mm;
+          }
+
+          .cover-logo-kmi-putri {
+            max-width: 450px;
             height: auto;
             object-fit: contain;
             margin-top: 14mm;

@@ -9,6 +9,7 @@ interface Student {
   name: string;
   studentNo: string;
   raportNo?: string;
+  gender?: string;
 }
 
 interface ClassData {
@@ -76,6 +77,7 @@ function CoverPreviewContent() {
               name: s.name || 'N/A',
               studentNo: s.studentNo || 'N/A',
               raportNo: s.raportNo || null,
+              gender: s.gender || 'MALE',
             }));
             setAllStudents(students);
 
@@ -166,6 +168,7 @@ function CoverPreviewContent() {
           className: classData.name,
           studentNo: student.studentNo,
           raportNo: student.raportNo,
+          gender: student.gender,
         }),
       });
 
@@ -618,7 +621,10 @@ function CoverPreviewContent() {
             <div className="cover-content">
               {/* Logo Section */}
               <div className="cover-logo-section">
-                <img src="/KMI.jpg" alt="KMI Logo" />
+                <img 
+                  src={student?.gender === 'FEMALE' ? '/kmi_putri.png' : '/KMI.jpg'} 
+                  alt="KMI Logo" 
+                />
                 <img src="/mahad.png" alt="Mahad Logo" />
               </div>
 
