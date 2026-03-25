@@ -25,14 +25,10 @@ services:
       - ./.env:/app/.env
     restart: unless-stopped
     # Resource limits for 1GB RAM VPS (increased for Puppeteer)
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 768M
-        reservations:
-          cpus: '0.5'
-          memory: 384M
+    # Syntax kompatibel docker-compose v2 dan v3
+    mem_limit: 768m
+    mem_reservation: 384m
+    cpus: 1
     # Optimized health check
     healthcheck:
       test: ["CMD", "bun", "run", "-e", "fetch('http://localhost:3000/api/health').catch(() => process.exit(1))"]
