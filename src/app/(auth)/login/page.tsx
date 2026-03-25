@@ -27,42 +27,37 @@ export default function LoginPage() {
   useEffect(() => {
     const accessToken = localStorage.getItem('accessToken');
     const user = localStorage.getItem('user');
-    
-    // Only redirect if BOTH token and user exist
-    if (accessToken && user) {
+
+    // Cek apakah cookie masih ada (jika tidak, berarti session expired)
+    const hasCookie = document.cookie.includes('accessToken') || document.cookie.includes('refreshToken');
+
+    // Jika localStorage ada tapi cookie tidak ada, bersihkan localStorage
+    if (accessToken && !hasCookie) {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('user');
+      setIsLoading(false);
+      return;
+    }
+
+    // Only redirect if BOTH token and user exist AND cookie masih valid
+    if (accessToken && user && hasCookie) {
       try {
         const userData = JSON.parse(user);
         if (userData?.role) {
-          // Don't redirect if we just logged out (check for redirect param with logout marker)
-          const redirectParam = searchParams.get('redirect') as string;
-          const isComingFromLogout = searchParams.get('logout') === 'true' || redirectParam?.includes('logout');
-          
-          if (!isComingFromLogout) {
-            redirectAfterLogin(userData.role);
-            return;
-          }
+          redirectAfterLogin(userData.role);
+          return;
         }
       } catch (error) {
         console.error('Error parsing user:', error);
         localStorage.clear();
       }
     }
-    
+
     setIsLoading(false);
   }, [searchParams]);
 
   function redirectAfterLogin(role: string) {
-    // Get redirect parameter from URL
-    let redirectTo = searchParams.get('redirect') as string;
-    
-    // Sanitize redirect param to prevent open redirect
-    if (redirectTo && redirectTo.startsWith('/') && !redirectTo.includes('logout')) {
-      router.push(redirectTo);
-      return;
-    }
-
-    // Otherwise, redirect based on role (with small delay for stability)
-    const redirectPath = 
+    const redirectPath =
       role === 'ADMIN' || role === 'PRINCIPAL' ? '/admin/dashboard' :
       role === 'TEACHER' ? '/teacher/dashboard' :
       role === 'WALI_KELAS' ? '/wali-kelas/dashboard' :
