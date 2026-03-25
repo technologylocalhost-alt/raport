@@ -11,21 +11,27 @@ RUN apk add --no-cache ca-certificates
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json bun.lock* ./
+# Copy lockfile dan package.json dulu (layer ini jarang berubah = cache hit)
+COPY package.json bun.lock ./
 
-# Install all dependencies (regenerate lockfile for clean install)
-# Increased timeout for slow VPS network
-RUN bun install --network-timeout=300000
+# Install dependencies menggunakan frozen lockfile (lebih cepat, deterministic)
+RUN bun install --frozen-lockfile --network-timeout=300000
 
-# Copy only necessary source files
+# Copy prisma schema dulu (layer terpisah, jarang berubah)
 COPY prisma ./prisma
+
+# Generate Prisma client (cache terpisah dari build)
+RUN bun run prisma:generate
+
+# Copy config files (jarang berubah)
+COPY next.config.ts tsconfig.json bunfig.toml ./
+COPY eslint.config.mjs postcss.config.mjs prisma.config.ts ./
+COPY middleware.ts ./
+
+# Copy source files terakhir (paling sering berubah)
 COPY scripts ./scripts
 COPY src ./src
 COPY public ./public
-COPY next.config.ts tsconfig.json bunfig.toml ./
-COPY middleware.ts ./
-COPY eslint.config.mjs postcss.config.mjs prisma.config.ts ./
 
 # Set dummy environment variables for build stage only
 ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
@@ -34,14 +40,15 @@ ENV JWT_REFRESH_SECRET="dummy-build-secret-min-32-chars-long"
 ENV NEXTAUTH_SECRET="dummy-build-secret"
 
 # Build the application with memory limit
-RUN bun run prisma:generate && \
-    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+RUN PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     NODE_OPTIONS="--max-old-space-size=512" \
     bun run build
 
-# Remove dev dependencies and clean cache
-RUN bun install --production && \
-    rm -rf /app/.next/cache
+# Strip dev dependencies, keep production deps (termasuk puppeteer)
+RUN bun install --production --network-timeout=300000
+
+# Bersihkan cache Next.js yang tidak perlu di image
+RUN rm -rf /app/.next/cache
 
 # ============================================
 # Stage 2: Runtime (Alpine - minimal size)
