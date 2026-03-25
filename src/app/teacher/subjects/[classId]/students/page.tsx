@@ -8,11 +8,13 @@ import * as XLSX from 'xlsx';
 interface Student {
   id: string;
   name: string;
+  nisn?: string;
   studentNo: string;
   nourut?: number;
   email?: string;
   phone?: string;
   classId?: string;
+  className?: string;
 }
 
 interface Competency {
@@ -132,10 +134,31 @@ export default function TeacherStudentsPage() {
   const [importSuccess, setImportSuccess] = useState('');
   const [importSubmitting, setImportSubmitting] = useState(false);
 
+  // Auto-refresh data when tab becomes visible
   useEffect(() => {
-    fetchClassStudents();
-    fetchClassInfo();
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchClassStudents();
+        fetchClassInfo();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [classId, currentPage]);
+
+  // Clear grade form when subject changes
+  useEffect(() => {
+    setGradeFormData({
+      competencyId: '',
+      score: '',
+      assessmentType: 'UTS_1',
+      notes: '',
+    });
+    setGradeError('');
+    setGradeSuccess('');
+    setGrades({});
+  }, [subjectId]);
 
   // Auto-select first student when page loads and student changes
   useEffect(() => {
@@ -376,6 +399,7 @@ export default function TeacherStudentsPage() {
       const payload = {
         studentId: selectedStudent.id,
         competencyId: gradeFormData.competencyId,
+        subjectId: subjectId, // Add subjectId to ensure data is for correct subject
         score: parseFloat(gradeFormData.score),
         assessmentType: gradeFormData.assessmentType,
         notes: gradeFormData.notes,
@@ -414,6 +438,10 @@ export default function TeacherStudentsPage() {
           assessmentType: 'UTS_1',
           notes: '',
         });
+        // Auto clear success message after 3 seconds
+        setTimeout(() => {
+          setGradeSuccess('');
+        }, 3000);
         // Fetch latest grades and ensure the list is expanded to show them
         console.log('Fetching grades for student:', selectedStudent.id);
         await fetchStudentGrades(selectedStudent.id);
@@ -436,6 +464,23 @@ export default function TeacherStudentsPage() {
         
         console.error('Grade submission error:', errorResponse, 'Status:', response.status);
         
+        // Handle 409 Conflict - grade has been approved
+        if (response.status === 409) {
+          setGradeError(errorResponse.error || 'Nilai ini sudah disetujui dan tidak dapat diubah.');
+          setEditingGradeId(null);
+          setGradeFormData({
+            competencyId: '',
+            score: '',
+            assessmentType: 'UTS_1',
+            notes: '',
+          });
+          // Refresh grades to get updated approved status
+          if (selectedStudent) {
+            await fetchStudentGrades(selectedStudent.id);
+          }
+          return;
+        }
+        
         // Handle field errors from validation
         if (errorResponse.details && Array.isArray(errorResponse.details)) {
           const fieldErrorMessages = errorResponse.details
@@ -455,6 +500,13 @@ export default function TeacherStudentsPage() {
   };
 
   const handleEditGrade = (grade: Grade, student: Student) => {
+    const isApproved = isGradeApproved(grade, student.id);
+    
+    if (isApproved) {
+      setGradeError('Nilai ini sudah disetujui dan tidak dapat diubah. Hubungi Wali Kelas untuk perubahan lebih lanjut.');
+      return;
+    }
+
     setSelectedStudent(student);
     setEditingGradeId(grade.id);
     setGradeFormData({
@@ -494,7 +546,12 @@ export default function TeacherStudentsPage() {
   };
 
   const isGradeApproved = (grade: Grade, studentId: string): boolean => {
-    const key = `${grade.competencyId}-${grade.assessmentType}`;
+    let key: string;
+    if (grade.competencyId === null || grade.competencyId === '') {
+      key = `null-${grade.assessmentType}`;
+    } else {
+      key = `${grade.competencyId}-${grade.assessmentType}`;
+    }
     return Boolean(approvedGrades[studentId]?.has(key));
   };
 
@@ -520,24 +577,7 @@ export default function TeacherStudentsPage() {
 
     let nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
     
-    // Check if we need to load next/previous page
-    if (nextIndex < 0 && currentPage > 1) {
-      // Go to previous page
-      const prevPage = currentPage - 1;
-      setCurrentPage(prevPage);
-      // The useEffect will handle fetching the students for the new page
-      // We'll set the selected student after students are loaded
-      return;
-    }
-    
-    if (nextIndex >= students.length && currentPage < totalPages) {
-      // Go to next page
-      const nextPage = currentPage + 1;
-      setCurrentPage(nextPage);
-      // The useEffect will handle fetching the students for the new page
-      return;
-    }
-
+    // Check boundary
     if (nextIndex < 0 || nextIndex >= students.length) return;
 
     const nextStudent = students[nextIndex];
@@ -554,25 +594,31 @@ export default function TeacherStudentsPage() {
   };
 
   const downloadTemplate = () => {
-    const ws = XLSX.utils.json_to_sheet([
-      {
-        'Nomor Siswa': '387',
-        'Nama Siswa': 'Faaiq Husain',
-        'Nilai (1-10)': 8.5,
-        'Jenis Penilaian': 'UTS_1',
-        'Catatan': 'Bagus',
-      },
-      {
-        'Nomor Siswa': '412',
-        'Nama Siswa': 'Rayyan Aryatama Karim',
-        'Nilai (1-10)': 7.0,
-        'Jenis Penilaian': 'UTS_1',
-        'Catatan': '',
-      },
-    ]);
+    // Create rows with actual student data
+    const templateRows = students.map((student) => ({
+      'Nomor Siswa': student.nisn || student.studentNo || '',
+      'Nama Siswa': student.name || '',
+      'Nama Kompetensi': '', // Empty for user to fill
+      'Nilai (1-10)': '', // Empty for user to fill
+      'Jenis Penilaian': 'UTS_1', // Default value
+      'Catatan': '', // Empty for user to fill
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(templateRows);
+    
+    // Set column widths for better readability
+    ws['!cols'] = [
+      { wch: 12 }, // Nomor Siswa
+      { wch: 25 }, // Nama Siswa
+      { wch: 25 }, // Nama Kompetensi
+      { wch: 12 }, // Nilai
+      { wch: 18 }, // Jenis Penilaian
+      { wch: 20 }, // Catatan
+    ];
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Template Nilai');
-    XLSX.writeFile(wb, `Template_Nilai_${subjectName || 'Mata_Pelajaran'}.xlsx`);
+    XLSX.writeFile(wb, `Template_Nilai_${className}_${subjectName || 'Mata_Pelajaran'}.xlsx`);
   };
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -687,10 +733,13 @@ export default function TeacherStudentsPage() {
           successMsg = `${data.successCount || importedRows.length} nilai berhasil diimport`;
         }
         setImportSuccess(successMsg);
-        setShowImportModal(false);
-        setImportFile(null);
-        setImportedRows([]);
-        setImportError('');
+        // Auto close modal after 2 seconds
+        setTimeout(() => {
+          setShowImportModal(false);
+          setImportFile(null);
+          setImportedRows([]);
+          setImportError('');
+        }, 2000);
         // Refresh data
         fetchClassStudents();
         // Reload grades for all students
@@ -827,7 +876,7 @@ export default function TeacherStudentsPage() {
                                 <p className="font-semibold text-gray-900">{student.name}</p>
                               </div>
                             </div>
-                            <p className="text-sm text-gray-600 mt-1">{student.studentNo}</p>
+                            <p className="text-sm text-gray-600 mt-1">{student.nisn || student.studentNo || '-'}</p>
                           </div>
                           <div className="flex-1">
                             {/* Grades Column - Grid layout */}
@@ -1072,7 +1121,7 @@ export default function TeacherStudentsPage() {
               <div className="flex gap-2 mb-4 pb-4 border-b">
                 <button
                   onClick={() => handleNavigateStudent('prev')}
-                  disabled={getCurrentStudentIndex() === 0 && currentPage === 1}
+                  disabled={getCurrentStudentIndex() === 0}
                   className="flex-1 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed text-gray-700 px-3 py-2 rounded-lg transition-colors font-medium text-sm flex items-center justify-center gap-2"
                   title="Siswa Sebelumnya"
                 >
@@ -1081,7 +1130,7 @@ export default function TeacherStudentsPage() {
                 </button>
                 <button
                   onClick={() => handleNavigateStudent('next')}
-                  disabled={getCurrentStudentIndex() === students.length - 1 && currentPage === totalPages}
+                  disabled={getCurrentStudentIndex() === students.length - 1}
                   className="flex-1 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed text-gray-700 px-3 py-2 rounded-lg transition-colors font-medium text-sm flex items-center justify-center gap-2"
                   title="Siswa Selanjutnya"
                 >
@@ -1224,7 +1273,10 @@ export default function TeacherStudentsPage() {
           <div className="bg-white rounded-lg shadow-xl max-w-4xl max-h-[90vh] overflow-y-auto w-full">
             {/* Modal Header */}
             <div className="sticky top-0 bg-white border-b p-6 flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-gray-900">Import Nilai dari Excel</h2>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Import Nilai dari Excel</h2>
+                <p className="text-sm text-gray-600 mt-2"><span className="font-semibold">Kelas:</span> {className} | <span className="font-semibold">Mata Pelajaran:</span> {subjectName}</p>
+              </div>
               <button
                 onClick={() => {
                   setShowImportModal(false);
