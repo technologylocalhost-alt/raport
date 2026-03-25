@@ -47,12 +47,7 @@ export function middleware(request: NextRequest) {
       );
     }
     
-    const loginUrl = new URL('/login', request.url);
-    // Add the original URL as redirect parameter (but not for API routes)
-    if (!pathname.startsWith('/api/')) {
-      loginUrl.searchParams.set('redirect', pathname);
-    }
-    return NextResponse.redirect(loginUrl, { status: 307 });
+    return NextResponse.redirect(new URL('/login', request.url), { status: 307 });
   }
 
   // If has refresh token but no access token, let it pass
