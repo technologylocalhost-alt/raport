@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Save, X } from 'lucide-react';
+import { ArrowLeft, Plus, Save, Trash2, X } from 'lucide-react';
 
 // === FORM FIELD COMPONENTS ===
 
@@ -49,6 +49,110 @@ export function TextareaField({ label, name, value, onChange, rows = 2 }: {
 
 export function SectionTitle({ title }: { title: string }) {
   return <h3 className="sm:col-span-2 text-sm font-bold text-emerald-700 border-b border-emerald-200 pb-1 mt-2">{title}</h3>;
+}
+
+interface KamarItem {
+  kelas: string;
+  tahun: string;
+  smt1: string;
+  smt2: string;
+}
+
+export function KamarHistoryInput({ value, onChange }: { 
+  value: string; 
+  onChange: (name: string, val: string) => void;
+}) {
+  const [items, setItems] = useState<KamarItem[]>([]);
+
+  // Sync state when prop value changes (e.g. after loading data)
+  useEffect(() => {
+    try {
+      const parsed = value ? JSON.parse(value) : [];
+      if (JSON.stringify(parsed) !== JSON.stringify(items)) {
+        setItems(parsed);
+      }
+    } catch (e) {
+      console.error('Error parsing kamar history JSON:', e);
+    }
+  }, [value]);
+
+  const updateItems = (newItems: KamarItem[]) => {
+    setItems(newItems);
+    onChange('riwayatKamar', JSON.stringify(newItems));
+  };
+
+  const addItem = () => {
+    updateItems([...items, { kelas: '', tahun: '', smt1: '', smt2: '' }]);
+  };
+
+  const removeItem = (index: number) => {
+    updateItems(items.filter((_, i) => i !== index));
+  };
+
+  const handleChange = (index: number, field: keyof KamarItem, val: string) => {
+    const newItems = [...items];
+    newItems[index] = { ...newItems[index], [field]: val };
+    updateItems(newItems);
+  };
+
+  return (
+    <div className="sm:col-span-2 space-y-3">
+      <div className="flex items-center justify-between">
+        <label className="block text-sm font-medium text-gray-700">Riwayat Kamar (Kelas, Tahun, Semester 1, Semester 2)</label>
+        <button type="button" onClick={addItem}
+          className="flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md transition-colors">
+          <Plus size={14} /> Tambah Baris
+        </button>
+      </div>
+      
+      {items.length > 0 ? (
+        <div className="overflow-x-auto border rounded-lg">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b">
+              <tr>
+                <th className="px-3 py-2 text-left text-xs font-bold text-gray-700 uppercase">Kelas</th>
+                <th className="px-3 py-2 text-left text-xs font-bold text-gray-700 uppercase">Tahun</th>
+                <th className="px-3 py-2 text-left text-xs font-bold text-gray-700 uppercase">Smt 1</th>
+                <th className="px-3 py-2 text-left text-xs font-bold text-gray-700 uppercase">Smt 2</th>
+                <th className="px-3 py-2 text-center text-xs font-bold text-gray-700 uppercase w-10">#</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 bg-white">
+              {items.map((item, idx) => (
+                <tr key={idx} className="hover:bg-gray-50/50">
+                  <td className="px-2 py-2">
+                    <input type="text" value={item.kelas} onChange={(e) => handleChange(idx, 'kelas', e.target.value)}
+                      placeholder="Kelas" className="w-full bg-transparent border-none focus:ring-0 text-sm p-1 text-gray-900 font-medium" />
+                  </td>
+                  <td className="px-2 py-2">
+                    <input type="text" value={item.tahun} onChange={(e) => handleChange(idx, 'tahun', e.target.value)}
+                      placeholder="Thn" className="w-full bg-transparent border-none focus:ring-0 text-sm p-1 text-gray-900 font-medium" />
+                  </td>
+                  <td className="px-2 py-2">
+                    <input type="text" value={item.smt1} onChange={(e) => handleChange(idx, 'smt1', e.target.value)}
+                      placeholder="Kamar Smt 1" className="w-full bg-transparent border-none focus:ring-0 text-sm p-1 text-gray-900 font-medium" />
+                  </td>
+                  <td className="px-2 py-2">
+                    <input type="text" value={item.smt2} onChange={(e) => handleChange(idx, 'smt2', e.target.value)}
+                      placeholder="Kamar Smt 2" className="w-full bg-transparent border-none focus:ring-0 text-sm p-1 text-gray-900 font-medium" />
+                  </td>
+                  <td className="px-2 py-2 text-center">
+                    <button type="button" onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600 p-1">
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="text-center py-6 border-2 border-dashed border-gray-100 rounded-lg">
+          <p className="text-sm text-gray-400">Belum ada data riwayat kamar. Klik Tambah Baris untuk memulai.</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // === CONSTANTS ===
@@ -298,9 +402,9 @@ export function renderTabContent(activeTab: string, formData: Record<string, str
             <p className="text-sm text-gray-400 italic py-2">Belum ada data riwayat kelas di database</p>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <SectionTitle title="Riwayat Kamar di PPMDL" />
-            <TextareaField label="Riwayat Kamar (Kelas, Tahun, Semester 1, Semester 2)" name="riwayatKamar" value={F.riwayatKamar} onChange={C} rows={4} />
+            <KamarHistoryInput value={F.riwayatKamar} onChange={C} />
             <InputField label="Kamar yang Paling Berkesan" name="kamarBerkesan" value={F.kamarBerkesan} onChange={C} />
           </div>
         </div>
@@ -478,7 +582,14 @@ export function SantriFormPage({ id }: { id?: string }) {
         alert(err.message || 'Gagal menyimpan data santri');
         return;
       }
-      router.push('/admin/santri');
+      const result = await response.json();
+      alert(isEdit ? 'Perubahan berhasil disimpan!' : 'Santri baru berhasil ditambahkan!');
+      
+      if (!isEdit && result.data?.id) {
+        // Alihkan ke halaman edit santri yang baru dibuat agar tetap di form yang sama
+        router.replace(`/admin/santri/${result.data.id}/edit`);
+      }
+      // Jika mode edit, tetap di halaman tanpa push/replace.
     } catch (error) {
       console.error('Error saving:', error);
       alert('Terjadi kesalahan');

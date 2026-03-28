@@ -78,7 +78,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         { title: 'Jenjang Pendidikan', icon: GraduationCap, href: '/admin/levels' },
         { title: 'Mata Pelajaran', icon: BookOpen, href: '/admin/subjects' },
         { title: 'Kelas', icon: Layers, href: '/admin/classes' },
-        { title: 'Data Santri', icon: Users, href: '/admin/santri' },
+        { title: 'Master Data Santri', icon: Users, href: '/admin/santri' },
       ],
     },
     {

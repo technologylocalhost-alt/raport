@@ -155,9 +155,51 @@ export default function DetailSantriPage({ params }: { params: Promise<{ id: str
                 </div>
 
                 {/* Field manual lainnya: riwayat kamar & kamar berkesan */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+                <div className="space-y-6 pt-4 border-t border-gray-100">
                   {section.fields.filter(f => f.key !== 'riwayatKelas').map(f => {
                     const val = data[f.key];
+                    
+                    // Spesial rendering untuk Riwayat Kamar yang berbentuk JSON String
+                    if (f.key === 'riwayatKamar' && val) {
+                      try {
+                        const items = JSON.parse(val);
+                        if (Array.isArray(items) && items.length > 0) {
+                          return (
+                            <div key={f.key}>
+                              <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">{f.label}</h3>
+                              <div className="overflow-x-auto border rounded-lg">
+                                <table className="w-full text-sm">
+                                  <thead className="bg-emerald-50/50 border-b border-emerald-100">
+                                    <tr>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-emerald-800 uppercase">No</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-emerald-800 uppercase">Kelas</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-emerald-800 uppercase">Tahun</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-emerald-800 uppercase">Smt 1</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold text-emerald-800 uppercase">Smt 2</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-100">
+                                    {items.map((it: any, i: number) => (
+                                      <tr key={i} className="hover:bg-gray-50">
+                                        <td className="px-3 py-2 text-gray-500 text-xs">{i + 1}</td>
+                                        <td className="px-3 py-2 text-gray-900 font-medium">{it.kelas || '-'}</td>
+                                        <td className="px-3 py-2 text-gray-700">{it.tahun || '-'}</td>
+                                        <td className="px-3 py-2 text-gray-900 font-medium">{it.smt1 || '-'}</td>
+                                        <td className="px-3 py-2 text-gray-900 font-medium">{it.smt2 || '-'}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          );
+                        }
+                      } catch (e) {
+                         // Fallback ke teks biasa jika gagal diparse
+                         console.warn('Failed to parse riwayatKamar JSON:', e);
+                      }
+                    }
+
                     const displayVal = formatValue(f.key, val);
                     return (
                       <div key={f.key}>

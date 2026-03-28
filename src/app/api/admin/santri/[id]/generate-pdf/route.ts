@@ -222,18 +222,117 @@ function formatDate(val: string | Date | null): string {
 
 function buildHtml(santri: any): string {
   const sectionsHtml = DETAIL_SECTIONS.map(section => {
-    const rowsHtml = section.fields.map(f => {
-      const raw = santri[f.key];
-      const display = (f as any).type === 'date' ? formatDate(raw) : formatValue(f.key, raw);
-      return `<tr><td class="label">${f.label}</td><td class="sep">:</td><td class="value">${display}</td></tr>`;
-    }).join('');
+    // Determine which fields to show in 1 column vs 2 columns
+    // History tables or long text fields should be 1 column
+    const isHistorySection = section.title.includes('Riwayat');
+    
+    let fieldsContent = '';
+    
+    if (isHistorySection) {
+      fieldsContent = section.fields.map(f => {
+        // Special rendering for Riwayat Kelas (from database)
+        if (f.key === 'riwayatKelas') {
+          const classHistory = santri.classHistory || [];
+          let tableHtml = '<div class="no-data">- Belum ada data -</div>';
+          if (classHistory.length > 0) {
+            tableHtml = `
+              <table class="inner-table">
+                <thead>
+                  <tr>
+                    <th>No</th>
+                    <th>Tahun Ajaran</th>
+                    <th>Smt</th>
+                    <th>Tingkat</th>
+                    <th>Kelas</th>
+                    <th>Wali Kelas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${classHistory.map((ch: any, i: number) => `
+                    <tr>
+                      <td style="text-align:center;">${i + 1}</td>
+                      <td>${ch.schoolYear}</td>
+                      <td style="text-align:center;">${ch.semester}</td>
+                      <td>${ch.levelName || '-'}</td>
+                      <td><strong>${ch.className}</strong></td>
+                      <td>${ch.waliKelasName || '-'}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            `;
+          }
+          return `<div class="full-field"><div class="field-label">${f.label}</div>${tableHtml}</div>`;
+        }
+
+        // Special rendering for Riwayat Kamar (from JSON string)
+        if (f.key === 'riwayatKamar') {
+          const rawKamar = santri[f.key];
+          let tableHtml = '<div class="no-data">- Belum ada data -</div>';
+          if (rawKamar) {
+            try {
+              const items = JSON.parse(rawKamar);
+              if (Array.isArray(items) && items.length > 0) {
+                tableHtml = `
+                  <table class="inner-table">
+                    <thead>
+                      <tr>
+                        <th>No</th>
+                        <th>Kelas</th>
+                        <th>Tahun</th>
+                        <th>Semester 1</th>
+                        <th>Semester 2</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${items.map((it: any, i: number) => `
+                        <tr>
+                          <td style="text-align:center;">${i + 1}</td>
+                          <td>${it.kelas || '-'}</td>
+                          <td>${it.tahun || '-'}</td>
+                          <td>${it.smt1 || '-'}</td>
+                          <td>${it.smt2 || '-'}</td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                `;
+              }
+            } catch (e) {}
+          }
+          return `<div class="full-field" style="margin-top:4mm;"><div class="field-label">${f.label}</div>${tableHtml}</div>`;
+        }
+
+        const raw = santri[f.key];
+        const display = (f as any).type === 'date' ? formatDate(raw) : formatValue(f.key, raw);
+        return `<div class="full-field mt-2"><div class="field-label">${f.label}</div><div class="field-value">${display}</div></div>`;
+      }).join('');
+    } else {
+      // Standard sections: Use 2-column layout
+      fieldsContent = `
+        <div class="grid-container">
+          ${section.fields.map(f => {
+            const raw = santri[f.key];
+            const display = (f as any).type === 'date' ? formatDate(raw) : formatValue(f.key, raw);
+            const isLong = display.length > 50 || f.key.includes('Alamat') || f.key.includes('Catatan');
+            
+            return `
+              <div class="grid-item ${isLong ? 'col-span-2' : ''}">
+                <div class="field-label">${f.label}</div>
+                <div class="field-value">${display}</div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
 
     return `
       <div class="section">
-        <div class="section-header">${section.title}</div>
-        <table class="section-table">
-          ${rowsHtml}
-        </table>
+        <div class="section-title">${section.title}</div>
+        <div class="section-body">
+          ${fieldsContent}
+        </div>
       </div>
     `;
   }).join('');
@@ -243,92 +342,144 @@ function buildHtml(santri: any): string {
 <head>
   <meta charset="UTF-8">
   <style>
+    @page { margin: 15mm; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      font-size: 10px;
-      color: #1a1a1a;
-      line-height: 1.4;
+      font-family: 'Helvetica', 'Arial', sans-serif;
+      font-size: 9px;
+      color: #1f2937;
+      line-height: 1.5;
+      background: white;
     }
-    .header {
+    .header-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-bottom: 5mm;
+      border-bottom: 3px double #059669;
+      margin-bottom: 6mm;
+      position: relative;
+    }
+    .header-text {
       text-align: center;
-      padding: 8mm 0 5mm 0;
-      border-bottom: 2px solid #047857;
-      margin-bottom: 4mm;
     }
-    .header h1 {
-      font-size: 14px;
-      font-weight: 700;
-      color: #047857;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .header .sub {
-      font-size: 10px;
-      color: #666;
-      margin-top: 2px;
-    }
-    .section {
-      margin-bottom: 3mm;
-      break-inside: avoid;
-    }
-    .section-header {
-      background: #ecfdf5;
-      border-left: 3px solid #047857;
-      padding: 2mm 3mm;
-      font-size: 10px;
-      font-weight: 700;
+    .header-text h1 {
+      font-size: 16px;
       color: #065f46;
       text-transform: uppercase;
-      letter-spacing: 0.3px;
+      letter-spacing: 1px;
       margin-bottom: 1mm;
     }
-    .section-table {
-      width: 100%;
-      border-collapse: collapse;
+    .header-text p {
+      font-size: 10px;
+      color: #4b5563;
+      font-weight: 500;
     }
-    .section-table tr {
-      border-bottom: 0.5px solid #e5e7eb;
+    .section {
+      margin-bottom: 5mm;
+      break-inside: avoid;
     }
-    .section-table td {
-      padding: 1.2mm 2mm;
-      vertical-align: top;
-    }
-    .section-table .label {
-      width: 35%;
-      font-weight: 600;
-      color: #374151;
+    .section-title {
+      background: #f0fdf4;
+      color: #065f46;
       font-size: 9px;
+      font-weight: 800;
+      padding: 1.5mm 3mm;
+      border-left: 4px solid #059669;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 2mm;
     }
-    .section-table .sep {
-      width: 3%;
-      text-align: center;
-      color: #9ca3af;
+    .section-body {
+      padding: 0 2mm;
     }
-    .section-table .value {
-      width: 62%;
-      color: #1f2937;
+    .grid-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      column-gap: 8mm;
+      row-gap: 2.5mm;
+    }
+    .grid-item {
+      display: flex;
+      flex-direction: column;
+      border-bottom: 0.1px solid #f3f4f6;
+      padding-bottom: 0.5mm;
+    }
+    .col-span-2 { grid-column: span 2; }
+    
+    .field-label {
+      font-size: 8px;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+      margin-bottom: 0.5mm;
+    }
+    .field-value {
       font-size: 9.5px;
+      font-weight: 500;
+      color: #111827;
       white-space: pre-wrap;
     }
-    .footer {
-      text-align: center;
-      font-size: 8px;
-      color: #9ca3af;
-      margin-top: 5mm;
-      padding-top: 2mm;
-      border-top: 1px solid #e5e7eb;
+    .full-field {
+      width: 100%;
+      margin-bottom: 3mm;
     }
+    
+    .inner-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1.5mm;
+      border: 1px solid #e5e7eb;
+    }
+    .inner-table th {
+      background: #f9fafb;
+      color: #374151;
+      font-weight: 700;
+      font-size: 8px;
+      padding: 1.5mm 2mm;
+      text-align: left;
+      border: 1px solid #e5e7eb;
+      text-transform: uppercase;
+    }
+    .inner-table td {
+      padding: 1.5mm 2mm;
+      font-size: 9px;
+      border: 1px solid #e5e7eb;
+      color: #1f2937;
+    }
+    .no-data {
+      padding: 4mm;
+      text-align: center;
+      color: #9ca3af;
+      font-style: italic;
+      background: #f9fafb;
+      border-radius: 4px;
+      border: 1px dashed #e5e7eb;
+    }
+    .footer {
+      position: fixed;
+      bottom: 10mm;
+      left: 15mm;
+      right: 15mm;
+      text-align: center;
+      font-size: 7.5px;
+      color: #9ca3af;
+      border-top: 0.5px solid #e5e7eb;
+      padding-top: 2mm;
+    }
+    .mt-2 { margin-top: 2mm; }
   </style>
 </head>
 <body>
-  <div class="header">
-    <h1>Form Data Diri Santri &amp; Santriwati</h1>
-    <div class="sub">PPM Darussalam Lahat</div>
+  <div class="header-container">
+    <div class="header-text">
+      <h1>Data Master Santri &amp; Santriwati</h1>
+      <p>Pondok Pesantren Modern Darussalam Lahat (PPMDL)</p>
+    </div>
   </div>
   ${sectionsHtml}
   <div class="footer">
-    Dicetak pada ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+    Dicetak pada ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })} • PPM Darussalam Lahat
   </div>
 </body>
 </html>`;
@@ -346,12 +497,41 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const santri = await prisma.santri.findUnique({ where: { id } });
+    const santri = await prisma.santri.findUnique({
+      where: { id }
+    });
     if (!santri) {
       return NextResponse.json({ success: false, error: 'Data santri tidak ditemukan' }, { status: 404 });
     }
 
-    const htmlContent = buildHtml(santri);
+    // Fetch riwayat kelas manual (karena bukan relasi langsung di model Santri)
+    let classHistory: any[] = [];
+    if (santri.studentNo) {
+      const students = await prisma.student.findMany({
+        where: { studentNo: santri.studentNo },
+        include: {
+          class: {
+            include: {
+              waliKelas: { select: { name: true } },
+              schoolYear: { select: { year: true } },
+              semester: { select: { number: true, semesterLabel: true } },
+              level: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { class: { schoolYear: { year: 'asc' } } },
+      });
+
+      classHistory = students.map(s => ({
+        className: s.class.name,
+        levelName: s.class.level.name,
+        waliKelasName: s.class.waliKelas?.name || '-',
+        schoolYear: s.class.schoolYear.year,
+        semester: s.class.semester.semesterLabel || `Semester ${s.class.semester.number}`,
+      }));
+    }
+
+    const htmlContent = buildHtml({ ...santri, classHistory });
 
     let executablePath = '';
     if (process.env.PUPPETEER_EXECUTABLE_PATH) {
