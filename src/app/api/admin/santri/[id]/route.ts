@@ -110,7 +110,34 @@ export async function GET(
       return errorResponse('Data santri tidak ditemukan', 404);
     }
 
-    return successResponse(santri);
+    // Fetch riwayat kelas from Student → Class → waliKelas, schoolYear, semester
+    let classHistory: any[] = [];
+    if (santri.studentNo) {
+      const students = await prisma.student.findMany({
+        where: { studentNo: santri.studentNo },
+        include: {
+          class: {
+            include: {
+              waliKelas: { select: { name: true } },
+              schoolYear: { select: { year: true } },
+              semester: { select: { number: true, semesterLabel: true } },
+              level: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { class: { schoolYear: { year: 'asc' } } },
+      });
+
+      classHistory = students.map(s => ({
+        className: s.class.name,
+        levelName: s.class.level.name,
+        waliKelasName: s.class.waliKelas?.name || '-',
+        schoolYear: s.class.schoolYear.year,
+        semester: s.class.semester.semesterLabel || `Semester ${s.class.semester.number}`,
+      }));
+    }
+
+    return successResponse({ ...santri, classHistory });
   } catch (error) {
     console.error('Error fetching santri:', error);
     return errorResponse('Gagal memuat data santri', 500);

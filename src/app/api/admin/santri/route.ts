@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
         where,
         skip,
         take: limit,
-        orderBy: [{ name: 'asc' }],
+        orderBy: [{ studentNo: 'asc' }],
       }),
       prisma.santri.count({ where }),
     ]);

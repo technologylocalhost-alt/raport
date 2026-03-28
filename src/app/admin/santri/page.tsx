@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, Users, Download, Eye } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, Users, Download, Eye, Upload, FileSpreadsheet, FileDown } from 'lucide-react';
 
 interface Santri {
   id: string;
@@ -29,6 +29,8 @@ export default function SantriPage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [isImporting, setIsImporting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImportingExcel, setIsImportingExcel] = useState(false);
 
   const limit = 10;
 
@@ -80,6 +82,86 @@ export default function SantriPage() {
     }
   };
 
+  const handleDownloadTemplate = async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch('/api/admin/santri/template', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) { alert('Gagal mengunduh template'); return; }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'template-santri.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading template:', error);
+      alert('Terjadi kesalahan saat mengunduh template');
+    }
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      setIsExporting(true);
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch('/api/admin/santri/export', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) { alert('Gagal mengekspor data'); return; }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `data-santri-${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error exporting:', error);
+      alert('Terjadi kesalahan saat ekspor');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    try {
+      setIsImportingExcel(true);
+      const token = localStorage.getItem('accessToken');
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await fetch('/api/admin/santri/import', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await response.json();
+      if (!response.ok) { alert(data.error || 'Gagal import data'); return; }
+      const r = data.data;
+      let msg = `Import selesai!\n- Baru ditambahkan: ${r.imported}\n- Diperbarui: ${r.updated}\n- Dilewati: ${r.skipped}`;
+      if (r.errors && r.errors.length > 0) {
+        msg += `\n\nError (${r.errors.length}):\n${r.errors.slice(0, 10).join('\n')}`;
+        if (r.errors.length > 10) msg += `\n... dan ${r.errors.length - 10} error lainnya`;
+      }
+      alert(msg);
+      fetchSantri();
+    } catch (error) {
+      console.error('Error importing Excel:', error);
+      alert('Terjadi kesalahan saat import');
+    } finally {
+      setIsImportingExcel(false);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm('Yakin ingin menghapus data santri ini?')) return;
     try {
@@ -110,7 +192,22 @@ export default function SantriPage() {
           <h1 className="text-3xl font-bold text-gray-900">Master Data Santri</h1>
           <p className="text-gray-600 mt-2">Total: {total} santri</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={handleDownloadTemplate}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white hover:bg-gray-700 rounded-lg transition-colors font-medium text-sm">
+            <FileDown size={18} />
+            Download Template
+          </button>
+          <button onClick={handleExportExcel} disabled={isExporting}
+            className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white hover:bg-teal-700 rounded-lg transition-colors font-medium disabled:opacity-50 text-sm">
+            <FileSpreadsheet size={18} />
+            {isExporting ? 'Exporting...' : 'Export Excel'}
+          </button>
+          <label className={`flex items-center gap-2 px-4 py-2 bg-orange-600 text-white hover:bg-orange-700 rounded-lg transition-colors font-medium text-sm cursor-pointer ${isImportingExcel ? 'opacity-50 pointer-events-none' : ''}`}>
+            <Upload size={18} />
+            {isImportingExcel ? 'Importing...' : 'Import Excel'}
+            <input type="file" accept=".xlsx,.xls" onChange={handleImportExcel} className="hidden" disabled={isImportingExcel} />
+          </label>
           <button onClick={handleImportFromStudents} disabled={isImporting}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors font-medium disabled:opacity-50 text-sm">
             <Download size={18} />

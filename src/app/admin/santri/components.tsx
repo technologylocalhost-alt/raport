@@ -109,7 +109,7 @@ const PENDIDIKAN_OPTIONS = [
 
 // === TAB CONTENT RENDERER ===
 
-export function renderTabContent(activeTab: string, formData: Record<string, string>, onChange: (name: string, val: string) => void) {
+export function renderTabContent(activeTab: string, formData: Record<string, string>, onChange: (name: string, val: string) => void, classHistory?: any[]) {
   const F = formData;
   const C = onChange;
 
@@ -255,18 +255,54 @@ export function renderTabContent(activeTab: string, formData: Record<string, str
 
     case 'riwayat':
       return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <SectionTitle title="Riwayat Pendidikan Sebelum PPMDL" />
-          <InputField label="TK A/B (Tahun)" name="pendidikanTK" value={F.pendidikanTK} onChange={C} />
-          <InputField label="PAUD (Tahun)" name="pendidikanPAUD" value={F.pendidikanPAUD} onChange={C} />
-          <InputField label="SD/MI (Tahun)" name="pendidikanSD" value={F.pendidikanSD} onChange={C} />
-          <InputField label="SMP/MTS (Tahun)" name="pendidikanSMP" value={F.pendidikanSMP} onChange={C} />
-          <InputField label="SMA/MA - Pindahan/Lanjut (Tahun)" name="pendidikanSMA" value={F.pendidikanSMA} onChange={C} />
-          <SectionTitle title="Riwayat Kelas di PPMDL" />
-          <TextareaField label="Riwayat Kelas (Kelas, Wali Kelas, Tahun)" name="riwayatKelas" value={F.riwayatKelas} onChange={C} rows={4} />
-          <SectionTitle title="Riwayat Kamar di PPMDL" />
-          <TextareaField label="Riwayat Kamar (Kelas, Tahun, Semester 1, Semester 2)" name="riwayatKamar" value={F.riwayatKamar} onChange={C} rows={4} />
-          <InputField label="Kamar yang Paling Berkesan" name="kamarBerkesan" value={F.kamarBerkesan} onChange={C} />
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <SectionTitle title="Riwayat Pendidikan Sebelum PPMDL" />
+            <InputField label="TK A/B (Tahun)" name="pendidikanTK" value={F.pendidikanTK} onChange={C} />
+            <InputField label="PAUD (Tahun)" name="pendidikanPAUD" value={F.pendidikanPAUD} onChange={C} />
+            <InputField label="SD/MI (Tahun)" name="pendidikanSD" value={F.pendidikanSD} onChange={C} />
+            <InputField label="SMP/MTS (Tahun)" name="pendidikanSMP" value={F.pendidikanSMP} onChange={C} />
+            <InputField label="SMA/MA - Pindahan/Lanjut (Tahun)" name="pendidikanSMA" value={F.pendidikanSMA} onChange={C} />
+          </div>
+
+          {/* Riwayat Kelas dari Database */}
+          <h3 className="text-sm font-bold text-emerald-700 border-b border-emerald-200 pb-1 mt-2">Riwayat Kelas di PPMDL</h3>
+          {classHistory && classHistory.length > 0 ? (
+            <div className="overflow-x-auto border rounded-lg">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">No</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Tahun Ajaran</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Semester</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Tingkat</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Kelas</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Wali Kelas</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {classHistory.map((ch: any, idx: number) => (
+                    <tr key={idx} className="hover:bg-gray-50">
+                      <td className="px-4 py-2.5 text-gray-700">{idx + 1}</td>
+                      <td className="px-4 py-2.5 text-gray-900 font-medium">{ch.schoolYear}</td>
+                      <td className="px-4 py-2.5 text-gray-700">{ch.semester}</td>
+                      <td className="px-4 py-2.5 text-gray-700">{ch.levelName}</td>
+                      <td className="px-4 py-2.5 text-gray-900 font-medium">{ch.className}</td>
+                      <td className="px-4 py-2.5 text-gray-700">{ch.waliKelasName}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400 italic py-2">Belum ada data riwayat kelas di database</p>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <SectionTitle title="Riwayat Kamar di PPMDL" />
+            <TextareaField label="Riwayat Kamar (Kelas, Tahun, Semester 1, Semester 2)" name="riwayatKamar" value={F.riwayatKamar} onChange={C} rows={4} />
+            <InputField label="Kamar yang Paling Berkesan" name="kamarBerkesan" value={F.kamarBerkesan} onChange={C} />
+          </div>
         </div>
       );
 
@@ -384,6 +420,7 @@ export function renderTabContent(activeTab: string, formData: Record<string, str
 export function SantriFormPage({ id }: { id?: string }) {
   const router = useRouter();
   const [formData, setFormData] = useState<Record<string, string>>({ ...EMPTY_FORM });
+  const [classHistory, setClassHistory] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('identitas');
   const [isLoading, setIsLoading] = useState(!!id);
   const [isSaving, setIsSaving] = useState(false);
@@ -410,6 +447,7 @@ export function SantriFormPage({ id }: { id?: string }) {
           }
         }
         setFormData(newForm);
+        if (d.classHistory) setClassHistory(d.classHistory);
       })
       .catch(() => { alert('Gagal memuat data'); router.push('/admin/santri'); })
       .finally(() => setIsLoading(false));
@@ -494,7 +532,7 @@ export function SantriFormPage({ id }: { id?: string }) {
         {/* Form Content */}
         <form onSubmit={handleSubmit}>
           <div className="p-6">
-            {renderTabContent(activeTab, formData, handleFieldChange)}
+            {renderTabContent(activeTab, formData, handleFieldChange, classHistory)}
           </div>
 
           {/* Footer */}

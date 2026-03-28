@@ -117,22 +117,79 @@ export default function DetailSantriPage({ params }: { params: Promise<{ id: str
             <h2 className="text-sm font-bold text-emerald-800 uppercase tracking-wider">{section.title}</h2>
           </div>
           <div className="p-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4">
-              {section.fields.map(f => {
-                const val = data[f.key];
-                const displayVal = (f as any).type === 'date' ? formatDate(val) : formatValue(f.key, val);
-                return (
-                  <div key={f.key}>
-                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">{f.label}</dt>
-                    <dd className={`mt-1 text-sm font-medium whitespace-pre-wrap ${
-                      displayVal === '-' ? 'text-gray-400 italic' : 'text-gray-900'
-                    }`}>
-                      {displayVal}
-                    </dd>
-                  </div>
-                );
-              })}
-            </div>
+            {section.title === 'Riwayat Kelas & Kamar di PPMDL' ? (
+              <div className="space-y-6">
+                {/* Riwayat Kelas dari Database */}
+                <div>
+                  <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Riwayat Kelas (dari Database)</h3>
+                  {data.classHistory && data.classHistory.length > 0 ? (
+                    <div className="overflow-x-auto border rounded-lg">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50 border-b">
+                          <tr>
+                            <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">No</th>
+                            <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Tahun Ajaran</th>
+                            <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Semester</th>
+                            <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Tingkat</th>
+                            <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Kelas</th>
+                            <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Wali Kelas</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {data.classHistory.map((ch: any, idx: number) => (
+                            <tr key={idx} className="hover:bg-gray-50">
+                              <td className="px-4 py-2.5 text-gray-700">{idx + 1}</td>
+                              <td className="px-4 py-2.5 text-gray-900 font-medium">{ch.schoolYear}</td>
+                              <td className="px-4 py-2.5 text-gray-700">{ch.semester}</td>
+                              <td className="px-4 py-2.5 text-gray-700">{ch.levelName}</td>
+                              <td className="px-4 py-2.5 text-gray-900 font-medium">{ch.className}</td>
+                              <td className="px-4 py-2.5 text-gray-700">{ch.waliKelasName}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 italic">Belum ada data riwayat kelas di database</p>
+                  )}
+                </div>
+
+                {/* Field manual lainnya: riwayat kamar & kamar berkesan */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+                  {section.fields.filter(f => f.key !== 'riwayatKelas').map(f => {
+                    const val = data[f.key];
+                    const displayVal = formatValue(f.key, val);
+                    return (
+                      <div key={f.key}>
+                        <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">{f.label}</dt>
+                        <dd className={`mt-1 text-sm font-medium whitespace-pre-wrap ${
+                          displayVal === '-' ? 'text-gray-400 italic' : 'text-gray-900'
+                        }`}>
+                          {displayVal}
+                        </dd>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4">
+                {section.fields.map(f => {
+                  const val = data[f.key];
+                  const displayVal = (f as any).type === 'date' ? formatDate(val) : formatValue(f.key, val);
+                  return (
+                    <div key={f.key}>
+                      <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">{f.label}</dt>
+                      <dd className={`mt-1 text-sm font-medium whitespace-pre-wrap ${
+                        displayVal === '-' ? 'text-gray-400 italic' : 'text-gray-900'
+                      }`}>
+                        {displayVal}
+                      </dd>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       ))}
