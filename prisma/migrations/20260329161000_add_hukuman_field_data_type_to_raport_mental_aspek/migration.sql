@@ -1,0 +1,1 @@
+ALTER TYPE "RaportMentalFieldDataType" ADD VALUE IF NOT EXISTS 'HUKUMAN';

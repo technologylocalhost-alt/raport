@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
@@ -56,6 +57,7 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
     const levelId = searchParams.get('levelId');
+    const schoolId = searchParams.get('schoolId');
     const schoolYearId = searchParams.get('schoolYearId');
     const semesterId = searchParams.get('semesterId');
     const waliKelasId = searchParams.get('waliKelasId');
@@ -73,7 +75,7 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit;
 
     // Build where clause with validation
-    const where: any = {};
+    const where: Prisma.ClassWhereInput = {};
     
     // By default, only show active classes unless explicitly requested otherwise
     if (!includeInactive) {
@@ -94,6 +96,16 @@ export async function GET(request: NextRequest) {
     
     if (levelId && levelId.trim() !== '') {
       where.levelId = levelId;
+    }
+    if (schoolId && schoolId.trim() !== '') {
+      where.schoolYear = {
+        ...(where.schoolYear || {}),
+        schoolId,
+      };
+      where.level = {
+        ...(where.level || {}),
+        schoolId,
+      };
     }
     if (schoolYearId && schoolYearId.trim() !== '') {
       where.schoolYearId = schoolYearId;

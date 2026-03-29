@@ -89,6 +89,7 @@ model SchoolYear {
   classes               Class[]
   school                School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   semesters             Semester[]
+  raportMentalNilai     RaportMentalNilai[]
 
   @@unique([schoolId, year])
   @@index([schoolId])
@@ -107,6 +108,7 @@ model Semester {
   updatedAt           DateTime   @updatedAt
   classes             Class[]
   schoolYear          SchoolYear @relation(fields: [schoolYearId], references: [id], onDelete: Cascade)
+  raportMentalNilai   RaportMentalNilai[]
 
   @@unique([schoolYearId, number])
   @@index([schoolYearId])
@@ -548,6 +550,68 @@ model ReportConfig {
   level            Level       @relation(fields: [levelId], references: [id], onDelete: Cascade)
 }
 
+// =============================================
+// RAPORT MENTAL — Master Data & Penilaian
+// =============================================
+
+model RaportMentalSeksi {
+  id          String                 @id @default(cuid())
+  nama        String
+  kode        String                 @unique
+  deskripsi   String?
+  urutan      Int                    @default(0)
+  tipeNilai   TipeNilaiRaportMental  @default(NILAI_ABCD)
+  isActive    Boolean                @default(true)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  aspek       RaportMentalAspek[]
+  nilai       RaportMentalNilai[]
+
+  @@index([urutan])
+}
+
+model RaportMentalAspek {
+  id             String             @id @default(cuid())
+  seksiId        String
+  nama           String
+  keterangan     String?
+  urutan         Int                @default(0)
+  punyaFieldData Boolean            @default(false)
+  fieldDataType  RaportMentalFieldDataType @default(NONE)
+  isActive       Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  seksi          RaportMentalSeksi  @relation(fields: [seksiId], references: [id], onDelete: Cascade)
+  nilai          RaportMentalNilai[]
+
+  @@index([seksiId])
+  @@index([urutan])
+}
+
+model RaportMentalNilai {
+  id           String             @id @default(cuid())
+  studentNo    String
+  seksiId      String
+  aspekId      String
+  schoolYearId String
+  semesterId   String
+  nilai        String?
+  dataEkstra   String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  seksi        RaportMentalSeksi  @relation(fields: [seksiId], references: [id], onDelete: Cascade)
+  aspek        RaportMentalAspek  @relation(fields: [aspekId], references: [id], onDelete: Cascade)
+  schoolYear   SchoolYear         @relation(fields: [schoolYearId], references: [id], onDelete: Cascade)
+  semester     Semester           @relation(fields: [semesterId], references: [id], onDelete: Cascade)
+
+  @@unique([studentNo, aspekId, schoolYearId, semesterId])
+  @@index([studentNo])
+  @@index([seksiId])
+  @@index([aspekId])
+  @@index([schoolYearId])
+  @@index([semesterId])
+}
+
 enum UserRole {
   ADMIN
   TEACHER
@@ -566,6 +630,21 @@ enum ScoringType {
   NUMERIC_0_100
   LETTER_A_D
   LETTER_E_A
+}
+
+enum TipeNilaiRaportMental {
+  NILAI_ABCD        // nilai A, B, C, D
+  NILAI_ABCDE       // nilai A, B, C, D, E
+  NILAI_PLUS_MINUS  // nilai A+, A, A-, B+, B, B-, C+, C, C-, D
+  TEXT              // teks bebas
+  ANGKA             // angka/jumlah
+}
+
+enum RaportMentalFieldDataType {
+  NONE
+  TEXT
+  PRESTASI
+  HUKUMAN
 }
 
 enum AssessmentType {
