@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Search, Save, CheckCircle, ChevronRight,
@@ -102,6 +102,139 @@ function stringifyHukumanData(rows: HukumanRow[]): string {
   return JSON.stringify(rows);
 }
 
+function parseJumlah(raw: string): number {
+  const cleaned = raw.replace(/[^\d-]/g, '');
+  if (!cleaned) return raw.trim() ? 1 : 0;
+  const value = Number.parseInt(cleaned, 10);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function formatSummary(items: string[]): string {
+  return Array.from(new Set(items.filter(Boolean))).join(', ');
+}
+
+function assignOtherPunishments(
+  kategoriByUrutan: Map<number, { total: number; keterangan: string[] }>,
+  unmatchedPunishments: Map<string, number>
+) {
+  const lainLain = Array.from(unmatchedPunishments.entries())
+    .sort((a, b) => b[1] - a[1]);
+
+  const first = lainLain[0];
+  if (first) {
+    const target = kategoriByUrutan.get(6)!;
+    target.total = first[1];
+    target.keterangan = [`${first[0]} (${first[1]})`];
+  }
+
+  const rest = lainLain.slice(1);
+  if (rest.length > 0) {
+    const target = kategoriByUrutan.get(7)!;
+    target.total = rest.reduce((sum, [, total]) => sum + total, 0);
+    target.keterangan = rest.map(([label, total]) => `${label} (${total})`);
+  }
+}
+
+function getPelanggaranSeverityIndex(kode: string): number | null {
+  const normalized = kode.trim().toUpperCase();
+  if (normalized === 'PELANGGARAN_RINGAN' || normalized === 'L') return 0;
+  if (normalized === 'PELANGGARAN_SEDANG' || normalized === 'M') return 1;
+  if (normalized === 'PELANGGARAN_BERAT' || normalized === 'N') return 2;
+  return null;
+}
+
+function addPunishmentCategory(
+  kategoriByUrutan: Map<number, { total: number; keterangan: string[] }>,
+  unmatchedPunishments: Map<string, number>,
+  hukuman: string,
+  amount: number
+) {
+  const normalized = hukuman.trim().toUpperCase();
+  if (!normalized) return;
+
+  if (normalized.includes('SP-1')) {
+    kategoriByUrutan.get(3)!.total += amount;
+    kategoriByUrutan.get(3)!.keterangan.push(hukuman);
+  } else if (normalized.includes('SP-2') || normalized.includes('BOTAK')) {
+    kategoriByUrutan.get(4)!.total += amount;
+    kategoriByUrutan.get(4)!.keterangan.push(hukuman);
+  } else if (normalized.includes('SP-3') || normalized.includes('PEMANGGILAN ORANG TUA')) {
+    kategoriByUrutan.get(5)!.total += amount;
+    kategoriByUrutan.get(5)!.keterangan.push(hukuman);
+  } else {
+    unmatchedPunishments.set(hukuman, (unmatchedPunishments.get(hukuman) ?? 0) + amount);
+  }
+}
+
+function buildAkumulasiMap(
+  seksiList: Seksi[],
+  nilaiMap: Record<string, NilaiEntry>
+): Record<string, NilaiEntry> {
+  const akumulasi = seksiList.find((seksi) => seksi.kode === 'AKUMULASI');
+  if (!akumulasi) return {};
+
+  const kategoriByUrutan = new Map<number, { total: number; keterangan: string[] }>();
+  for (let i = 0; i < 8; i += 1) {
+    kategoriByUrutan.set(i, { total: 0, keterangan: [] });
+  }
+
+  const unmatchedPunishments = new Map<string, number>();
+  const pelanggaranSeksi = seksiList.filter((seksi) => getPelanggaranSeverityIndex(seksi.kode) !== null);
+
+  for (const seksi of pelanggaranSeksi) {
+    const severityIndex = getPelanggaranSeverityIndex(seksi.kode);
+    if (severityIndex === null) continue;
+
+    for (const aspek of seksi.aspek) {
+      const entry = nilaiMap[aspek.id];
+      const rows = parseHukumanData(entry?.dataEkstra ?? '');
+      let hasStructuredRows = false;
+
+      for (const row of rows) {
+        const amount = parseJumlah(row.jumlah);
+        if (!amount && !row.namaPelanggaran && !row.hukuman) continue;
+        hasStructuredRows = true;
+
+        kategoriByUrutan.get(severityIndex)!.total += amount || 1;
+        if (row.namaPelanggaran) {
+          kategoriByUrutan.get(severityIndex)!.keterangan.push(row.namaPelanggaran);
+        }
+
+        const hukuman = row.hukuman.trim();
+        if (!hukuman) continue;
+        addPunishmentCategory(kategoriByUrutan, unmatchedPunishments, hukuman, amount || 1);
+      }
+
+      // Fallback untuk data lama yang tersimpan sebagai input biasa, bukan JSON row hukuman.
+      if (!hasStructuredRows && entry && (entry.nilai || entry.dataEkstra)) {
+        const amount = parseJumlah(entry.nilai || '');
+        const safeAmount = amount || 1;
+        kategoriByUrutan.get(severityIndex)!.total += safeAmount;
+        kategoriByUrutan.get(severityIndex)!.keterangan.push(entry.dataEkstra || aspek.nama);
+
+        if (entry.dataEkstra) {
+          addPunishmentCategory(kategoriByUrutan, unmatchedPunishments, entry.dataEkstra, safeAmount);
+        }
+      }
+    }
+  }
+
+  assignOtherPunishments(kategoriByUrutan, unmatchedPunishments);
+
+  return Object.fromEntries(
+    akumulasi.aspek.map((aspek) => {
+      const kategori = kategoriByUrutan.get(aspek.urutan) ?? { total: 0, keterangan: [] };
+      return [
+        aspek.id,
+        {
+          nilai: kategori.total > 0 ? String(kategori.total) : '',
+          dataEkstra: formatSummary(kategori.keterangan),
+        },
+      ];
+    })
+  );
+}
+
 // ─── Breadcrumb ────────────────────────────────────────────────────────────────
 function Breadcrumb({ steps }: { steps: { label: string; onClick?: () => void }[] }) {
   return (
@@ -195,6 +328,7 @@ export default function PenilaianRaportMentalPage() {
     s.name.toLowerCase().includes(searchSantri.toLowerCase()) ||
     s.studentNo.includes(searchSantri)
   );
+  const akumulasiMap = useMemo(() => buildAkumulasiMap(seksiList, nilaiMap), [seksiList, nilaiMap]);
 
   // ─── Load awal: sekolah + seksi ────────────────────────────────────────────
   useEffect(() => {
@@ -443,6 +577,7 @@ export default function PenilaianRaportMentalPage() {
     try {
       const items: { aspekId: string; seksiId: string; nilai: string; dataEkstra: string }[] = [];
       for (const seksi of seksiList) {
+        if (seksi.kode === 'AKUMULASI') continue;
         for (const aspek of seksi.aspek) {
           const e = nilaiMap[aspek.id];
           if (!e) continue;
@@ -464,6 +599,21 @@ export default function PenilaianRaportMentalPage() {
           }
         }
       }
+
+      const akumulasiSeksi = seksiList.find((seksi) => seksi.kode === 'AKUMULASI');
+      if (akumulasiSeksi) {
+        for (const aspek of akumulasiSeksi.aspek) {
+          const e = akumulasiMap[aspek.id];
+          if (!e) continue;
+          items.push({
+            aspekId: aspek.id,
+            seksiId: akumulasiSeksi.id,
+            nilai: e.nilai || '',
+            dataEkstra: e.dataEkstra || '',
+          });
+        }
+      }
+
       const res = await fetch('/api/admin/raport-mental/nilai', {
         method: 'POST', headers: authH(),
         body: JSON.stringify({ studentNo: selectedSantri.studentNo, schoolYearId: selectedSchoolYearId, semesterId: selectedSemesterId, items }),
@@ -475,7 +625,10 @@ export default function PenilaianRaportMentalPage() {
     finally { setSaving(false); }
   };
 
-  const filledCount = Object.values(nilaiMap).filter(e => e.nilai || e.dataEkstra).length;
+  const filledCount = seksiList.reduce((total, seksi) => {
+    const source = seksi.kode === 'AKUMULASI' ? akumulasiMap : nilaiMap;
+    return total + seksi.aspek.filter(aspek => source[aspek.id]?.nilai || source[aspek.id]?.dataEkstra).length;
+  }, 0);
   const totalAspek = seksiList.reduce((s, sk) => s + sk.aspek.length, 0);
 
   // ─── Breadcrumb steps ──────────────────────────────────────────────────────
@@ -796,7 +949,8 @@ export default function PenilaianRaportMentalPage() {
                 <div className="border-b border-gray-200 px-4 py-4">
                   <div className="flex gap-2 overflow-x-auto pb-1">
                     {seksiList.map((seksi, idx) => {
-                      const filled = seksi.aspek.filter(a => nilaiMap[a.id]?.nilai || nilaiMap[a.id]?.dataEkstra).length;
+                      const source = seksi.kode === 'AKUMULASI' ? akumulasiMap : nilaiMap;
+                      const filled = seksi.aspek.filter(a => source[a.id]?.nilai || source[a.id]?.dataEkstra).length;
                       const isActive = seksi.id === activeSeksiId;
                       return (
                         <button
@@ -838,9 +992,108 @@ export default function PenilaianRaportMentalPage() {
                       <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
                         <h3 className="text-base font-semibold text-gray-900">{activeSeksi.nama}</h3>
                         <p className="text-sm text-gray-600 mt-1">
-                          {activeSeksi.aspek.filter(a => nilaiMap[a.id]?.nilai || nilaiMap[a.id]?.dataEkstra).length}/{activeSeksi.aspek.length} aspek terisi
+                          {(activeSeksi.kode === 'AKUMULASI'
+                            ? activeSeksi.aspek.filter(a => akumulasiMap[a.id]?.nilai || akumulasiMap[a.id]?.dataEkstra).length
+                            : activeSeksi.aspek.filter(a => nilaiMap[a.id]?.nilai || nilaiMap[a.id]?.dataEkstra).length)}/{activeSeksi.aspek.length} aspek terisi
                         </p>
                       </div>
+                      {activeSeksi.kode === 'AKUMULASI' ? (
+                        <div className="px-6 py-5">
+                          <div className="overflow-hidden rounded-xl border border-gray-200">
+                            <div className="grid grid-cols-[64px_minmax(0,1fr)_140px_280px] gap-0 bg-gray-100 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                              <div className="border-r border-gray-200 px-4 py-3 text-center">No</div>
+                              <div className="border-r border-gray-200 px-4 py-3">Jenis Pelanggaran</div>
+                              <div className="border-r border-gray-200 px-4 py-3">Jumlah</div>
+                              <div className="px-4 py-3">Ket</div>
+                            </div>
+                            {activeSeksi.aspek.map((aspek, aidx) => {
+                              const entry = akumulasiMap[aspek.id] ?? { nilai: '', dataEkstra: '' };
+                              const isFilled = !!(entry.nilai || entry.dataEkstra);
+                              return (
+                                <div
+                                  key={aspek.id}
+                                  className={`grid grid-cols-[64px_minmax(0,1fr)_140px_280px] gap-0 border-t border-gray-200 ${isFilled ? 'bg-emerald-50/40' : 'bg-white'}`}
+                                >
+                                  <div className="flex items-start justify-center border-r border-gray-200 px-3 py-4 text-sm font-semibold text-gray-500">
+                                    {aidx + 1}
+                                  </div>
+                                  <div className="border-r border-gray-200 px-4 py-4">
+                                    <p className="text-sm font-medium text-gray-900">{aspek.nama}</p>
+                                  </div>
+                                  <div className="border-r border-gray-200 px-4 py-4">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      value={entry.nilai}
+                                      readOnly
+                                      className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm text-gray-900 bg-gray-50"
+                                      placeholder="0"
+                                    />
+                                  </div>
+                                  <div className="px-4 py-4">
+                                    <div className="min-h-[72px] rounded-lg border-2 border-gray-200 bg-gray-50 px-3 py-2 text-sm leading-6 text-gray-900">
+                                      {entry.dataEkstra ? (
+                                        <div className="space-y-1">
+                                          {entry.dataEkstra.split(', ').map((item, idx) => (
+                                            <div key={`${aspek.id}-${idx}`} className="break-words">
+                                              {item}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <span className="text-gray-400">Tidak ada keterangan</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <p className="mt-3 text-xs text-gray-500">
+                            Nilai akumulasi dihitung otomatis dari input pada tab pelanggaran dan hukuman.
+                          </p>
+                        </div>
+                      ) : activeSeksi.kode === 'PENILAIAN_AKHIR' ? (
+                        <div className="space-y-5 px-6 py-5">
+                          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-7 text-amber-900">
+                            Dengan mempertimbangkan berbagai aspek serta menelaah raport mental dari beragam sudut pandang
+                            dalam setiap ranah kegiatan secara menyeluruh, maka secara keseluruhan raport ananda dinilai:
+                            <span className="font-semibold"> pilih nilai akhir A / B / C / D / E</span>.
+                            Semoga hasil ini dapat menjadi bahan evaluasi yang bermanfaat demi kebaikan dan kemajuan bersama,
+                            khususnya untuk perkembangan ananda ke arah yang lebih baik.
+                          </div>
+                          <div className="grid gap-5">
+                            {activeSeksi.aspek.map((aspek) => {
+                              const entry = nilaiMap[aspek.id] ?? { nilai: '', dataEkstra: '' };
+                              return (
+                                <div key={aspek.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                                  <div className="mb-4">
+                                    <h4 className="text-sm font-bold uppercase tracking-wider text-slate-800">{aspek.nama}</h4>
+                                    <p className="mt-1 text-sm text-slate-500">Pilih satu nilai akhir untuk keseluruhan raport mental.</p>
+                                  </div>
+                                  <div className="flex flex-wrap gap-3">
+                                    {['A', 'B', 'C', 'D', 'E'].map((opt) => (
+                                      <button
+                                        key={opt}
+                                        type="button"
+                                        onClick={() => setNilai(aspek.id, entry.nilai === opt ? '' : opt)}
+                                        className={`flex h-14 w-14 items-center justify-center rounded-full border-2 text-lg font-bold transition-all ${
+                                          entry.nilai === opt
+                                            ? 'border-emerald-500 bg-emerald-500 text-white shadow-md'
+                                            : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-400'
+                                        }`}
+                                      >
+                                        {opt}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                      <>
                       <div className="grid gap-3 px-6 py-3 bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider"
                         style={{ gridTemplateColumns: opts.length > 0 ? (isPM ? '1fr 2fr' : '2fr 1fr') : '1fr' }}>
                         <span>Aspek</span>
@@ -852,6 +1105,16 @@ export default function PenilaianRaportMentalPage() {
                         const fieldDataType = getFieldDataType(aspek);
                         const prestasiData = fieldDataType === 'PRESTASI' ? parsePrestasiData(entry.dataEkstra) : null;
                         const hukumanRows = fieldDataType === 'HUKUMAN' ? parseHukumanData(entry.dataEkstra) : null;
+                        const isAkumulasi = activeSeksi.kode === 'AKUMULASI';
+                        const isPenilaianUmum =
+                          activeSeksi.kode === 'CATATAN_POSITIF' ||
+                          activeSeksi.kode === 'CATATAN_NEGATIF' ||
+                          activeSeksi.kode === 'P' ||
+                          activeSeksi.nama.toUpperCase().includes('PENILAIAN UMUM');
+                        const isPositiveNote =
+                          aspek.nama.toUpperCase().includes('POSITIF') ||
+                          aspek.nama.toUpperCase().includes('AFIRMASI') ||
+                          aspek.nama.toUpperCase().includes('APRESIASI');
                         return (
                           <div key={aspek.id}
                             className={`grid gap-4 px-6 py-4 items-start ${isFilled ? 'bg-emerald-50/40' : 'hover:bg-gray-50'}`}
@@ -864,31 +1127,48 @@ export default function PenilaianRaportMentalPage() {
                             </div>
                             <div className="pt-1">
                               {fieldDataType === 'TEXT' ? (
+                                isPenilaianUmum ? (
+                                  <div className={`rounded-2xl border p-4 ${isPositiveNote ? 'border-emerald-200 bg-emerald-50/60' : 'border-rose-200 bg-rose-50/60'}`}>
+                                    <label className={`mb-2 block text-[11px] font-semibold uppercase tracking-wider ${isPositiveNote ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                      {isPositiveNote ? 'Catatan Positif' : 'Catatan Negatif'}
+                                    </label>
+                                    <textarea
+                                      value={entry.dataEkstra}
+                                      onChange={e => setEkstra(aspek.id, e.target.value)}
+                                      rows={5}
+                                      className="w-full rounded-xl border-2 border-white bg-white px-4 py-3 text-sm leading-6 text-gray-900 shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500"
+                                      placeholder={isPositiveNote
+                                        ? 'Tulis afirmasi, apresiasi, atau catatan positif...'
+                                        : 'Tulis evaluasi, perhatian khusus, atau catatan negatif...'}
+                                    />
+                                  </div>
+                                ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                   <div>
                                     <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">
-                                      Data Pendukung
+                                      {isAkumulasi ? 'Ket' : 'Data Pendukung'}
                                     </label>
                                     <input
                                       type="text"
                                       value={entry.dataEkstra}
                                       onChange={e => setEkstra(aspek.id, e.target.value)}
                                       className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm text-gray-900 bg-white"
-                                      placeholder="Isi data pendukung..."
+                                      placeholder={isAkumulasi ? 'Isi keterangan...' : 'Isi data pendukung...'}
                                     />
                                   </div>
                                   <div>
                                     <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">
-                                      Nilai
+                                      {isAkumulasi ? 'Jumlah' : 'Nilai'}
                                     </label>
                                     {isPM ? <PlusMinusInput nilai={entry.nilai} onChange={v => setNilai(aspek.id, v)} /> :
                                      opts.length > 0 ? <SimpleNilaiInput opts={opts} nilai={entry.nilai} onChange={v => setNilai(aspek.id, v)} /> :
                                      <input type={activeSeksi.tipeNilai === 'ANGKA' ? 'number' : 'text'}
                                        value={entry.nilai} onChange={e => setNilai(aspek.id, e.target.value)} min={0}
                                        className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm text-gray-900 bg-white"
-                                       placeholder={activeSeksi.tipeNilai === 'ANGKA' ? '0' : 'Isi nilai...'} />}
+                                       placeholder={activeSeksi.tipeNilai === 'ANGKA' ? '0' : (isAkumulasi ? 'Isi jumlah...' : 'Isi nilai...')} />}
                                   </div>
                                 </div>
+                                )
                               ) : fieldDataType === 'PRESTASI' && prestasiData ? (
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                   <div>
@@ -1015,6 +1295,8 @@ export default function PenilaianRaportMentalPage() {
                           </div>
                         );
                       })}
+                      </>
+                      )}
                     </div>
                   );
                 })()}

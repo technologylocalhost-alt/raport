@@ -93,6 +93,137 @@ function nilaiDisplay(item?: NilaiItem): string {
   return item?.nilai?.trim() || '-';
 }
 
+function getFieldDataType(aspek: Seksi['aspek'][number]): 'NONE' | 'TEXT' | 'PRESTASI' | 'HUKUMAN' {
+  return aspek.fieldDataType || (aspek.punyaFieldData ? 'TEXT' : 'NONE');
+}
+
+function parseJumlah(raw: string): number {
+  const cleaned = raw.replace(/[^\d-]/g, '');
+  if (!cleaned) return raw.trim() ? 1 : 0;
+  const value = Number.parseInt(cleaned, 10);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function formatSummary(items: string[]): string {
+  return Array.from(new Set(items.filter(Boolean))).join(', ');
+}
+
+function assignOtherPunishments(
+  kategoriByUrutan: Map<number, { total: number; keterangan: string[] }>,
+  unmatchedPunishments: Map<string, number>
+) {
+  const lainLain = Array.from(unmatchedPunishments.entries())
+    .sort((a, b) => b[1] - a[1]);
+
+  const first = lainLain[0];
+  if (first) {
+    const target = kategoriByUrutan.get(6)!;
+    target.total = first[1];
+    target.keterangan = [`${first[0]} (${first[1]})`];
+  }
+
+  const rest = lainLain.slice(1);
+  if (rest.length > 0) {
+    const target = kategoriByUrutan.get(7)!;
+    target.total = rest.reduce((sum, [, total]) => sum + total, 0);
+    target.keterangan = rest.map(([label, total]) => `${label} (${total})`);
+  }
+}
+
+function addPunishmentCategory(
+  kategoriByUrutan: Map<number, { total: number; keterangan: string[] }>,
+  unmatchedPunishments: Map<string, number>,
+  hukuman: string,
+  amount: number
+) {
+  const normalized = hukuman.trim().toUpperCase();
+  if (!normalized) return;
+
+  if (normalized.includes('SP-1')) {
+    kategoriByUrutan.get(3)!.total += amount;
+    kategoriByUrutan.get(3)!.keterangan.push(hukuman);
+  } else if (normalized.includes('SP-2') || normalized.includes('BOTAK')) {
+    kategoriByUrutan.get(4)!.total += amount;
+    kategoriByUrutan.get(4)!.keterangan.push(hukuman);
+  } else if (normalized.includes('SP-3') || normalized.includes('PEMANGGILAN ORANG TUA')) {
+    kategoriByUrutan.get(5)!.total += amount;
+    kategoriByUrutan.get(5)!.keterangan.push(hukuman);
+  } else {
+    unmatchedPunishments.set(hukuman, (unmatchedPunishments.get(hukuman) ?? 0) + amount);
+  }
+}
+
+function buildAkumulasiMap(seksiList: Seksi[], nilaiList: NilaiItem[]): Map<string, { nilai: string; dataEkstra: string }> {
+  const akumulasi = seksiList.find((seksi) => seksi.kode === 'AKUMULASI');
+  if (!akumulasi) return new Map();
+
+  const nilaiMap = new Map(nilaiList.map((item) => [item.aspek.id, item]));
+  const kategoriByUrutan = new Map<number, { total: number; keterangan: string[] }>();
+  for (let i = 0; i < 8; i += 1) {
+    kategoriByUrutan.set(i, { total: 0, keterangan: [] });
+  }
+
+  const unmatchedPunishments = new Map<string, number>();
+  const pelanggaranSeksi = seksiList.filter((seksi) =>
+    ['L', 'M', 'N'].includes(seksi.kode)
+  );
+
+  for (const seksi of pelanggaranSeksi) {
+    const severityIndex = seksi.kode === 'L'
+      ? 0
+      : seksi.kode === 'M'
+        ? 1
+        : 2;
+
+    for (const aspek of seksi.aspek) {
+      const entry = nilaiMap.get(aspek.id);
+      const rows = parseHukumanRows(entry?.dataEkstra);
+      let hasStructuredRows = false;
+
+      for (const row of rows) {
+        const amount = parseJumlah(row.jumlah);
+        if (!amount && !row.namaPelanggaran && !row.hukuman) continue;
+        hasStructuredRows = true;
+
+        kategoriByUrutan.get(severityIndex)!.total += amount || 1;
+        if (row.namaPelanggaran) {
+          kategoriByUrutan.get(severityIndex)!.keterangan.push(row.namaPelanggaran);
+        }
+
+        const hukuman = row.hukuman.trim();
+        if (!hukuman) continue;
+        addPunishmentCategory(kategoriByUrutan, unmatchedPunishments, hukuman, amount || 1);
+      }
+
+      if (!hasStructuredRows && entry && (entry.nilai || entry.dataEkstra)) {
+        const amount = parseJumlah(entry.nilai || '');
+        const safeAmount = amount || 1;
+        kategoriByUrutan.get(severityIndex)!.total += safeAmount;
+        kategoriByUrutan.get(severityIndex)!.keterangan.push(entry.dataEkstra || aspek.nama);
+
+        if (entry.dataEkstra) {
+          addPunishmentCategory(kategoriByUrutan, unmatchedPunishments, entry.dataEkstra, safeAmount);
+        }
+      }
+    }
+  }
+
+  assignOtherPunishments(kategoriByUrutan, unmatchedPunishments);
+
+  return new Map(
+    akumulasi.aspek.map((aspek) => {
+      const kategori = kategoriByUrutan.get(aspek.urutan) ?? { total: 0, keterangan: [] };
+      return [
+        aspek.id,
+        {
+          nilai: kategori.total > 0 ? String(kategori.total) : '',
+          dataEkstra: formatSummary(kategori.keterangan),
+        },
+      ];
+    })
+  );
+}
+
 function MentalReportContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -175,6 +306,10 @@ function MentalReportContent() {
   const nilaiMap = useMemo(
     () => new Map(nilaiList.map((item) => [item.aspek.id, item])),
     [nilaiList]
+  );
+  const akumulasiMap = useMemo(
+    () => buildAkumulasiMap(seksiList, nilaiList),
+    [seksiList, nilaiList]
   );
 
   const handlePrint = () => window.print();
@@ -347,6 +482,35 @@ function MentalReportContent() {
           font-size: 10pt;
         }
 
+        .final-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+          margin-bottom: 12px;
+        }
+
+        .final-card {
+          border: 1px solid #111827;
+          padding: 8px 10px;
+          min-height: 96px;
+          font-size: 10pt;
+        }
+
+        .final-card-title {
+          margin-bottom: 6px;
+          font-weight: bold;
+          text-transform: uppercase;
+        }
+
+        .final-summary {
+          margin-bottom: 10px;
+          border: 1px solid #d1d5db;
+          background: #f9fafb;
+          padding: 10px 12px;
+          font-size: 10pt;
+          line-height: 1.6;
+        }
+
         .signature-grid {
           margin-top: 20px;
           display: grid;
@@ -427,14 +591,70 @@ function MentalReportContent() {
           </div>
 
           {seksiList.map((seksi) => {
-            const hasPrestasi = seksi.aspek.some((aspek) => (aspek.fieldDataType || (aspek.punyaFieldData ? 'TEXT' : 'NONE')) === 'PRESTASI');
-            const hasHukuman = seksi.aspek.some((aspek) => (aspek.fieldDataType || (aspek.punyaFieldData ? 'TEXT' : 'NONE')) === 'HUKUMAN');
+            const hasPrestasi = seksi.aspek.some((aspek) => getFieldDataType(aspek) === 'PRESTASI');
+            const hasHukuman = seksi.aspek.some((aspek) => getFieldDataType(aspek) === 'HUKUMAN');
 
             return (
               <section key={seksi.id}>
                 <div className="section-title">{seksi.nama}</div>
 
-                {hasPrestasi ? (
+                {seksi.kode === 'AKUMULASI' ? (
+                  <table className="mental-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: '7%' }}>No</th>
+                        <th>Jenis Pelanggaran</th>
+                        <th style={{ width: '14%' }}>Jumlah</th>
+                        <th style={{ width: '24%' }}>Ket</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {seksi.aspek.map((aspek, idx) => {
+                        const item = akumulasiMap.get(aspek.id);
+                        return (
+                          <tr key={aspek.id}>
+                            <td className="center">{idx + 1}</td>
+                            <td>{aspek.nama}</td>
+                            <td className="center">{item?.nilai || '-'}</td>
+                            <td>
+                              {item?.dataEkstra ? (
+                                item.dataEkstra.split(', ').map((text, lineIdx) => (
+                                  <div key={`${aspek.id}-${lineIdx}`}>{text}</div>
+                                ))
+                              ) : '-'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : seksi.kode === 'PENILAIAN_AKHIR' ? (
+                  <>
+                    <div className="final-summary">
+                      Dengan mempertimbangkan berbagai aspek serta menelaah raport mental dari beragam sudut pandang
+                      dalam setiap ranah kegiatan secara menyeluruh, maka secara keseluruhan raport ananda dinilai:
+                      {' '}
+                      <strong>{nilaiMap.get(seksi.aspek[0]?.id || '')?.nilai || '-'}</strong>.
+                      {' '}
+                      Semoga hasil ini dapat menjadi bahan evaluasi yang bermanfaat demi kebaikan dan kemajuan bersama,
+                      khususnya untuk perkembangan ananda ke arah yang lebih baik.
+                    </div>
+                    <table className="mental-table">
+                      <thead>
+                        <tr>
+                          <th>Keterangan</th>
+                          <th style={{ width: '25%' }}>Nilai Akhir</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>Penilaian akhir keseluruhan raport mental</td>
+                          <td className="center">{nilaiMap.get(seksi.aspek[0]?.id || '')?.nilai || '-'}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </>
+                ) : hasPrestasi ? (
                   <table className="mental-table">
                     <thead>
                       <tr>
