@@ -89,6 +89,7 @@ model SchoolYear {
   classes               Class[]
   school                School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   semesters             Semester[]
+  raportMentalNilai     RaportMentalNilai[]
 
   @@unique([schoolId, year])
   @@index([schoolId])
@@ -107,6 +108,7 @@ model Semester {
   updatedAt           DateTime   @updatedAt
   classes             Class[]
   schoolYear          SchoolYear @relation(fields: [schoolYearId], references: [id], onDelete: Cascade)
+  raportMentalNilai   RaportMentalNilai[]
 
   @@unique([schoolYearId, number])
   @@index([schoolYearId])
@@ -335,6 +337,202 @@ model StudentNote {
   @@index([classId])
 }
 
+model Santri {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // === IDENTITAS PENDAFTARAN ===
+  tahunDaftar       String?
+  noPendaftaranPSB  String?
+  studentNo         String   @unique // Nomor Stambuk
+  tingkatSebelumnya String? // MI/SD, MTS/SMP, MA/SMA
+  gender            String   @default("MALE") // MALE / FEMALE
+
+  // === DATA DIRI SANTRI ===
+  name          String
+  namaPanggilan String?
+  birthPlace    String?
+  birthDate     DateTime?
+  anakKe        Int?
+  dariAnak      Int?
+  nik           String?
+  nisn          String?
+  asalSekolah   String?
+  nsmNpsn       String? // NSM/NPSN asal sekolah
+  statusDomisili String? // Rumah Ortu, Nenek/Kakek, Saudara Ortu, Saudara Kandung, Lainnya
+  alamatKK      String? // Alamat sesuai KK
+  kodePos       String?
+  domisiliLuar  String? // Domisili di luar alamat KK
+  penanggungJawab     String? // Nama penanggung jawab
+  penanggungJawabHP   String? // HP penanggung jawab
+  ukuranPakaian String?
+  bahasaSehariHari String?
+  golonganDarah String?
+  tinggiBadan   String?
+  beratBadan    String?
+  noBPJS        String?
+  phone         String?
+  address       String?
+  parentPhoneNo String?
+
+  // === KONDISI KESEHATAN ===
+  kondisiGigi       String? // Normal, Tidak Rapi, Berlubang/Sakit-Kambuh
+  kondisiFisik      String? // Normal, Cacat ___
+  instansiKesehatanNama   String?
+  instansiKesehatanAlamat String?
+  instansiKesehatanHP     String?
+
+  // === RIWAYAT PENYAKIT ===
+  penyakitDalam     String? // Penyakit dalam (pernah/sedang)
+  rawatJalan        String? // Rawat jalan & kambuh
+  riwayatSakit      String? // Riwayat sakit (sudah sembuh)
+  alergiMakanan     String?
+  alergiObat        String?
+  konsumsiObatRutin String?
+
+  // === DATA ORANG TUA - AYAH ===
+  ayahNama          String?
+  ayahStatus        String? // Hidup / Wafat
+  ayahTempatTglLahir String?
+  ayahKebangsaan    String? // WNI / WNA
+  ayahNIK           String?
+  ayahNoKK          String?
+  ayahAgama         String?
+  ayahPendidikan    String? // SD/SMP/SMA/S1/S2/S3
+  ayahPekerjaan     String?
+  ayahPenghasilan   String?
+  ayahAlamat        String?
+  ayahTelepon       String?
+  ayahEmail         String?
+
+  // === DATA ORANG TUA - IBU ===
+  ibuNama           String?
+  ibuStatus         String? // Hidup / Wafat
+  ibuTempatTglLahir String?
+  ibuKebangsaan     String? // WNI / WNA
+  ibuNIK            String?
+  ibuNoKK           String?
+  ibuAgama          String?
+  ibuPendidikan     String?
+  ibuPekerjaan      String?
+  ibuPenghasilan    String?
+  ibuAlamat         String?
+  ibuTelepon        String?
+  ibuEmail          String?
+
+  // === PEMBIAYAAN ===
+  sumberPembiayaan    String? // Orang tua, Hubungan Khusus, Beasiswa
+  detailPembiayaan    String? // Detail siapa/lembaga
+  nominalBantuan      String?
+  periodeBantuan      String? // Harian/Mingguan/Bulanan/Semester/Tahunan
+
+  // === DATA WALI ===
+  waliStatus        String? // Status hubungan
+  waliNama          String?
+  waliTempatTglLahir String?
+  waliNIK           String?
+  waliNoKK          String?
+  waliAgama         String?
+  waliPendidikan    String?
+  waliPekerjaan     String?
+  waliPenghasilan   String?
+  waliAlamat        String?
+  waliKondisi       String? // Pembiayaan/Pengasuhan/dll
+
+  // === RIWAYAT PENDIDIKAN ===
+  pendidikanTK      String?
+  pendidikanPAUD    String?
+  pendidikanSD      String?
+  pendidikanSMP     String?
+  pendidikanSMA     String? // Pindahan / Lanjut
+
+  // === RIWAYAT KELAS DI PPMDL ===
+  riwayatKelas      String? // JSON: [{kelas, waliKelas, tahun}]
+
+  // === RIWAYAT KAMAR DI PPMDL ===
+  riwayatKamar      String? // JSON: [{kelas, tahun, semester1, semester2}]
+  kamarBerkesan     String?
+
+  // === MOTIVASI / ALASAN MASUK PONDOK ===
+  motivasiMasuk         String?
+  ikutOrangtuaAtauSendiri String?
+  betahDiPondok         String?
+  alasanBetah           String?
+  alasanTidakBetah      String?
+  janjiOrangtua         String?
+  inspirasiDiPondok     String?
+  sosokTeladan          String?
+  sadarDewasa           String?
+  dariManaTahuPPMDL     String?
+
+  // === PROFIL LINGKUNGAN ===
+  lingkunganSuku        String?
+  lingkunganBahasa      String?
+  lingkunganInteraksi   String?
+  lingkunganTradisi     String?
+  lingkunganGotongRoyong String?
+  lingkunganPolitik     String?
+  lingkunganOrmasMasyarakat String?
+  lingkunganOrmasKeagamaan  String?
+  lingkunganBeragama    String?
+  lingkunganJarakMasjid String?
+  lingkunganKeagamaan   String? // Pengajian, Yasinan, dll
+  lingkunganJumlahMasjid String?
+  lingkunganShalatJamaah String?
+  lingkunganPendidikanMayoritas String?
+  lingkunganLembagaPendidikan   String?
+  lingkunganBudayaBelajar       String?
+  lingkunganAksesInternet       String?
+  lingkunganGadget              String?
+  lingkunganMedsos              String?
+  lingkunganOrganisasi          String?
+  lingkunganKepemudaan          String?
+  lingkunganKeamanan            String?
+  lingkunganRonda               String?
+  lingkunganPergaulanRemaja     String?
+
+  // === PRESTASI & MINAT ===
+  prestasi              String?
+  kegiatanOrganisasi    String?
+  kegiatanEkskul        String?
+  subjekDigemari        String?
+
+  // === KETERANGAN TAMBAHAN KESEHATAN ===
+  pernahOperasi         String? // YA/TIDAK + detail
+  penyakitKronis        String? // YA/TIDAK + detail
+  alergiZat             String? // YA/TIDAK + detail
+  gejalaSatuTahun       String? // YA/TIDAK + detail
+  kebutuhanKhusus       String? // YA/TIDAK + detail
+
+  // === LAIN-LAIN / PREFERENSI ===
+  preferensiBahasa        String? // Arab / Inggris
+  preferensiPelajaran     String? // Bahasa / Umum / Eksakta
+  pelajaranArabDisukai    String?
+  pelajaranInggrisDisukai String?
+  pelajaranEksaktaDisukai String?
+  pelajaranTidakDisukai   String?
+  ekskulDisukai           String?
+  ekskulTidakDisukai      String?
+  kegiatanBesarDisukai    String?
+  kegiatanBesarTidakDisukai String?
+  rencanaMA               String?
+  rencanaKuliah           String?
+  rencanaKarier           String?
+  tempatKerjaDiinginkan   String?
+  profesiCitaCita         String?
+  skillDipelajari         String?
+  target10Tahun           String? // JSON: [{tahun, target}]
+
+  // === ADMINISTRASI ===
+  diInputOleh     String?
+  tanggalInput    DateTime?
+  catatanSekpim   String?
+
+  @@index([studentNo])
+  @@index([name])
+}
+
 model ReportConfig {
   id               String      @id @default(cuid())
   levelId          String      @unique
@@ -350,6 +548,68 @@ model ReportConfig {
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
   level            Level       @relation(fields: [levelId], references: [id], onDelete: Cascade)
+}
+
+// =============================================
+// RAPORT MENTAL — Master Data & Penilaian
+// =============================================
+
+model RaportMentalSeksi {
+  id          String                 @id @default(cuid())
+  nama        String
+  kode        String                 @unique
+  deskripsi   String?
+  urutan      Int                    @default(0)
+  tipeNilai   TipeNilaiRaportMental  @default(NILAI_ABCD)
+  isActive    Boolean                @default(true)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  aspek       RaportMentalAspek[]
+  nilai       RaportMentalNilai[]
+
+  @@index([urutan])
+}
+
+model RaportMentalAspek {
+  id             String             @id @default(cuid())
+  seksiId        String
+  nama           String
+  keterangan     String?
+  urutan         Int                @default(0)
+  punyaFieldData Boolean            @default(false)
+  fieldDataType  RaportMentalFieldDataType @default(NONE)
+  isActive       Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  seksi          RaportMentalSeksi  @relation(fields: [seksiId], references: [id], onDelete: Cascade)
+  nilai          RaportMentalNilai[]
+
+  @@index([seksiId])
+  @@index([urutan])
+}
+
+model RaportMentalNilai {
+  id           String             @id @default(cuid())
+  studentNo    String
+  seksiId      String
+  aspekId      String
+  schoolYearId String
+  semesterId   String
+  nilai        String?
+  dataEkstra   String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  seksi        RaportMentalSeksi  @relation(fields: [seksiId], references: [id], onDelete: Cascade)
+  aspek        RaportMentalAspek  @relation(fields: [aspekId], references: [id], onDelete: Cascade)
+  schoolYear   SchoolYear         @relation(fields: [schoolYearId], references: [id], onDelete: Cascade)
+  semester     Semester           @relation(fields: [semesterId], references: [id], onDelete: Cascade)
+
+  @@unique([studentNo, aspekId, schoolYearId, semesterId])
+  @@index([studentNo])
+  @@index([seksiId])
+  @@index([aspekId])
+  @@index([schoolYearId])
+  @@index([semesterId])
 }
 
 enum UserRole {
@@ -370,6 +630,21 @@ enum ScoringType {
   NUMERIC_0_100
   LETTER_A_D
   LETTER_E_A
+}
+
+enum TipeNilaiRaportMental {
+  NILAI_ABCD        // nilai A, B, C, D
+  NILAI_ABCDE       // nilai A, B, C, D, E
+  NILAI_PLUS_MINUS  // nilai A+, A, A-, B+, B, B-, C+, C, C-, D
+  TEXT              // teks bebas
+  ANGKA             // angka/jumlah
+}
+
+enum RaportMentalFieldDataType {
+  NONE
+  TEXT
+  PRESTASI
+  HUKUMAN
 }
 
 enum AssessmentType {

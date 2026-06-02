@@ -18,6 +18,8 @@ import {
   User,
   ChevronDown,
   TrendingUp,
+  Brain,
+  ClipboardList,
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -62,7 +64,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                           pathname.includes('/raport-arab/cover-preview') ||
                           pathname.includes('/raport-arab/detail') ||
                           pathname.includes('/raport-arab/bulk-review') ||
-                          pathname.includes('/raport-arab/bulk-download');
+                          pathname.includes('/raport-arab/bulk-download') ||
+                          pathname.includes('/raport-mental/laporan');
 
   const menuItems = [
     {
@@ -78,6 +81,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         { title: 'Jenjang Pendidikan', icon: GraduationCap, href: '/admin/levels' },
         { title: 'Mata Pelajaran', icon: BookOpen, href: '/admin/subjects' },
         { title: 'Kelas', icon: Layers, href: '/admin/classes' },
+        { title: 'Master Data Santri', icon: Users, href: '/admin/santri' },
       ],
     },
     {
@@ -88,6 +92,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         { title: 'Siswa', icon: BarChart3, href: '/admin/students' },
         { title: 'Raport', icon: BookOpen, href: '/admin/raport-sampul' },
         { title: 'Naik Kelas', icon: TrendingUp, href: '/admin/naik-kelas' },
+      ],
+    },
+    {
+      title: 'Raport Mental',
+      items: [
+        { title: 'Master Data (Seksi & Aspek)', icon: Brain, href: '/admin/raport-mental' },
+        { title: 'Penilaian Santri', icon: ClipboardList, href: '/admin/raport-mental/penilaian' },
       ],
     },
     {
