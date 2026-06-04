@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import puppeteer from 'puppeteer';
+import puppeteer, { type Browser } from 'puppeteer';
 import chromium from '@sparticuz/chromium';
 import { prisma } from '@/lib/db';
 import { verifyAccessToken } from '@/lib/auth/jwt';
@@ -18,7 +18,7 @@ async function verifyAdmin(req: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  let browser: puppeteer.Browser | null = null;
+  let browser: Browser | null = null;
 
   try {
     const user = await verifyAdmin(request);
