@@ -1,8 +1,10 @@
+import { Prisma } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
 // All allowed string fields for Santri (excluding id, createdAt, updatedAt)
 const SANTRI_STRING_FIELDS = [
@@ -40,11 +42,11 @@ const SANTRI_STRING_FIELDS = [
   'diInputOleh', 'catatanSekpim',
 ];
 
-const SANTRI_INT_FIELDS = ['anakKe', 'dariAnak'];
-const SANTRI_DATE_FIELDS = ['birthDate', 'tanggalInput'];
+const SANTRI_INT_FIELDS = ['anakKe', 'dariAnak'] as const;
+const SANTRI_DATE_FIELDS = ['birthDate', 'tanggalInput'] as const;
 
-function buildSantriData(body: any) {
-  const data: any = {};
+function buildSantriData(body: Record<string, unknown>) {
+  const data: Record<string, unknown> = {};
   for (const field of SANTRI_STRING_FIELDS) {
     if (body[field] !== undefined) {
       data[field] = body[field] || null;
@@ -52,12 +54,12 @@ function buildSantriData(body: any) {
   }
   for (const field of SANTRI_INT_FIELDS) {
     if (body[field] !== undefined) {
-      data[field] = body[field] ? parseInt(body[field]) : null;
+      data[field] = body[field] ? parseInt(String(body[field]), 10) : null;
     }
   }
   for (const field of SANTRI_DATE_FIELDS) {
     if (body[field] !== undefined) {
-      data[field] = body[field] ? new Date(body[field]) : null;
+      data[field] = body[field] ? new Date(String(body[field])) : null;
     }
   }
   // Ensure required fields are not null
@@ -67,27 +69,8 @@ function buildSantriData(body: any) {
   return data;
 }
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) {
-    return user;
-  }
-  return null;
+async function requireSantriAccess(req: NextRequest) {
+  return requireAdminOrPrincipal(req);
 }
 
 /**
@@ -96,7 +79,7 @@ async function verifyAdmin(req: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await verifyAdmin(request);
+    const user = await requireSantriAccess(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
@@ -109,7 +92,7 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.SantriWhereInput = {};
 
     if (search) {
       where.OR = [
@@ -135,7 +118,7 @@ export async function GET(request: NextRequest) {
 
     return paginatedResponse(santriList, total, page, limit);
   } catch (error) {
-    console.error('Error fetching santri:', error);
+    serverError('Error fetching santri:', error);
     return errorResponse('Failed to fetch santri', 500);
   }
 }
@@ -146,26 +129,26 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const user = await verifyAdmin(request);
+    const user = await requireSantriAccess(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
 
-    const body = await request.json();
+    const body = await request.json() as Record<string, unknown>;
 
     if (!body.name || !body.studentNo) {
       return errorResponse('Nama dan No Stambuk wajib diisi', 400);
     }
 
     const existing = await prisma.santri.findUnique({
-      where: { studentNo: body.studentNo },
+      where: { studentNo: String(body.studentNo) },
     });
 
     if (existing) {
       return errorResponse('No Stambuk sudah terdaftar', 409);
     }
 
-    const data = buildSantriData(body);
+    const data = buildSantriData(body) as Prisma.SantriCreateInput;
     const santri = await prisma.santri.create({ data });
 
     await logActivity({
@@ -183,7 +166,7 @@ export async function POST(request: NextRequest) {
 
     return successResponse(santri);
   } catch (error) {
-    console.error('Error creating santri:', error);
+    serverError('Error creating santri:', error);
     return errorResponse('Gagal menambah data santri', 500);
   }
 }

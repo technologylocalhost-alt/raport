@@ -1,31 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { verifyAccessToken } from '@/lib/auth/jwt';
-import { extractAccessToken } from '@/lib/auth/token-extractor';
+import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const token = extractAccessToken(req);
-  if (!token) {
-    return null;
-  }
-
-  const payload = verifyAccessToken(token);
-  
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-  
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) {
-    return user;
-  }
-  return null;
+async function requireLevelAccess(req: NextRequest) {
+  return requireAdminOrPrincipal(req);
 }
 
 const levelSchema = z.object({
@@ -75,7 +57,7 @@ export async function GET(request: NextRequest) {
 
     return paginatedResponse(levels, total, page, limit);
   } catch (error) {
-    console.error('Get levels error:', error);
+    serverError('Get levels error:', error);
     return errorResponse('Failed to fetch levels', 500);
   }
 }
@@ -85,19 +67,10 @@ export async function GET(request: NextRequest) {
  * Create a new level
  */
 export async function POST(request: NextRequest) {
+  let admin;
   try {
-    const token = extractAccessToken(request);
-    if (!token) {
-      return errorResponse('Unauthorized', 401);
-    }
-    const payload = verifyAccessToken(token);
-    if (!payload) {
-      return errorResponse('Unauthorized', 401);
-    }
-    const admin = await prisma.user.findUnique({
-      where: { id: payload.userId },
-    });
-    if (!admin || (admin.role !== 'ADMIN' && admin.role !== 'PRINCIPAL')) {
+    admin = await requireLevelAccess(request);
+    if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
 
@@ -145,29 +118,20 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return errorResponse('Validation error', 400, error.issues);
     }
-    console.error('Create level error:', error);
+    serverError('Create level error:', error);
     
     // Log failed level creation
-    const token = extractAccessToken(request);
-    if (token) {
-      const payload = verifyAccessToken(token);
-      if (payload) {
-        const admin = await prisma.user.findUnique({
-          where: { id: payload.userId },
-        });
-        if (admin) {
-          await logActivity({
-            userId: admin.id,
-            action: 'CREATE',
-            resourceType: 'Level',
-            description: 'Failed to create level',
-            ipAddress: getClientIp(request),
-            userAgent: getUserAgent(request),
-            status: 'FAILED',
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
-          });
-        }
-      }
+    if (admin) {
+      await logActivity({
+        userId: admin.id,
+        action: 'CREATE',
+        resourceType: 'Level',
+        description: 'Failed to create level',
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'FAILED',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
 
     return errorResponse('Failed to create level', 500);

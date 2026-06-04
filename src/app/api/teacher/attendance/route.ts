@@ -1,35 +1,17 @@
+import { AttendanceStatus, Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { requireTeacherOrWaliKelas } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
-async function getTeacher(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const teacher = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  // Allow both TEACHER and WALI_KELAS roles
-  if (teacher && (teacher.role === 'TEACHER' || teacher.role === 'WALI_KELAS')) {
-    return teacher;
-  }
-  return null;
+async function requireTeacherAccess(req: NextRequest) {
+  return requireTeacherOrWaliKelas(req);
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const teacher = await getTeacher(req);
+    const teacher = await requireTeacherAccess(req);
     if (!teacher) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -78,18 +60,20 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const whereClause: any = {
-      student: {
-        classId: { in: classIds },
-      },
+    const studentWhere: Prisma.StudentWhereInput = {
+      classId: { in: classIds },
     };
 
     if (search) {
-      whereClause.student.OR = [
+      studentWhere.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { studentNo: { contains: search, mode: 'insensitive' } },
       ];
     }
+
+    const whereClause: Prisma.AttendanceWhereInput = {
+      student: { is: studentWhere },
+    };
 
     if (date) {
       const startDate = new Date(date);
@@ -130,15 +114,15 @@ export async function GET(req: NextRequest) {
       total,
     });
   } catch (error) {
-    console.error('Error fetching attendance:', error);
+    serverError('Error fetching attendance:', error);
     return NextResponse.json({ error: 'Failed to fetch attendance' }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
-  let teacher: any;
+  let teacher: Awaited<ReturnType<typeof requireTeacherAccess>> = null;
   try {
-    teacher = await getTeacher(req);
+    teacher = await requireTeacherAccess(req);
     if (!teacher) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -148,6 +132,10 @@ export async function POST(req: NextRequest) {
 
     if (!studentId || !date || !status) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    if (!Object.values(AttendanceStatus).includes(status as AttendanceStatus)) {
+      return NextResponse.json({ error: 'Invalid attendance status' }, { status: 400 });
     }
 
     // Verify teacher has access to this student
@@ -197,7 +185,7 @@ export async function POST(req: NextRequest) {
       const updated = await prisma.attendance.update({
         where: { id: existing.id },
         data: {
-          status,
+          status: status as AttendanceStatus,
           notes,
         },
         include: { student: true },
@@ -210,7 +198,7 @@ export async function POST(req: NextRequest) {
         resourceId: updated.id,
         resourceName: `${updated.student.name} - ${new Date(updated.date).toLocaleDateString()}`,
         description: `Updated attendance for ${updated.student.name}`,
-        newValue: { status, notes },
+        newValue: { status: status as AttendanceStatus, notes },
         ipAddress: getClientIp(req),
         userAgent: getUserAgent(req),
         status: 'SUCCESS',
@@ -227,7 +215,7 @@ export async function POST(req: NextRequest) {
       data: {
         studentId,
         date: attendanceDate,
-        status,
+        status: status as AttendanceStatus,
         notes,
       },
       include: { student: true },
@@ -240,7 +228,7 @@ export async function POST(req: NextRequest) {
       resourceId: attendance.id,
       resourceName: `${attendance.student.name} - ${new Date(attendance.date).toLocaleDateString()}`,
       description: `Created attendance record for ${attendance.student.name}`,
-      newValue: { studentId, date: attendanceDate, status, notes },
+      newValue: { studentId, date: attendanceDate, status: status as AttendanceStatus, notes },
       ipAddress: getClientIp(req),
       userAgent: getUserAgent(req),
       status: 'SUCCESS',
@@ -251,7 +239,7 @@ export async function POST(req: NextRequest) {
       data: attendance,
     });
   } catch (error) {
-    console.error('Error creating attendance:', error);
+    serverError('Error creating attendance:', error);
     await logActivity({
       userId: teacher?.id || 'unknown',
       action: 'CREATE',

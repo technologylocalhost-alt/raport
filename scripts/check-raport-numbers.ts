@@ -38,18 +38,6 @@ async function checkRaportNumbers() {
     // Check for duplicate raport numbers
     console.log('\n🔍 Memeriksa duplikasi nomor raport...\n');
     
-    const allRaportNumbers = await prisma.nilaiApprove.groupBy({
-      by: ['nomorRaport'],
-      where: {
-        nomorRaport: {
-          not: null,
-        },
-      },
-      _count: {
-        studentId: true,
-      },
-    });
-
     const raportByStudent = await prisma.nilaiApprove.findMany({
       where: {
         nomorRaport: {

@@ -1,7 +1,12 @@
 'use client';
 
-import { FormEvent, useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { apiFetch } from '@/lib/api-client';
+import { clearAuthData, getAccessToken, getCurrentUser, setAccessToken, setCurrentUser } from '@/lib/auth/client';
+import { resolveMenuHref } from '@/lib/menu-config';
+import { fetchAllowedMenuPaths } from '@/lib/rbac-client';
+import { devError } from '@/lib/dev-log';
 
 interface LoginResponse {
   success: boolean;
@@ -11,60 +16,79 @@ interface LoginResponse {
     email: string;
     name: string;
     role: string;
+    bagian?: string[];
   };
   error?: string;
 }
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string>('');
+  const [error, setError] = useState('');
 
-  // Check if user is already logged in
-  useEffect(() => {
-    const accessToken = localStorage.getItem('accessToken');
-    const user = localStorage.getItem('user');
-
-    // Cek apakah cookie masih ada (jika tidak, berarti session expired)
-    const hasCookie = document.cookie.includes('accessToken') || document.cookie.includes('refreshToken');
-
-    // Jika localStorage ada tapi cookie tidak ada, bersihkan localStorage
-    if (accessToken && !hasCookie) {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('user');
-      setIsLoading(false);
-      return;
-    }
-
-    // Only redirect if BOTH token and user exist AND cookie masih valid
-    if (accessToken && user && hasCookie) {
-      try {
-        const userData = JSON.parse(user);
-        if (userData?.role) {
-          redirectAfterLogin(userData.role);
-          return;
-        }
-      } catch (error) {
-        console.error('Error parsing user:', error);
-        localStorage.clear();
-      }
-    }
-
-    setIsLoading(false);
-  }, [searchParams]);
-
-  function redirectAfterLogin(role: string) {
-    const redirectPath =
+  const redirectAfterLogin = useCallback(async (role: string, accessToken?: string | null) => {
+    const fallbackPath =
       role === 'ADMIN' || role === 'PRINCIPAL' ? '/admin/dashboard' :
       role === 'TEACHER' ? '/teacher/dashboard' :
       role === 'WALI_KELAS' ? '/wali-kelas/dashboard' :
       '/admin/dashboard';
 
-    setTimeout(() => router.push(redirectPath), 50);
-  }
+    const preferredPrefix =
+      role === 'ADMIN' || role === 'PRINCIPAL' ? '/admin' :
+      role === 'TEACHER' ? '/teacher' :
+      role === 'WALI_KELAS' ? '/wali-kelas' :
+      '/admin';
+
+    const token = accessToken || getAccessToken();
+    if (!token) {
+      setTimeout(() => router.push(fallbackPath), 50);
+      return;
+    }
+
+    try {
+      const menuGroup =
+        role === 'ADMIN' || role === 'PRINCIPAL' ? 'admin' :
+        role === 'TEACHER' ? 'teacher' :
+        role === 'WALI_KELAS' ? 'wali-kelas' :
+        'admin';
+
+      const { allowedPaths, hasRestrictions } = await fetchAllowedMenuPaths(menuGroup);
+
+      if (hasRestrictions && allowedPaths.length > 0) {
+        if (allowedPaths.includes(fallbackPath)) {
+          setTimeout(() => router.push(fallbackPath), 50);
+          return;
+        }
+
+        const sameRolePath = allowedPaths.find((path) => path.startsWith(preferredPrefix));
+        if (sameRolePath) {
+          setTimeout(() => router.push(sameRolePath), 50);
+          return;
+        }
+
+        setTimeout(() => router.push(resolveMenuHref(allowedPaths[0]!, role)), 50);
+        return;
+      }
+    } catch (error) {
+      devError('Failed to resolve post-login redirect:', error);
+    }
+
+    setTimeout(() => router.push(fallbackPath), 50);
+  }, [router]);
+
+  useEffect(() => {
+    const accessToken = getAccessToken();
+    const user = getCurrentUser();
+
+    if (accessToken && user?.role) {
+      void redirectAfterLogin(user.role, accessToken);
+      return;
+    }
+
+    setTimeout(() => setIsLoading(false), 0);
+  }, [redirectAfterLogin]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -72,33 +96,32 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await apiFetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ email, password }),
-        credentials: 'include', // Ensure cookies are sent/received
+        credentials: 'include',
+        skipRefresh: true,
       });
 
       const data: LoginResponse = await response.json();
 
       if (!response.ok) {
+        clearAuthData();
         setError(data.error || 'Login failed');
         setIsLoading(false);
         return;
       }
 
-      // Store access token in localStorage
-      localStorage.setItem('accessToken', data.accessToken!);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      setAccessToken(data.accessToken || null);
+      setCurrentUser((data.user || null) as never);
 
-      // Small delay to ensure cookies are processed
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Redirect to appropriate page
-      redirectAfterLogin(data.user?.role || 'ADMIN');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await redirectAfterLogin(data.user?.role || 'ADMIN', data.accessToken);
     } catch (error) {
+      clearAuthData();
       setError(error instanceof Error ? error.message : 'An error occurred');
       setIsLoading(false);
     }

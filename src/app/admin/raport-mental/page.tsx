@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, ChevronDown, ChevronRight, Edit2, Trash2, GripVertical, CheckCircle, XCircle, BookOpen, List } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface Aspek {
   id: string;
@@ -42,14 +44,6 @@ const TIPE_NILAI_COLORS = {
   ANGKA:             'bg-rose-100 text-rose-700',
 };
 
-function getToken() {
-  return typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '';
-}
-
-function authHeaders() {
-  return { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` };
-}
-
 const FIELD_DATA_TYPE_LABELS = {
   NONE: 'Tanpa Data Tambahan',
   TEXT: 'Data Teks',
@@ -78,8 +72,9 @@ function SeksiModal({
     try {
       const url = seksi ? `/api/admin/raport-mental/seksi/${seksi.id}` : '/api/admin/raport-mental/seksi';
       const method = seksi ? 'PUT' : 'POST';
-      const res = await fetch(url, {
-        method, headers: authHeaders(),
+      const res = await apiFetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, urutan: form.urutan !== '' ? parseInt(form.urutan) : undefined }),
       });
       const data = await res.json();
@@ -161,8 +156,9 @@ function AspekModal({
     try {
       const url = aspek ? `/api/admin/raport-mental/aspek/${aspek.id}` : '/api/admin/raport-mental/aspek';
       const method = aspek ? 'PUT' : 'POST';
-      const res = await fetch(url, {
-        method, headers: authHeaders(),
+      const res = await apiFetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
           seksiId,
@@ -228,6 +224,12 @@ function AspekModal({
 // ─── Halaman Utama ───────────────────────────────────────────────────────────
 export default function RaportMentalMasterPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const mentalBasePath = pathname.startsWith('/teacher')
+    ? '/teacher/raport-mental'
+    : pathname.startsWith('/wali-kelas')
+      ? '/wali-kelas/raport-mental'
+      : '/admin/raport-mental';
   const [seksiList, setSeksiList] = useState<Seksi[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -238,18 +240,20 @@ export default function RaportMentalMasterPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/raport-mental/seksi?includeInactive=${includeInactive}`, { headers: authHeaders() });
+      const res = await apiFetch(`/api/admin/raport-mental/seksi?includeInactive=${includeInactive}`);
       const data = await res.json();
       if (data.success) {
         setSeksiList(data.data);
         // Auto-expand semua seksi
         setExpandedIds(new Set(data.data.map((s: Seksi) => s.id)));
       }
-    } catch { console.error('Gagal memuat data'); }
+    } catch {
+      devError('Gagal memuat data');
+    }
     finally { setLoading(false); }
   }, [includeInactive]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { void fetchData(); }, [fetchData]);
 
   const toggleExpand = (id: string) => {
     setExpandedIds(prev => {
@@ -262,14 +266,14 @@ export default function RaportMentalMasterPage() {
 
   const handleDeleteSeksi = async (seksi: Seksi) => {
     if (!confirm(`Yakin hapus seksi "${seksi.nama}"? Semua aspek dan nilai di dalamnya akan ikut terhapus.`)) return;
-    await fetch(`/api/admin/raport-mental/seksi/${seksi.id}`, { method: 'DELETE', headers: authHeaders() });
-    fetchData();
+    await apiFetch(`/api/admin/raport-mental/seksi/${seksi.id}`, { method: 'DELETE' });
+    void fetchData();
   };
 
   const handleDeleteAspek = async (aspek: Aspek) => {
     if (!confirm(`Yakin hapus aspek "${aspek.nama}"?`)) return;
-    await fetch(`/api/admin/raport-mental/aspek/${aspek.id}`, { method: 'DELETE', headers: authHeaders() });
-    fetchData();
+    await apiFetch(`/api/admin/raport-mental/aspek/${aspek.id}`, { method: 'DELETE' });
+    void fetchData();
   };
 
   const totalAspek = seksiList.reduce((sum, s) => sum + s.aspek.length, 0);
@@ -284,7 +288,7 @@ export default function RaportMentalMasterPage() {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => router.push('/admin/raport-mental/penilaian')}
+            onClick={() => router.push(`${mentalBasePath}/penilaian`)}
             className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 transition-colors"
           >
             <BookOpen size={15} /> Penilaian Santri

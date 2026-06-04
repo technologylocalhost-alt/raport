@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { BookOpen, Users } from 'lucide-react';
+import { devError } from '@/lib/dev-log';
 
 interface SchoolData {
   [className: string]: StudentData[];
@@ -27,8 +27,19 @@ interface School {
   name: string;
 }
 
+interface PengumumanSchoolYear {
+  year?: string;
+  tahunAkademik?: string;
+}
+
+interface PengumumanResponse {
+  success: boolean;
+  data?: Record<string, SchoolData>;
+  schoolYear?: PengumumanSchoolYear | null;
+  schools?: School[];
+}
+
 export default function Home() {
-  const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [allData, setAllData] = useState<Record<string, SchoolData>>({});
   const [schools, setSchools] = useState<School[]>([]);
@@ -36,12 +47,11 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [searchNama, setSearchNama] = useState('');
   const [filteredData, setFilteredData] = useState<Record<string, SchoolData>>({});
-  const [schoolYear, setSchoolYear] = useState<any>(null);
+  const [schoolYear, setSchoolYear] = useState<PengumumanSchoolYear | null>(null);
 
   useEffect(() => {
     // Check if user is logged in
-    const token = localStorage.getItem('accessToken');
-    if (token) {
+    if (typeof window !== 'undefined' && localStorage.getItem('accessToken')) {
       setIsLoggedIn(true);
     }
   }, []);
@@ -87,11 +97,11 @@ export default function Home() {
       const response = await fetch('/api/nilai-pengumuman');
       if (!response.ok) throw new Error('Failed to fetch');
       
-      const result = await response.json();
+      const result: PengumumanResponse = await response.json();
       if (result.success) {
         setAllData(result.data || {});
         setFilteredData(result.data || {});
-        setSchoolYear(result.schoolYear);
+        setSchoolYear(result.schoolYear ?? null);
         setSchools(result.schools || []);
         // Set default selected school to first one
         if (result.schools && result.schools.length > 0) {
@@ -99,7 +109,7 @@ export default function Home() {
         }
       }
     } catch (error) {
-      console.error('Error fetching grades:', error);
+      devError('Error fetching grades:', error);
       setAllData({});
       setFilteredData({});
     } finally {

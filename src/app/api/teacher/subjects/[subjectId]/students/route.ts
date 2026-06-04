@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireTeacherOnly } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
 export async function GET(
   request: NextRequest,
@@ -9,33 +10,12 @@ export async function GET(
   try {
     const { subjectId } = await params;
 
-    // Verify token
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    const teacher = await requireTeacherOnly(request);
 
-    const token = authHeader.slice(7);
-    const payload = verifyAccessToken(token);
-
-    if (!payload) {
+    if (!teacher) {
       return NextResponse.json(
         { success: false, error: 'Invalid token' },
         { status: 401 }
-      );
-    }
-
-    const teacher = await prisma.user.findUnique({
-      where: { id: payload.userId },
-    });
-
-    if (!teacher || teacher.role !== 'TEACHER') {
-      return NextResponse.json(
-        { success: false, error: 'Not a teacher' },
-        { status: 403 }
       );
     }
 
@@ -98,7 +78,7 @@ export async function GET(
       total: students.length,
     });
   } catch (error) {
-    console.error('Error fetching students:', error);
+    serverError('Error fetching students:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to fetch students' },
       { status: 500 }

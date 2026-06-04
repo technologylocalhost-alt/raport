@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { FileText, Download, Eye, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface StudentReport {
   id: string;
@@ -25,14 +27,9 @@ export default function ReportsPage() {
   const limit = 10;
   const totalPages = Math.ceil(total / limit);
 
-  useEffect(() => {
-    fetchReports();
-  }, [page, search, filterStatus]);
-
-  async function fetchReports() {
+  const fetchReports = useCallback(async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('accessToken');
       const params = new URLSearchParams({
         page: page.toString(),
         limit: '10',
@@ -40,11 +37,7 @@ export default function ReportsPage() {
         ...(filterStatus !== 'all' && { status: filterStatus }),
       });
 
-      const response = await fetch(`/api/teacher/reports?${params}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch(`/api/teacher/reports?${params}`);
 
       const data = await response.json();
       if (data.success) {
@@ -52,11 +45,15 @@ export default function ReportsPage() {
         setTotal(data.total);
       }
     } catch (error) {
-      console.error('Error fetching reports:', error);
+      devError('Error fetching reports:', error);
     } finally {
       setLoading(false);
     }
-  }
+  }, [filterStatus, page, search]);
+
+  useEffect(() => {
+    void fetchReports();
+  }, [fetchReports]);
 
   const statusColors = {
     draft: 'bg-gray-100 text-gray-700 border-gray-300',
@@ -72,22 +69,20 @@ export default function ReportsPage() {
 
   const handleGenerateReport = async (reportId: string) => {
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch('/api/teacher/reports', {
+      const response = await apiFetch('/api/teacher/reports', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ studentId: reportId }),
       });
 
       if (response.ok) {
         alert('Raport berhasil dibuat! Silahkan download.');
-        fetchReports();
+        void fetchReports();
       }
     } catch (error) {
-      console.error('Error generating report:', error);
+      devError('Error generating report:', error);
     }
   };
 
@@ -168,7 +163,7 @@ export default function ReportsPage() {
           <select
             value={filterStatus}
             onChange={(e) => {
-              setFilterStatus(e.target.value as any);
+              setFilterStatus(e.target.value as 'all' | 'draft' | 'completed' | 'approved');
               setPage(1);
             }}
             className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"

@@ -1,8 +1,11 @@
+import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/db';
+import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
 import * as XLSX from 'xlsx';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { AuthenticatedUser } from '@/lib/auth/access';
+import { serverError } from '@/lib/server-log';
 
 // Label → key mapping (must match export/template headers)
 const LABEL_TO_KEY: Record<string, { key: string; type?: string }> = {
@@ -164,24 +167,17 @@ const LABEL_TO_KEY: Record<string, { key: string; type?: string }> = {
 const INT_KEYS = new Set(['anakKe', 'dariAnak']);
 const DATE_KEYS = new Set(['birthDate', 'tanggalInput']);
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  if (!payload) return null;
-  const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) return user;
-  return null;
+async function requireSantriImportAccess(req: NextRequest) {
+  return requireAdminOrPrincipal(req);
 }
 
-function parseValue(value: any, fieldKey: string): any {
+function parseValue(value: unknown, fieldKey: string): string | number | Date | null {
   if (value === null || value === undefined || value === '') return null;
   const str = String(value).trim();
   if (!str) return null;
 
   if (INT_KEYS.has(fieldKey)) {
-    const num = parseInt(str);
+    const num = parseInt(str, 10);
     return isNaN(num) ? null : num;
   }
 
@@ -213,9 +209,9 @@ function parseValue(value: any, fieldKey: string): any {
  * Import santri data from Excel file
  */
 export async function POST(request: NextRequest) {
-  let user: any;
+  let user: AuthenticatedUser | null = null;
   try {
-    user = await verifyAdmin(request);
+    user = await requireSantriImportAccess(request);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -237,7 +233,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Build header mapping from first row's keys
-    const sampleRow = rawData[0] as Record<string, any>;
+    const sampleRow = rawData[0] as Record<string, unknown>;
     const headerMap: Record<string, { key: string; type?: string }> = {};
     for (const header of Object.keys(sampleRow)) {
       const normalized = header.toLowerCase().trim();
@@ -254,13 +250,13 @@ export async function POST(request: NextRequest) {
     };
 
     for (let i = 0; i < rawData.length; i++) {
-      const row = rawData[i] as Record<string, any>;
+      const row = rawData[i] as Record<string, unknown>;
 
       try {
         if (!row || Object.keys(row).length === 0) continue;
 
         // Extract mapped data
-        const data: Record<string, any> = {};
+        const data: Record<string, string | number | Date | null> = {};
         for (const [header, fieldInfo] of Object.entries(headerMap)) {
           const rawValue = row[header];
           data[fieldInfo.key] = parseValue(rawValue, fieldInfo.key);
@@ -296,7 +292,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Remove null values to avoid overwriting existing data with nulls on update
-        const cleanData: Record<string, any> = {};
+        const cleanData: Record<string, string | number | Date> = {};
         for (const [key, val] of Object.entries(data)) {
           if (val !== null) {
             cleanData[key] = val;
@@ -311,17 +307,17 @@ export async function POST(request: NextRequest) {
         if (existing) {
           await prisma.santri.update({
             where: { studentNo: data.studentNo },
-            data: cleanData,
+            data: cleanData as Prisma.SantriUpdateInput,
           });
           results.updated++;
         } else {
           await prisma.santri.create({
-            data: cleanData as any,
+            data: cleanData as Prisma.SantriCreateInput,
           });
           results.imported++;
         }
-      } catch (error: any) {
-        results.errors.push(`Baris ${i + 2}: ${error.message}`);
+      } catch (error: unknown) {
+        results.errors.push(`Baris ${i + 2}: ${error instanceof Error ? error.message : 'Unknown error'}`);
         results.skipped++;
       }
     }
@@ -340,8 +336,8 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ success: true, data: results }, { status: 200 });
-  } catch (error: any) {
-    console.error('Import santri error:', error);
+  } catch (error: unknown) {
+    serverError('Import santri error:', error);
     if (user) {
       await logActivity({
         userId: user.id,
@@ -349,7 +345,7 @@ export async function POST(request: NextRequest) {
         resourceType: 'Santri',
         resourceId: '',
         description: 'Failed to import santri',
-        errorMessage: error?.message || 'Unknown error',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
         ipAddress: getClientIp(request),
         userAgent: getUserAgent(request),
         status: 'FAILED',

@@ -3,6 +3,8 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Download, Eye, Check } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface Student {
   id: string;
@@ -21,6 +23,16 @@ interface Class {
 interface StudentWithClass extends Student {
   classId: string;
   className: string;
+}
+
+interface ClassApiItem extends Omit<Class, 'students'> {
+  students?: Student[];
+}
+
+interface StudentApiItem {
+  id: string;
+  name: string;
+  studentNo: string;
 }
 
 function BulkDownloadPageContent() {
@@ -46,25 +58,11 @@ function BulkDownloadPageContent() {
   };
 
   useEffect(() => {
-    fetchAllData();
-  }, []);
-
-  const fetchAllData = async () => {
+    const fetchAllData = async () => {
     try {
       setError('');
-      const token = localStorage.getItem('accessToken');
 
-      if (!token || token.trim() === '') {
-        setError('Sesi Anda telah berakhir. Silakan login kembali');
-        setTimeout(() => router.push('/login'), 1500);
-        return;
-      }
-
-      const response = await fetch('/api/admin/classes?limit=100', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch('/api/admin/classes?limit=100');
 
       if (response.status === 401) {
         setError('Sesi Anda telah berakhir. Silakan login kembali');
@@ -79,22 +77,17 @@ function BulkDownloadPageContent() {
       const data = await response.json();
       if (data.success && Array.isArray(data.data)) {
         const classesWithStudents = await Promise.all(
-          data.data.map(async (cls: any) => {
+          (data.data as ClassApiItem[]).map(async (cls) => {
             try {
-              const studentsResponse = await fetch(
-                `/api/admin/classes/${cls.id}/students?limit=100`,
-                {
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                  },
-                }
+              const studentsResponse = await apiFetch(
+                `/api/admin/classes/${cls.id}/students?limit=100`
               );
 
               let students: Student[] = [];
               if (studentsResponse.ok) {
                 const studentsData = await studentsResponse.json();
                 if (studentsData.success && Array.isArray(studentsData.data)) {
-                  students = studentsData.data.map((s: any) => ({
+                  students = (studentsData.data as StudentApiItem[]).map((s) => ({
                     id: s.id,
                     name: s.name,
                     studentNo: s.studentNo,
@@ -107,8 +100,7 @@ function BulkDownloadPageContent() {
                 ...cls,
                 students,
               };
-            } catch (err) {
-              console.warn(`Failed to fetch students for class ${cls.id}`);
+            } catch {
               return {
                 ...cls,
                 students: [],
@@ -120,7 +112,7 @@ function BulkDownloadPageContent() {
         setClasses(classesWithStudents);
 
         const students = classesWithStudents.flatMap((cls) =>
-          cls.students.map((student: any) => ({
+          cls.students.map((student: Student) => ({
             ...student,
             classId: cls.id,
             className: cls.name,
@@ -130,12 +122,15 @@ function BulkDownloadPageContent() {
       }
 
       setIsLoading(false);
-    } catch (err) {
-      console.error('Error fetching classes:', err);
+    } catch (error) {
+      devError('Error fetching classes:', error);
       setError('Terjadi kesalahan saat memuat data kelas');
       setIsLoading(false);
     }
   };
+
+    void fetchAllData();
+  }, [router]);
 
   const toggleSelectStudent = (key: string) => {
     const newSelected = new Set(selectedStudents);
@@ -182,7 +177,6 @@ function BulkDownloadPageContent() {
     }
 
     setIsDownloading(true);
-    const token = localStorage.getItem('accessToken');
 
     try {
       for (const key of selectedStudents) {
@@ -192,22 +186,18 @@ function BulkDownloadPageContent() {
         if (!student) continue;
 
         // Fetch grades and other data for student
-        const gradesResponse = await fetch(
-          `/api/teacher/grades?studentId=${studentId}&classId=${classId}&limit=100`,
-          { headers: { Authorization: `Bearer ${token}` } }
+        const gradesResponse = await apiFetch(
+          `/api/teacher/grades?studentId=${studentId}&classId=${classId}&limit=100`
         );
 
         const gradesData = await gradesResponse.json();
         const grades = gradesData.data || [];
 
         // Fetch more data...
-        const classResponse = await fetch(`/api/admin/classes/${classId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const classData = await classResponse.json();
+        await apiFetch(`/api/admin/classes/${classId}`);
 
         // Download PDF
-        const pdfResponse = await fetch('/api/wali-kelas/generate-pdf-puppeteer', {
+        const pdfResponse = await apiFetch('/api/wali-kelas/generate-pdf-puppeteer', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -241,8 +231,8 @@ function BulkDownloadPageContent() {
 
       alert(`${selectedStudents.size} raport berhasil diunduh`);
       setSelectedStudents(new Set());
-    } catch (err) {
-      console.error('Error downloading PDFs:', err);
+    } catch (error) {
+      devError('Error downloading PDFs:', error);
       alert('Terjadi kesalahan saat mengunduh raport');
     } finally {
       setIsDownloading(false);

@@ -2,8 +2,9 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { verifyAccessToken } from '@/lib/auth/jwt';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { requireTeacherWaliAdminPrincipal } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
 const gradeUpdateSchema = z.object({
   score: z
@@ -17,27 +18,8 @@ const gradeUpdateSchema = z.object({
   notes: z.string().optional(),
 });
 
-async function getTeacher(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const teacher = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (teacher && (teacher.role === 'TEACHER' || teacher.role === 'WALI_KELAS' || teacher.role === 'ADMIN' || teacher.role === 'PRINCIPAL')) {
-    return teacher;
-  }
-  return null;
+async function requireGradeAccess(req: NextRequest) {
+  return requireTeacherWaliAdminPrincipal(req);
 }
 
 /**
@@ -50,7 +32,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const teacher = await getTeacher(request);
+    const teacher = await requireGradeAccess(request);
 
     if (!teacher) {
       return errorResponse('Unauthorized', 401);
@@ -106,7 +88,7 @@ export async function GET(
       date: grade.createdAt?.toISOString().split('T')[0],
     });
   } catch (error) {
-    console.error('Get grade error:', error);
+    serverError('Get grade error:', error);
     return errorResponse('Failed to fetch grade', 500);
   }
 }
@@ -121,7 +103,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const teacher = await getTeacher(request);
+    const teacher = await requireGradeAccess(request);
 
     if (!teacher) {
       return errorResponse('Unauthorized', 401);
@@ -177,7 +159,7 @@ export async function PUT(
     }
 
     // Build update data, converting score to float if provided
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     if (validatedData.score !== undefined) {
       updateData.score = String(validatedData.score);
     }
@@ -244,7 +226,7 @@ export async function PUT(
       }));
       return errorResponse('Validation error', 400, fieldErrors);
     }
-    console.error('Update grade error:', error);
+    serverError('Update grade error:', error);
     return errorResponse('Failed to update grade', 500);
   }
 }
@@ -259,7 +241,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const teacher = await getTeacher(request);
+    const teacher = await requireGradeAccess(request);
 
     if (!teacher) {
       return errorResponse('Unauthorized', 401);
@@ -323,7 +305,7 @@ export async function DELETE(
 
     return successResponse({ message: 'Grade deleted successfully' });
   } catch (error) {
-    console.error('Delete grade error:', error);
+    serverError('Delete grade error:', error);
     return errorResponse('Failed to delete grade', 500);
   }
 }

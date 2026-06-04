@@ -3,29 +3,23 @@ import { Prisma } from '@prisma/client';
 import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { getAuthenticatedUser } from '@/lib/auth/access';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
+async function requireClassAccess(req: NextRequest) {
+  const user = await getAuthenticatedUser(req);
+  if (!user) return null;
+
+  if (user.role === 'ADMIN' || user.role === 'PRINCIPAL') {
+    return requireMenuAccess(req, '/admin/classes', ['ADMIN', 'PRINCIPAL']);
   }
 
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  
-  if (!payload) {
-    return null;
+  if (user.role === 'WALI_KELAS') {
+    return requireMenuAccess(req, '/wali-kelas/classes', ['WALI_KELAS']);
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-  
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL' || user.role === 'WALI_KELAS')) {
-    return user;
-  }
   return null;
 }
 
@@ -48,7 +42,7 @@ const classSchema = z.object({
  */
 export async function GET(request: NextRequest) {
   try {
-    const admin = await verifyAdmin(request);
+    const admin = await requireClassAccess(request);
     if (!admin) {
       return errorResponse('Token tidak valid atau expired', 401);
     }
@@ -99,13 +93,13 @@ export async function GET(request: NextRequest) {
     }
     if (schoolId && schoolId.trim() !== '') {
       where.schoolYear = {
-        ...(where.schoolYear || {}),
+        ...((where.schoolYear && typeof where.schoolYear === 'object') ? where.schoolYear as Record<string, unknown> : {}),
         schoolId,
-      };
+      } as Prisma.SchoolYearWhereInput;
       where.level = {
-        ...(where.level || {}),
+        ...((where.level && typeof where.level === 'object') ? where.level as Record<string, unknown> : {}),
         schoolId,
-      };
+      } as Prisma.LevelWhereInput;
     }
     if (schoolYearId && schoolYearId.trim() !== '') {
       where.schoolYearId = schoolYearId;
@@ -153,7 +147,7 @@ export async function GET(request: NextRequest) {
 
     return paginatedResponse(classes, total, page, limit);
   } catch (error) {
-    console.error('Get classes error:', error);
+    serverError('Get classes error:', error);
     return errorResponse('Gagal memuat daftar kelas', 500);
   }
 }
@@ -165,7 +159,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   let admin;
   try {
-    admin = await verifyAdmin(request);
+    admin = await requireClassAccess(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -265,7 +259,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return errorResponse('Validation error', 400, error.issues);
     }
-    console.error('Create class error:', error);
+    serverError('Create class error:', error);
     
     // Log failed class creation
     if (admin) {

@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp, Eye } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { ActivityAction, ActivityStatus } from '@prisma/client';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface ActivityLog {
   id: string;
@@ -54,14 +56,9 @@ export default function ActivityLogsPage() {
     endDate: '',
   });
 
-  useEffect(() => {
-    fetchLogs();
-  }, [filters, pagination.page]);
-
-  async function fetchLogs() {
+  const fetchLogs = useCallback(async () => {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('accessToken');
 
       const queryParams = new URLSearchParams({
         page: pagination.page.toString(),
@@ -75,11 +72,7 @@ export default function ActivityLogsPage() {
       if (filters.startDate) queryParams.append('startDate', filters.startDate);
       if (filters.endDate) queryParams.append('endDate', filters.endDate);
 
-      const response = await fetch(`/api/admin/activity-logs?${queryParams}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch(`/api/admin/activity-logs?${queryParams}`);
 
       const data = await response.json();
 
@@ -90,12 +83,16 @@ export default function ActivityLogsPage() {
         alert(`Error: ${data.error}`);
       }
     } catch (error) {
-      console.error('Failed to fetch activity logs:', error);
+      devError('Failed to fetch activity logs:', error);
       alert('Failed to load activity logs');
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [filters, pagination.limit, pagination.page]);
+
+  useEffect(() => {
+    void fetchLogs();
+  }, [fetchLogs]);
 
   function getActionBadgeColor(action: ActivityAction) {
     const colors: Record<ActivityAction, string> = {

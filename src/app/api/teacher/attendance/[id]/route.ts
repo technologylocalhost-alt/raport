@@ -1,29 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { requireTeacherOnly } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
-async function getTeacher(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const teacher = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (teacher && teacher.role === 'TEACHER') {
-    return teacher;
-  }
-  return null;
+async function requireTeacherAccess(req: NextRequest) {
+  return requireTeacherOnly(req);
 }
 
 export async function PUT(
@@ -31,11 +13,11 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   let id = '';
-  let teacher: any;
+  let teacher;
   try {
     const result = await params;
     id = result.id;
-    teacher = await getTeacher(req);
+    teacher = await requireTeacherAccess(req);
     if (!teacher || teacher.role !== 'TEACHER') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -88,7 +70,7 @@ export async function PUT(
       data: updated,
     });
   } catch (error) {
-    console.error('Error updating attendance:', error);
+    serverError('Error updating attendance:', error);
     await logActivity({
       userId: teacher?.id || 'unknown',
       action: 'UPDATE',
@@ -109,11 +91,11 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   let id = '';
-  let teacher: any;
+  let teacher;
   try {
     const result = await params;
     id = result.id;
-    teacher = await getTeacher(req);
+    teacher = await requireTeacherAccess(req);
     if (!teacher || teacher.role !== 'TEACHER') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -163,7 +145,7 @@ export async function DELETE(
       message: 'Attendance deleted',
     });
   } catch (error) {
-    console.error('Error deleting attendance:', error);
+    serverError('Error deleting attendance:', error);
     await logActivity({
       userId: teacher?.id || 'unknown',
       action: 'DELETE',

@@ -1,31 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-  
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) {
-    return user;
-  }
-  return null;
+async function requireLevelAccess(req: NextRequest) {
+  return requireAdminOrPrincipal(req);
 }
 
 const levelSchema = z.object({
@@ -46,7 +28,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const admin = await verifyAdmin(request);
+    const admin = await requireLevelAccess(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -75,7 +57,7 @@ export async function GET(
 
     return successResponse(level);
   } catch (error) {
-    console.error('Get level error:', error);
+    serverError('Get level error:', error);
     return errorResponse('Failed to fetch level', 500);
   }
 }
@@ -90,7 +72,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const admin = await verifyAdmin(request);
+    const admin = await requireLevelAccess(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -135,7 +117,7 @@ export async function PUT(
     if (error instanceof z.ZodError) {
       return errorResponse('Validation error', 400, error.issues);
     }
-    console.error('Update level error:', error);
+    serverError('Update level error:', error);
     return errorResponse('Failed to update level', 500);
   }
 }
@@ -150,7 +132,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const admin = await verifyAdmin(request);
+    const admin = await requireLevelAccess(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -210,7 +192,7 @@ export async function DELETE(
 
     return successResponse({ message: 'Level deleted successfully' });
   } catch (error) {
-    console.error('Delete level error:', error);
+    serverError('Delete level error:', error);
     return errorResponse('Failed to delete level', 500);
   }
 }

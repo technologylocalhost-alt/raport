@@ -1,31 +1,33 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { getAuthenticatedUser } from '@/lib/auth/access';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
+async function requireClassReadAccess(req: NextRequest) {
+  const user = await getAuthenticatedUser(req);
+  if (!user) return null;
+
+  if (user.role === 'ADMIN' || user.role === 'PRINCIPAL') {
+    return requireMenuAccess(req, '/admin/classes', ['ADMIN', 'PRINCIPAL']);
   }
 
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  
-  if (!payload) {
-    return null;
+  if (user.role === 'WALI_KELAS') {
+    return requireMenuAccess(req, '/wali-kelas/classes', ['WALI_KELAS']);
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-  
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL' || user.role === 'WALI_KELAS' || user.role === 'TEACHER')) {
-    return user;
+  if (user.role === 'TEACHER') {
+    return requireMenuAccess(req, '/teacher/subjects', ['TEACHER']);
   }
+
   return null;
+}
+
+async function requireClassManagement(req: NextRequest) {
+  return requireMenuAccess(req, '/admin/classes', ['ADMIN', 'PRINCIPAL']);
 }
 
 const classUpdateSchema = z.object({
@@ -57,7 +59,7 @@ export async function GET(
       return errorResponse('ID Kelas tidak valid', 400);
     }
 
-    const admin = await verifyAdmin(request);
+    const admin = await requireClassReadAccess(request);
     if (!admin) {
       return errorResponse('Token tidak valid atau expired', 401);
     }
@@ -127,7 +129,7 @@ export async function GET(
 
     return successResponse(classData);
   } catch (error) {
-    console.error('Get class error:', error);
+    serverError('Get class error:', error);
     return errorResponse('Gagal memuat data kelas', 500);
   }
 }
@@ -142,7 +144,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const admin = await verifyAdmin(request);
+    const admin = await requireClassManagement(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -165,7 +167,7 @@ export async function PUT(
     }
 
     // Prepare update data - use existing values if not provided
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     const newName = validatedData.name || existingClass.name;
     const newLevelId = validatedData.levelId || existingClass.levelId;
     const newSchoolYearId = validatedData.schoolYearId || existingClass.schoolYearId;
@@ -219,9 +221,9 @@ export async function PUT(
           _count: { select: { students: true } },
         },
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Handle unique constraint violation
-      if (error.code === 'P2002') {
+      if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
         return errorResponse(
           'Kelas dengan kombinasi level, tahun ajaran, semester, dan nama yang sama sudah ada. Silakan gunakan nama kelas yang berbeda.',
           400
@@ -267,7 +269,7 @@ export async function PUT(
     if (error instanceof z.ZodError) {
       return errorResponse('Validation error', 400, error.issues);
     }
-    console.error('Update class error:', error);
+    serverError('Update class error:', error);
     return errorResponse('Failed to update class', 500);
   }
 }
@@ -282,7 +284,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const admin = await verifyAdmin(request);
+    const admin = await requireClassManagement(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -330,7 +332,7 @@ export async function DELETE(
 
     return successResponse({ message: 'Kelas berhasil dihapus' });
   } catch (error) {
-    console.error('Delete class error:', error);
+    serverError('Delete class error:', error);
     return errorResponse('Failed to delete class', 500);
   }
 }

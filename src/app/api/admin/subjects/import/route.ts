@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import * as XLSX from 'xlsx';
+import { serverError } from '@/lib/server-log';
 
 interface ImportRow {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface NormalizedRow {
@@ -30,53 +31,29 @@ function normalizeRow(row: ImportRow): NormalizedRow {
   const columnMap = Object.keys(row).reduce((acc, key) => {
     acc[normalizeColumnName(key)] = row[key];
     return acc;
-  }, {} as Record<string, any>);
+  }, {} as Record<string, unknown>);
 
-  console.log('[Normalize Row] Column map:', Object.keys(columnMap));
 
   // Map various possible column names to our standard properties
-  normalized.jenjang = columnMap['jenjang'] || columnMap['level'] || columnMap['level'];
-  normalized.kode = columnMap['kode'] || columnMap['code'] || columnMap['matapelajarankode'];
-  normalized.nama = columnMap['nama'] || columnMap['name'] || columnMap['matapelajarannama'];
-  normalized.namaArab = columnMap['namaarab'] || columnMap['namearabic'] || columnMap['arabicname'];
-  normalized.deskripsi = columnMap['deskripsi'] || columnMap['description'];
+  normalized.jenjang = columnMap['jenjang'] ? String(columnMap['jenjang']) : columnMap['level'] ? String(columnMap['level']) : undefined;
+  normalized.kode = columnMap['kode'] ? String(columnMap['kode']) : columnMap['code'] ? String(columnMap['code']) : columnMap['matapelajarankode'] ? String(columnMap['matapelajarankode']) : undefined;
+  normalized.nama = columnMap['nama'] ? String(columnMap['nama']) : columnMap['name'] ? String(columnMap['name']) : columnMap['matapelajarannama'] ? String(columnMap['matapelajarannama']) : undefined;
+  normalized.namaArab = columnMap['namaarab'] ? String(columnMap['namaarab']) : columnMap['namearabic'] ? String(columnMap['namearabic']) : columnMap['arabicname'] ? String(columnMap['arabicname']) : undefined;
+  normalized.deskripsi = columnMap['deskripsi'] ? String(columnMap['deskripsi']) : columnMap['description'] ? String(columnMap['description']) : undefined;
   
   // Parse credit hours as number
   const creditValue = columnMap['jamkredit'] || columnMap['credithours'] || columnMap['credits'];
   normalized.jamKredit = creditValue ? parseInt(creditValue.toString()) : undefined;
 
-  console.log('[Normalize Row] Result:', normalized);
   
   return normalized;
 }
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) {
-    return user;
-  }
-  return null;
-}
 
 export async function POST(request: NextRequest) {
   try {
     // Verify admin
-    const user = await verifyAdmin(request);
+    const user = await requireAdminOrPrincipal(request);
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -102,18 +79,13 @@ export async function POST(request: NextRequest) {
     const worksheet = workbook.Sheets[sheetName];
     const rawRows: ImportRow[] = XLSX.utils.sheet_to_json(worksheet);
 
-    console.log('[Import] Raw rows from Excel:', rawRows.length);
-    if (rawRows.length > 0) {
-      console.log('[Import] First row keys:', Object.keys(rawRows[0]));
-      console.log('[Import] First row values:', rawRows[0]);
-    }
 
     // Normalize all rows
     const rows: NormalizedRow[] = rawRows.map((row, idx) => {
       try {
         return normalizeRow(row);
       } catch (error) {
-        console.error(`[Import] Error normalizing row ${idx + 2}:`, error);
+        serverError(`[Import] Error normalizing row ${idx + 2}:`, error);
         return {};
       }
     });
@@ -166,7 +138,6 @@ export async function POST(request: NextRequest) {
       const rowNumber = i + 2; // +1 for header, +1 for 1-based indexing
 
       try {
-        console.log(`[Import] Processing row ${rowNumber}:`, row);
 
         // Trim all string fields
         const jenjang = row.jenjang?.toString().trim() || '';
@@ -175,7 +146,6 @@ export async function POST(request: NextRequest) {
         const namaArab = row.namaArab?.toString().trim() || '';
         const deskripsi = row.deskripsi?.toString().trim() || '';
 
-        console.log(`[Import] Row ${rowNumber} trimmed values:`, { jenjang, kode, nama });
 
         // Validate required fields
         if (!jenjang) {
@@ -269,7 +239,7 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     // Log failed import
-    const verifyUser = await verifyAdmin(request);
+    const verifyUser = await requireAdminOrPrincipal(request);
     if (verifyUser) {
       const ipAddress = getClientIp(request);
       const userAgent = getUserAgent(request);
@@ -286,7 +256,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    console.error('Import error:', error);
+    serverError('Import error:', error);
     return NextResponse.json(
       {
         error: 'Terjadi kesalahan saat mengimpor file',

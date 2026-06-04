@@ -1,30 +1,12 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) {
-    return user;
-  }
-  return null;
+async function requireSantriImportAccess(req: NextRequest) {
+  return requireAdminOrPrincipal(req);
 }
 
 /**
@@ -33,7 +15,7 @@ async function verifyAdmin(req: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const user = await verifyAdmin(request);
+    const user = await requireSantriImportAccess(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
@@ -100,7 +82,7 @@ export async function POST(request: NextRequest) {
       total: uniqueMap.size,
     });
   } catch (error) {
-    console.error('Error importing from students:', error);
+    serverError('Error importing from students:', error);
     return errorResponse('Gagal import data dari tabel student', 500);
   }
 }

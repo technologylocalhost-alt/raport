@@ -1,8 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import { NextRequest, NextResponse } from 'next/server';
 import puppeteer from 'puppeteer';
 import chromium from '@sparticuz/chromium';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { serverError } from '@/lib/server-log';
 
 export async function POST(request: NextRequest) {
   let browser = null;
@@ -152,48 +154,42 @@ export async function POST(request: NextRequest) {
       const imagePath = join(process.cwd(), 'public', 'namapondok.png');
       const imageBuffer = readFileSync(imagePath);
       logoBase64 = imageBuffer.toString('base64');
-    } catch (err) {
-      console.log('Logo not found, continuing without it');
+    } catch {
     }
 
     try {
       const kmiImagePath = join(process.cwd(), 'public', 'KMI.jpg');
       const kmiImageBuffer = readFileSync(kmiImagePath);
       kmiLogoBase64 = kmiImageBuffer.toString('base64');
-    } catch (err) {
-      console.log('KMI logo not found, continuing without it');
+    } catch {
     }
 
     try {
       const mahadImagePath = join(process.cwd(), 'public', 'mahad.png');
       const mahadImageBuffer = readFileSync(mahadImagePath);
       mahadLogoBase64 = mahadImageBuffer.toString('base64');
-    } catch (err) {
-      console.log('Mahad logo not found, continuing without it');
+    } catch {
     }
 
     try {
       const ttdImagePath = join(process.cwd(), 'public', 'ttd.png');
       const ttdImageBuffer = readFileSync(ttdImagePath);
       ttdBase64 = ttdImageBuffer.toString('base64');
-    } catch (err) {
-      console.log('TTD image not found, continuing without it');
+    } catch {
     }
 
     try {
       const kasyfuImagePath = join(process.cwd(), 'public', 'kasyfu.jpg');
       const kasyfuImageBuffer = readFileSync(kasyfuImagePath);
       kasyfuImageBase64 = kasyfuImageBuffer.toString('base64');
-    } catch (err) {
-      console.log('Kasyfu image not found, continuing without it');
+    } catch {
     }
 
     try {
       const bingkaiImagePath = join(process.cwd(), 'public', 'bingkai.png');
       const bingkaiImageBuffer = readFileSync(bingkaiImagePath);
       bingkaiImageBase64 = bingkaiImageBuffer.toString('base64');
-    } catch (err) {
-      console.log('Bingkai image not found, continuing without it');
+    } catch {
     }
 
     const htmlContent = `
@@ -577,14 +573,11 @@ export async function POST(request: NextRequest) {
     // Check if we have system Chromium (Docker/Alpine)
     if (process.env.PUPPETEER_EXECUTABLE_PATH) {
       executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-      console.log('Using system Chromium from env:', executablePath);
     } else {
       // Try @sparticuz/chromium for serverless environments
       try {
         executablePath = await chromium.executablePath();
-        console.log('Using Chromium from @sparticuz/chromium:', executablePath);
-      } catch (err) {
-        console.log('Chromium path from @sparticuz failed, falling back to puppeteer');
+      } catch {
         executablePath = puppeteer.executablePath();
       }
     }
@@ -605,7 +598,6 @@ export async function POST(request: NextRequest) {
       '--disable-default-apps',
     ];
 
-    console.log('Launching browser with executable:', executablePath);
     browser = await puppeteer.launch({
       args: launchArgs,
       defaultViewport: chromium.defaultViewport,
@@ -614,7 +606,7 @@ export async function POST(request: NextRequest) {
       timeout: 60000,
       protocolTimeout: 60000,
     }).catch((launchErr) => {
-      console.error('Launch error details:', {
+      serverError('Launch error details:', {
         message: launchErr.message,
         code: launchErr.code,
         executablePath,
@@ -675,7 +667,7 @@ export async function POST(request: NextRequest) {
       fileName: fileName,
     });
   } catch (error) {
-    console.error('Error generating PDF with Puppeteer:', {
+    serverError('Error generating PDF with Puppeteer:', {
       error: String(error),
       errorMsg: error instanceof Error ? error.message : 'Unknown error',
       errorCode: error instanceof Error && 'code' in error ? (error as any).code : 'N/A',
@@ -686,7 +678,7 @@ export async function POST(request: NextRequest) {
       try {
         await browser.close();
       } catch (closeErr) {
-        console.error('Error closing browser:', closeErr);
+        serverError('Error closing browser:', closeErr);
       }
     }
     return NextResponse.json(

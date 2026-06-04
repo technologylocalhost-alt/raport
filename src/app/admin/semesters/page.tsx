@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Plus, Edit, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface SchoolYear {
   id: string;
@@ -28,6 +30,7 @@ interface PaginatedResponse {
   page: number;
   limit: number;
   total: number;
+  pagination?: { total?: number };
 }
 
 export default function SemestersPage() {
@@ -49,31 +52,18 @@ export default function SemestersPage() {
 
   const limit = 10;
 
-  useEffect(() => {
-    fetchSchoolYears();
-  }, []);
-
-  useEffect(() => {
-    fetchSemesters();
-  }, [page, filterSchoolYear]);
-
-  async function fetchSchoolYears() {
+  const fetchSchoolYears = useCallback(async () => {
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch('/api/admin/school-years?limit=100', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch('/api/admin/school-years?limit=100');
 
       const data = await response.json();
       setSchoolYears(data.data || []);
     } catch (error) {
-      console.error('Failed to fetch school years:', error);
+      devError('Failed to fetch school years:', error);
     }
-  }
+  }, []);
 
-  async function fetchSemesters() {
+  const fetchSemesters = useCallback(async () => {
     try {
       setIsLoading(true);
       const queryParams = new URLSearchParams({
@@ -82,22 +72,25 @@ export default function SemestersPage() {
         ...(filterSchoolYear && { schoolYearId: filterSchoolYear }),
       });
 
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/semesters?${queryParams}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch(`/api/admin/semesters?${queryParams}`);
 
-      const data: any = await response.json();
+      const data: PaginatedResponse = await response.json();
       setSemesters(data.data || []);
       setTotal(data.pagination?.total || 0);
     } catch (error) {
-      console.error('Failed to fetch semesters:', error);
+      devError('Failed to fetch semesters:', error);
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [filterSchoolYear, page]);
+
+  useEffect(() => {
+    void fetchSchoolYears();
+  }, [fetchSchoolYears]);
+
+  useEffect(() => {
+    void fetchSemesters();
+  }, [fetchSemesters]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -116,19 +109,12 @@ export default function SemestersPage() {
     }
 
     try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) {
-        alert('❌ Token tidak ditemukan. Silakan login terlebih dahulu.');
-        return;
-      }
-
       const url = editingId ? `/api/admin/semesters/${editingId}` : '/api/admin/semesters';
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: editingId ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(formData),
       });
@@ -146,7 +132,7 @@ export default function SemestersPage() {
           endDate: '',
           isActive: true,
         });
-        fetchSemesters();
+        void fetchSemesters();
       } else {
         let errorMsg = 'Gagal menyimpan data';
         if (result.error) {
@@ -155,7 +141,7 @@ export default function SemestersPage() {
         alert(`❌ ${errorMsg}`);
       }
     } catch (error) {
-      console.error('Failed to save semester:', error);
+      devError('Failed to save semester:', error);
       alert('❌ Gagal menyimpan data. Silakan coba lagi.');
     }
   }
@@ -164,23 +150,19 @@ export default function SemestersPage() {
     if (!confirm('Apakah Anda yakin ingin menghapus semester ini?')) return;
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/semesters/${id}`, {
+      const response = await apiFetch(`/api/admin/semesters/${id}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       if (response.ok) {
         alert('✅ Semester berhasil dihapus!');
-        fetchSemesters();
+        void fetchSemesters();
       } else {
         const result = await response.json();
         alert(`❌ ${result.error || 'Gagal menghapus semester'}`);
       }
     } catch (error) {
-      console.error('Failed to delete semester:', error);
+      devError('Failed to delete semester:', error);
       alert('❌ Gagal menghapus semester');
     }
   }

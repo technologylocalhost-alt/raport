@@ -1,31 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { AuthenticatedUser } from '@/lib/auth/access';
+import { ensureClassOwnedByWaliKelasOrAllowed, requireClassSubjectAccess } from '@/lib/auth/class-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-  
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL' || user.role === 'WALI_KELAS')) {
-    return user;
-  }
-  return null;
-}
 
 /**
  * DELETE /api/admin/classes/[id]/teachers/[teacherId]
@@ -35,11 +15,11 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; teacherId: string }> }
 ) {
-  let user: any;
+  let user: AuthenticatedUser | null = null;
   let id = '';
   let teacherId = '';
   try {
-    user = await verifyAdmin(request);
+    user = await requireClassSubjectAccess(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
@@ -48,19 +28,10 @@ export async function DELETE(
     id = result.id;
     teacherId = result.teacherId;
 
-    // Verify the class exists
-    const classData = await prisma.class.findUnique({
-      where: { id },
-      select: { id: true, waliKelasId: true },
-    });
+    const access = await ensureClassOwnedByWaliKelasOrAllowed(user, id);
 
-    if (!classData) {
-      return errorResponse('Class not found', 404);
-    }
-
-    // If user is WALI_KELAS, verify they own this class
-    if (user.role === 'WALI_KELAS' && classData.waliKelasId !== user.id) {
-      return errorResponse('Unauthorized', 403);
+    if (!access.ok) {
+      return errorResponse(access.reason === 'NOT_FOUND' ? 'Class not found' : 'Unauthorized', access.reason === 'NOT_FOUND' ? 404 : 403);
     }
 
     // Delete class teacher by id
@@ -86,8 +57,8 @@ export async function DELETE(
     });
 
     return successResponse(deleted, 'Teacher removed from class');
-  } catch (error: any) {
-    console.error('Delete teacher from class error:', error);
+  } catch (error: unknown) {
+    serverError('Delete teacher from class error:', error);
     if (user) {
       await logActivity({
         userId: user.id,
@@ -95,13 +66,13 @@ export async function DELETE(
         resourceType: 'ClassTeacher',
         resourceId: teacherId,
         description: `Failed to remove teacher from class`,
-        errorMessage: error?.message || 'Unknown error',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
         ipAddress: getClientIp(request),
         userAgent: getUserAgent(request),
         status: 'FAILED',
       });
     }
-    if (error.code === 'P2025') {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2025') {
       return errorResponse('Teacher assignment not found', 404);
     }
     return errorResponse('Failed to remove teacher from class', 500);

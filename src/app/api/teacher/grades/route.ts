@@ -1,9 +1,11 @@
+import { AssessmentType, Prisma } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { verifyAccessToken } from '@/lib/auth/jwt';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { requireTeacherWaliAdminPrincipal } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
 const gradeSchema = z.object({
   studentId: z.string().min(1, 'Student ID is required'),
@@ -30,27 +32,8 @@ const gradeSchema = z.object({
   notes: z.string().optional(),
 });
 
-async function getUser(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (user && (user.role === 'TEACHER' || user.role === 'WALI_KELAS' || user.role === 'ADMIN')) {
-    return user;
-  }
-  return null;
+async function requireGradeAccess(req: NextRequest) {
+  return requireTeacherWaliAdminPrincipal(req);
 }
 
 /**
@@ -59,7 +42,7 @@ async function getUser(req: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await getUser(request);
+    const user = await requireGradeAccess(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
@@ -78,7 +61,7 @@ export async function GET(request: NextRequest) {
     const skip = Math.max(0, (page - 1) * limit);
 
     // Build where clause
-    const whereClause: any = {};
+    const whereClause: Prisma.GradeWhereInput = {};
 
     // Teachers can only see their own grades; wali-kelas can see grades for their classes; admin can see all
     if (user.role === 'ADMIN') {
@@ -97,7 +80,7 @@ export async function GET(request: NextRequest) {
       // Wali-kelas can see grades where:
       // 1. They are the waliKelasId of the class, OR
       // 2. They teach in the class (ClassTeacher relationship)
-      const orConditions: any[] = [
+      const orConditions: Prisma.GradeWhereInput[] = [
         {
           student: {
             class: {
@@ -186,13 +169,13 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    if (assessmentType) {
-      whereClause.assessmentType = assessmentType;
+    if (
+      assessmentType &&
+      Object.values(AssessmentType).includes(assessmentType as AssessmentType)
+    ) {
+      whereClause.assessmentType = assessmentType as AssessmentType;
     }
 
-    console.log('GET /api/teacher/grades - User:', user.role, user.id);
-    console.log('Filters - classId:', classId, 'studentId:', studentId, 'subjectId:', subjectId);
-    console.log('Where clause:', JSON.stringify(whereClause, null, 2));
 
     const grades = await prisma.grade.findMany({
       where: whereClause,
@@ -217,13 +200,9 @@ export async function GET(request: NextRequest) {
 
     const total = await prisma.grade.count({ where: whereClause });
 
-    console.log('Found grades:', grades.length, 'Total:', total);
-    if (grades.length > 0) {
-      console.log('First grade:', grades[0]);
-    }
 
     return paginatedResponse(
-      grades.map((g: any) => ({
+      grades.map((g) => ({
         id: g.id,
         studentId: g.studentId,
         studentName: g.student.name,
@@ -246,7 +225,7 @@ export async function GET(request: NextRequest) {
       limit
     );
   } catch (error) {
-    console.error('Get grades error:', error);
+    serverError('Get grades error:', error);
     return errorResponse('Failed to fetch grades', 500);
   }
 }
@@ -257,7 +236,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const user = await getUser(request);
+    const user = await requireGradeAccess(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
@@ -268,7 +247,6 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    console.log('POST /api/teacher/grades - Request body:', body);
     const validatedData = gradeSchema.parse(body);
 
     // Verify that student exists in a class taught by/assigned to this user
@@ -427,7 +405,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    console.log('Grade saved successfully:', grade.id, 'for student:', grade.studentId, 'competency:', grade.competencyId);
 
     // Log activity
     await logActivity({
@@ -465,17 +442,17 @@ export async function POST(request: NextRequest) {
     }, 201);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      console.error('Validation error details:', error.issues);
+      serverError('Validation error details:', error.issues);
       const fieldErrors = error.issues.map((e) => ({
         field: e.path.join('.'),
         message: e.message,
       }));
       return errorResponse('Validation error', 400, fieldErrors);
     }
-    console.error('Create grade error:', error);
+    serverError('Create grade error:', error);
 
     // Log failed grade creation
-    const user = await getUser(request);
+    const user = await requireGradeAccess(request);
     if (user) {
       await logActivity({
         userId: user.id,

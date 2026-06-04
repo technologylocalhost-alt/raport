@@ -3,15 +3,14 @@ import puppeteer from 'puppeteer';
 import chromium from '@sparticuz/chromium';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { serverError } from '@/lib/server-log';
 
 export async function POST(request: NextRequest) {
   let browser = null;
   try {
-    console.log('[GenerateCoverPDF] Request received');
     const data = await request.json();
     const { studentName, className, studentNo, raportNo, gender, semesterLabel, schoolYear, schoolYearGregorian } = data;
 
-    console.log('[GenerateCoverPDF] Data received:', { studentName, className, studentNo, raportNo, gender });
 
     if (!studentName || !className) {
       return NextResponse.json(
@@ -31,36 +30,31 @@ export async function POST(request: NextRequest) {
     try {
       const bingkaiPath = join(publicPath, 'bingkai.png');
       bingkaiBase64 = readFileSync(bingkaiPath).toString('base64');
-    } catch (err) {
-      console.log('Bingkai image not found, continuing without it');
+    } catch {
     }
 
     try {
       const kmiPath = join(publicPath, 'KMI.jpg');
       kmiBase64 = readFileSync(kmiPath).toString('base64');
-    } catch (err) {
-      console.log('KMI image not found, continuing without it');
+    } catch {
     }
 
     try {
       const kmiPutriPath = join(publicPath, 'kmi_putri.png');
       kmiPutriBase64 = readFileSync(kmiPutriPath).toString('base64');
-    } catch (err) {
-      console.log('KMI Putri image not found, continuing without it');
+    } catch {
     }
 
     try {
       const mahadPath = join(publicPath, 'mahad.png');
       mahadBase64 = readFileSync(mahadPath).toString('base64');
-    } catch (err) {
-      console.log('Mahad image not found, continuing without it');
+    } catch {
     }
 
     try {
       const kashfuPath = join(publicPath, 'kasyfu.jpg');
       kashfuBase64 = readFileSync(kashfuPath).toString('base64');
-    } catch (err) {
-      console.log('Kasyfu image not found, continuing without it');
+    } catch {
     }
 
     // Generate HTML matching the preview page
@@ -362,7 +356,6 @@ export async function POST(request: NextRequest) {
       '--disable-default-apps',
     ];
 
-    console.log('Launching browser for cover PDF');
     
     browser = await puppeteer.launch({
       args: launchArgs,
@@ -380,11 +373,9 @@ export async function POST(request: NextRequest) {
       deviceScaleFactor: 1,
     });
 
-    console.log('[GenerateCoverPDF] Setting page content...');
     // Set content
     await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 60000 });
 
-    console.log('[GenerateCoverPDF] Generating PDF...');
     const pdfBuffer = await page.pdf({
       width: '215mm',
       height: '330mm',
@@ -398,29 +389,27 @@ export async function POST(request: NextRequest) {
     });
 
     await browser.close();
-    console.log('[GenerateCoverPDF] PDF buffer size:', pdfBuffer.length);
 
     // Convert to base64
     const pdfBase64 = Buffer.from(pdfBuffer).toString('base64');
     const pdfDataUrl = `data:application/pdf;base64,${pdfBase64}`;
 
-    console.log('[GenerateCoverPDF] PDF generated successfully');
     return NextResponse.json({
       success: true,
       pdf: pdfDataUrl,
       fileName: `cover-${studentName.replace(/\s+/g, '-')}-${Date.now()}.pdf`,
     });
   } catch (error) {
-    console.error('[GenerateCoverPDF] Error:', error);
+    serverError('[GenerateCoverPDF] Error:', error);
     if (browser) {
       try {
         await browser.close();
       } catch (e) {
-        console.error('[GenerateCoverPDF] Error closing browser:', e);
+        serverError('[GenerateCoverPDF] Error closing browser:', e);
       }
     }
     const errorMessage = error instanceof Error ? error.message : 'Gagal membuat PDF cover';
-    console.error('[GenerateCoverPDF] Returning error:', errorMessage);
+    serverError('[GenerateCoverPDF] Returning error:', errorMessage);
     return NextResponse.json(
       { success: false, error: errorMessage },
       { status: 500 }

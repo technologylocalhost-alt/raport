@@ -1,21 +1,35 @@
+import type { Browser } from 'puppeteer';
 import { NextRequest, NextResponse } from 'next/server';
 import puppeteer from 'puppeteer';
 import chromium from '@sparticuz/chromium';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  if (!payload) return null;
-  const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) return user;
-  return null;
+async function requireSantriPdfAccess(req: NextRequest) {
+  return requireAdminOrPrincipal(req);
 }
 
-const DETAIL_SECTIONS = [
+type PdfField = { label: string; key: string; type?: 'date' };
+type DetailSection = { title: string; fields: PdfField[] };
+type ClassHistoryItem = {
+  className: string;
+  levelName: string;
+  waliKelasName: string;
+  schoolYear: string;
+  semester: string;
+};
+type KamarHistoryItem = {
+  kelas?: string;
+  tahun?: string;
+  smt1?: string;
+  smt2?: string;
+};
+type SantriPdfData = Record<string, unknown> & {
+  classHistory?: ClassHistoryItem[];
+};
+
+const DETAIL_SECTIONS: DetailSection[] = [
   { title: 'Identitas Pendaftaran', fields: [
     { label: 'Nama Lengkap', key: 'name' },
     { label: 'Nama Panggilan', key: 'namaPanggilan' },
@@ -209,7 +223,7 @@ const DETAIL_SECTIONS = [
   ]},
 ];
 
-function formatValue(key: string, val: any): string {
+function formatValue(key: string, val: unknown): string {
   if (val === null || val === undefined || val === '') return '-';
   if (key === 'gender') return val === 'MALE' ? 'Laki-laki (Putra)' : 'Perempuan (Putri)';
   return String(val);
@@ -220,7 +234,7 @@ function formatDate(val: string | Date | null): string {
   return new Date(val).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
-function buildHtml(santri: any): string {
+function buildHtml(santri: SantriPdfData): string {
   const sectionsHtml = DETAIL_SECTIONS.map(section => {
     // Determine which fields to show in 1 column vs 2 columns
     // History tables or long text fields should be 1 column
@@ -248,7 +262,7 @@ function buildHtml(santri: any): string {
                   </tr>
                 </thead>
                 <tbody>
-                  ${classHistory.map((ch: any, i: number) => `
+                  ${classHistory.map((ch: ClassHistoryItem, i: number) => `
                     <tr>
                       <td style="text-align:center;">${i + 1}</td>
                       <td>${ch.schoolYear}</td>
@@ -271,7 +285,7 @@ function buildHtml(santri: any): string {
           let tableHtml = '<div class="no-data">- Belum ada data -</div>';
           if (rawKamar) {
             try {
-              const items = JSON.parse(rawKamar);
+              const items = JSON.parse(String(rawKamar));
               if (Array.isArray(items) && items.length > 0) {
                 tableHtml = `
                   <table class="inner-table">
@@ -285,7 +299,7 @@ function buildHtml(santri: any): string {
                       </tr>
                     </thead>
                     <tbody>
-                      ${items.map((it: any, i: number) => `
+                      ${(items as KamarHistoryItem[]).map((it, i: number) => `
                         <tr>
                           <td style="text-align:center;">${i + 1}</td>
                           <td>${it.kelas || '-'}</td>
@@ -298,13 +312,13 @@ function buildHtml(santri: any): string {
                   </table>
                 `;
               }
-            } catch (e) {}
+            } catch {}
           }
           return `<div class="full-field" style="margin-top:4mm;"><div class="field-label">${f.label}</div>${tableHtml}</div>`;
         }
 
         const raw = santri[f.key];
-        const display = (f as any).type === 'date' ? formatDate(raw) : formatValue(f.key, raw);
+        const display = f.type === 'date' ? formatDate(raw as string | Date | null) : formatValue(f.key, raw);
         return `<div class="full-field mt-2"><div class="field-label">${f.label}</div><div class="field-value">${display}</div></div>`;
       }).join('');
     } else {
@@ -313,7 +327,7 @@ function buildHtml(santri: any): string {
         <div class="grid-container">
           ${section.fields.map(f => {
             const raw = santri[f.key];
-            const display = (f as any).type === 'date' ? formatDate(raw) : formatValue(f.key, raw);
+            const display = f.type === 'date' ? formatDate(raw as string | Date | null) : formatValue(f.key, raw);
             const isLong = display.length > 50 || f.key.includes('Alamat') || f.key.includes('Catatan');
             
             return `
@@ -489,10 +503,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  let browser = null;
+  let browser: Browser | null = null;
   try {
     const { id } = await params;
-    const user = await verifyAdmin(request);
+    const user = await requireSantriPdfAccess(request);
     if (!user) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
@@ -505,7 +519,7 @@ export async function POST(
     }
 
     // Fetch riwayat kelas manual (karena bukan relasi langsung di model Santri)
-    let classHistory: any[] = [];
+    let classHistory: ClassHistoryItem[] = [];
     if (santri.studentNo) {
       const students = await prisma.student.findMany({
         where: { studentNo: santri.studentNo },
@@ -584,9 +598,9 @@ export async function POST(
       fileName: `data-santri-${safeName}.pdf`,
     });
   } catch (error) {
-    console.error('[GenerateSantriPDF] Error:', error);
+    serverError('[GenerateSantriPDF] Error:', error);
     if (browser) {
-      try { await browser.close(); } catch (_) {}
+      try { await browser.close(); } catch {}
     }
     const errorMessage = error instanceof Error ? error.message : 'Gagal membuat PDF';
     return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });

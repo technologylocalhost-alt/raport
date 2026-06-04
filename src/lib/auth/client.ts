@@ -3,93 +3,86 @@
  * Handles token management, logout, and auth state
  */
 
-/**
- * Clear all authentication data and redirect to login
- * @param redirectPath - Optional path to redirect after login
- */
-export function logout(redirectPath?: string) {
-  console.log('[Auth Client] Logging out...');
-  
-  // Clear local storage
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('user');
-    
-    // Call logout API to clear cookies
-    fetch('/api/auth/logout', {
-      method: 'POST',
-      credentials: 'include',
-    })
-      .then(() => console.log('[Auth Client] Logout API called successfully'))
-      .catch(err => console.warn('[Auth Client] Logout API call failed:', err));
-    
-    // Redirect to login
-    const currentPath = redirectPath || window.location.pathname;
-    if (currentPath !== '/login') {
-      window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`;
-    } else {
-      window.location.href = '/login';
-    }
-  }
+import type { AuthUser } from '@/types';
+import { devError, devWarn } from '@/lib/dev-log';
+
+const ACCESS_TOKEN_KEY = 'accessToken';
+const USER_KEY = 'user';
+
+function isBrowser() {
+  return typeof window !== 'undefined';
 }
 
-/**
- * Check if user is authenticated (has valid tokens)
- * Note: This only checks for token existence, not validity
- */
-export function isAuthenticated(): boolean {
-  if (typeof window === 'undefined') return false;
-  
-  const accessToken = localStorage.getItem('accessToken');
-  return !!accessToken;
+export function clearAuthData() {
+  if (!isBrowser()) return;
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
 }
 
-/**
- * Get current access token
- */
 export function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('accessToken');
+  if (!isBrowser()) return null;
+  return localStorage.getItem(ACCESS_TOKEN_KEY);
 }
 
-/**
- * Set access token
- */
-export function setAccessToken(token: string) {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem('accessToken', token);
+export function setAccessToken(token: string | null) {
+  if (!isBrowser()) return;
+  if (token) {
+    localStorage.setItem(ACCESS_TOKEN_KEY, token);
+    return;
+  }
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
 }
 
-/**
- * Get current user data from localStorage
- */
-export function getCurrentUser(): any | null {
-  if (typeof window === 'undefined') return null;
-  
-  const userStr = localStorage.getItem('user');
+export function getCurrentUser(): AuthUser | null {
+  if (!isBrowser()) return null;
+
+  const userStr = localStorage.getItem(USER_KEY);
   if (!userStr) return null;
-  
+
   try {
-    return JSON.parse(userStr);
-  } catch (e) {
-    console.error('[Auth Client] Failed to parse user data:', e);
+    return JSON.parse(userStr) as AuthUser;
+  } catch (error) {
+    devError('[Auth Client] Failed to parse user data:', error);
+    localStorage.removeItem(USER_KEY);
     return null;
   }
 }
 
-/**
- * Set current user data
- */
-export function setCurrentUser(user: any) {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem('user', JSON.stringify(user));
+export function setCurrentUser(user: AuthUser | null) {
+  if (!isBrowser()) return;
+  if (user) {
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    return;
+  }
+  localStorage.removeItem(USER_KEY);
 }
 
-/**
- * Clear user data without redirecting
- */
-export function clearAuthData() {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem('accessToken');
-  localStorage.removeItem('user');
+export function isAuthenticated(): boolean {
+  return !!getAccessToken() && !!getCurrentUser();
+}
+
+export async function logout(redirectPath?: string) {
+  if (!isBrowser()) return;
+
+  const currentPath = redirectPath || window.location.pathname;
+  const token = getAccessToken();
+
+  try {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+  } catch (err) {
+    devWarn('[Auth Client] Logout API call failed:', err);
+  } finally {
+    clearAuthData();
+    sessionStorage.clear();
+
+    if (currentPath !== '/login') {
+      window.location.replace(`/login?redirect=${encodeURIComponent(currentPath)}`);
+    } else {
+      window.location.replace('/login');
+    }
+  }
 }

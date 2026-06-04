@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/db';
+import { requireTeacherOnly } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
 export async function GET(request: NextRequest) {
   try {
-    const token = request.headers.get('Authorization')?.replace('Bearer ', '');
-
-    if (!token) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    const decoded = verifyAccessToken(token);
-    if (!decoded || !decoded.userId) {
+    const teacher = await requireTeacherOnly(request);
+    if (!teacher) {
       return NextResponse.json(
         { success: false, message: 'Invalid token' },
         { status: 401 }
@@ -24,7 +16,7 @@ export async function GET(request: NextRequest) {
     // Get all classes where teacher has students (from ClassTeacher)
     const classTeachers = await prisma.classTeacher.findMany({
       where: {
-        teacherId: decoded.userId,
+        teacherId: teacher.id,
       },
       include: {
         class: {
@@ -46,7 +38,7 @@ export async function GET(request: NextRequest) {
     const uniqueClassesMap = new Map();
     const uniqueSubjectsMap = new Map();
 
-    classTeachers.forEach((ct: any) => {
+    classTeachers.forEach((ct) => {
       if (ct.class && ct.class.id) {
         uniqueClassesMap.set(ct.class.id, ct.class);
       }
@@ -55,10 +47,10 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    const classes = Array.from(uniqueClassesMap.values()).sort((a: any, b: any) => 
+    const classes = Array.from(uniqueClassesMap.values()).sort((a, b) =>
       a.name.localeCompare(b.name)
     );
-    const subjects = Array.from(uniqueSubjectsMap.values()).sort((a: any, b: any) => 
+    const subjects = Array.from(uniqueSubjectsMap.values()).sort((a, b) =>
       a.name.localeCompare(b.name)
     );
 
@@ -68,7 +60,7 @@ export async function GET(request: NextRequest) {
       subjects,
     });
   } catch (error) {
-    console.error('Error fetching filter options:', error);
+    serverError('Error fetching filter options:', error);
     return NextResponse.json(
       { success: false, message: 'Gagal memuat opsi filter' },
       { status: 500 }

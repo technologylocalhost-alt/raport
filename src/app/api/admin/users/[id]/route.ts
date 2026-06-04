@@ -1,33 +1,19 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
+import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { AuthenticatedUser, getAuthenticatedUser } from '@/lib/auth/access';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { hashPassword } from '@/lib/auth/password';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-  
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) {
-    return user;
-  }
-  return null;
+async function requireAdminUserManagement(req: NextRequest) {
+  return requireMenuAccess(req, '/admin/users', ['ADMIN', 'PRINCIPAL']);
 }
+
+const VALID_BAGIAN = ['PENGASUHAN', 'MABIKORI', 'PUSDAC', 'LAC', 'EKSKUL'] as const;
 
 const userUpdateSchema = z.object({
   email: z.string().email('Email harus valid').optional(),
@@ -36,6 +22,7 @@ const userUpdateSchema = z.object({
   role: z.enum(['ADMIN', 'TEACHER', 'PRINCIPAL', 'WALI_KELAS']).optional(),
   schoolId: z.string().min(1, 'School ID harus diisi').optional(),
   isActive: z.boolean().optional(),
+  bagian: z.array(z.enum(VALID_BAGIAN)).optional(),
 });
 
 /**
@@ -48,7 +35,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const admin = await verifyAdmin(request);
+    const admin = await requireAdminUserManagement(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -66,6 +53,9 @@ export async function GET(
         school: {
           select: { id: true, name: true },
         },
+        bagianList: {
+          select: { bagian: true },
+        },
       },
     });
 
@@ -73,9 +63,13 @@ export async function GET(
       return errorResponse('User tidak ditemukan', 404);
     }
 
-    return successResponse(user);
+    return successResponse({
+      ...user,
+      bagian: user.bagianList.map((b) => b.bagian),
+      bagianList: undefined,
+    });
   } catch (error) {
-    console.error('Get user error:', error);
+    serverError('Get user error:', error);
     return errorResponse('Failed to fetch user', 500);
   }
 }
@@ -88,12 +82,12 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  let admin: any;
+  let admin: AuthenticatedUser | null = null;
   let id = '';
   try {
     const result = await params;
     id = result.id;
-    admin = await verifyAdmin(request);
+    admin = await requireAdminUserManagement(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -130,34 +124,54 @@ export async function PUT(
       }
     }
 
-    const updateData: any = {};
+    const updateData: Prisma.UserUpdateInput = {};
     if (validatedData.email) updateData.email = validatedData.email;
     if (validatedData.name) updateData.name = validatedData.name;
     if (validatedData.role) updateData.role = validatedData.role;
-    if (validatedData.schoolId) updateData.schoolId = validatedData.schoolId;
+    if (validatedData.schoolId) {
+      updateData.school = { connect: { id: validatedData.schoolId } };
+    }
     if (validatedData.isActive !== undefined) updateData.isActive = validatedData.isActive;
     if (validatedData.password) updateData.password = await hashPassword(validatedData.password);
 
-    const user = await prisma.user.update({
-      where: { id },
-      data: updateData,
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        schoolId: true,
-        isActive: true,
-        createdAt: true,
-        school: {
-          select: { id: true, name: true },
+    const user = await prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { id },
+        data: updateData,
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          schoolId: true,
+          isActive: true,
+          createdAt: true,
+          school: {
+            select: { id: true, name: true },
+          },
         },
-      },
+      });
+
+      // Update bagian if provided (delete-recreate pattern)
+      if (validatedData.bagian !== undefined) {
+        await tx.userBagian.deleteMany({ where: { userId: id } });
+        if (validatedData.bagian.length > 0) {
+          await tx.userBagian.createMany({
+            data: validatedData.bagian.map((b) => ({
+              userId: id,
+              bagian: b,
+            })),
+          });
+        }
+      }
+
+      return { ...updated, bagian: validatedData.bagian || [] };
     });
 
     // Log without password
-    const logData = { ...validatedData };
-    delete (logData as any).password;
+    const logData = Object.fromEntries(
+      Object.entries(validatedData).filter(([key]) => key !== 'password')
+    );
 
     await logActivity({
       userId: admin.id,
@@ -177,7 +191,7 @@ export async function PUT(
     if (error instanceof z.ZodError) {
       return errorResponse('Validation error', 400, error.issues);
     }
-    console.error('Update user error:', error);
+    serverError('Update user error:', error);
     if (admin) {
       await logActivity({
         userId: admin.id,
@@ -203,19 +217,19 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  let admin: any;
+  let admin: AuthenticatedUser | null = null;
   let id = '';
   try {
     const result = await params;
     id = result.id;
-    admin = await verifyAdmin(request);
+    admin = await requireAdminUserManagement(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
 
     // Prevent deleting yourself
-    const payload = verifyAccessToken(request.headers.get('authorization')?.slice(7) || '');
-    if (payload?.userId === id) {
+    const currentUser = await getAuthenticatedUser(request);
+    if (currentUser?.id === id) {
       return errorResponse('Anda tidak bisa menghapus akun sendiri', 400);
     }
 
@@ -247,7 +261,7 @@ export async function DELETE(
 
     return successResponse({ message: 'User berhasil dihapus' });
   } catch (error) {
-    console.error('Delete user error:', error);
+    serverError('Delete user error:', error);
     if (admin) {
       await logActivity({
         userId: admin.id,

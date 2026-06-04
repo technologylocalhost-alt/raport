@@ -1,7 +1,26 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { apiFetch } from '@/lib/api-client';
 import { X, CheckCircle, AlertCircle, Loader } from 'lucide-react';
+import { devError } from '@/lib/dev-log';
+
+interface GradeSampleItem {
+  assessmentType?: string;
+  subjectId?: string;
+  studentId?: string;
+  studentName?: string;
+  student?: {
+    name?: string;
+    studentNo?: string;
+  };
+  jumlahNilai?: number;
+  mulahazoh?: string;
+  suluk?: string;
+  muazobah?: string;
+  nazofah?: string;
+  updatedAt?: string;
+}
 
 interface SubjectApproval {
   subjectId: string;
@@ -13,9 +32,9 @@ interface SubjectApproval {
   teachersCount: number;
   teachers: string[];
   isComplete: boolean;
-  gradesSample?: any[];
+  gradesSample?: GradeSampleItem[];
   isFullyApproved?: boolean;
-  approvedData?: any;
+  approvedData?: GradeSampleItem[];
   assessmentTypes?: string[];
 }
 
@@ -33,17 +52,11 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [selectedSubject, setSelectedSubject] = useState<SubjectApproval | null>(null);
-  const [selectedClassName, setSelectedClassName] = useState<string>('');
 
   useEffect(() => {
     if (isOpen) {
       setSelectedSubject(null);
       // Jika ada selectedClass dari props, langsung set ke modal
-      if (selectedClass) {
-        setSelectedClassName(selectedClass);
-      } else {
-        setSelectedClassName('');
-      }
       fetchApprovableSubjects();
     }
   }, [isOpen, selectedClass]);
@@ -52,21 +65,12 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
     try {
       setIsLoading(true);
       setError('');
-      const token = localStorage.getItem('accessToken');
 
-      if (!token) {
-        throw new Error('Token tidak ditemukan. Silakan login kembali.');
-      }
-
-      const response = await fetch('/api/wali-kelas/grades-for-approval', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch('/api/wali-kelas/grades-for-approval');
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('[fetchApprovableSubjects] API Error:', {
+        devError('[fetchApprovableSubjects] API Error:', {
           status: response.status,
           statusText: response.statusText,
           error: errorData,
@@ -81,52 +85,40 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
       const subjectsWithApprovalStatus = await Promise.all(
         subjectsData.map(async (subject: SubjectApproval) => {
           let isFullyApproved = false;
-          let approvedData: any[] = [];
+          let approvedData: GradeSampleItem[] = [];
 
           try {
-            if (!token) {
-              console.warn('[ApprovalModal] No token found');
-              return { ...subject, isFullyApproved, approvedData };
-            }
-
-            const approvalResponse = await fetch(
+            const approvalResponse = await apiFetch(
               `/api/wali-kelas/nilai-approve?classId=${subject.classId}&limit=1000`,
               {
                 method: 'GET',
                 headers: {
-                  Authorization: `Bearer ${token}`,
                   'Content-Type': 'application/json',
                 },
               }
             );
-
-            console.log(`[ApprovalModal] Fetch approval for ${subject.subjectName}: status ${approvalResponse.status}`);
 
             if (approvalResponse.ok) {
               const approvalDataResponse = await approvalResponse.json();
               const allApprovedGrades = approvalDataResponse.data?.data || [];
               
               // Filter approved data untuk subject ini
-              approvedData = allApprovedGrades.filter(
-                (g: any) => g.subjectId === subject.subjectId
+              approvedData = (allApprovedGrades as GradeSampleItem[]).filter(
+                (g) => g.subjectId === subject.subjectId
               );
               
-              // Get unique students yang approved untuk subject ini
-              const approvedStudents = new Set(approvedData.map((g: any) => g.studentId));
+              const approvedStudents = new Set(approvedData.map((g) => g.studentId));
               isFullyApproved = approvedStudents.size >= subject.totalStudents;
-              
-              console.log(`[ApprovalModal] Subject ${subject.subjectName}: approvedStudents=${approvedStudents.size}, totalStudents=${subject.totalStudents}, isFullyApproved=${isFullyApproved}`);
             } else {
               const errorData = await approvalResponse.json();
-              console.error(`[ApprovalModal] Approval fetch failed: ${approvalResponse.status}`, errorData);
+              devError(`[ApprovalModal] Approval fetch failed: ${approvalResponse.status}`, errorData);
             }
-          } catch (err) {
-            console.error('[ApprovalModal] Failed to fetch approval data for subject:', subject.subjectId, err);
+          } catch (error) {
+            devError('[ApprovalModal] Failed to fetch approval data for subject:', error, subject.subjectId);
           }
           
-          // Extract unique assessment types from gradesSample
           const assessmentTypes = subject.gradesSample
-            ? Array.from(new Set(subject.gradesSample.map((g: any) => g.assessmentType)))
+            ? Array.from(new Set(subject.gradesSample.map((g) => g.assessmentType).filter(Boolean))) as string[]
             : [];
           
           return {
@@ -139,9 +131,9 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
       );
 
       setSubjects(subjectsWithApprovalStatus);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
-      console.error('Error fetching approvable subjects:', err);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Terjadi kesalahan');
+      devError('Error fetching approvable subjects:', error);
     } finally {
       setIsLoading(false);
     }
@@ -165,30 +157,22 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
     try {
       setApproving(subject.subjectId);
       setError('');
-      const token = localStorage.getItem('accessToken');
 
       const payload = {
         subjectId: subject.subjectId,
         classId: subject.classId,
       };
 
-      console.log('[ApprovalModal] Sending approve request - Payload:', JSON.stringify(payload, null, 2));
-
-      const response = await fetch('/api/wali-kelas/approve-grades', {
+      const response = await apiFetch('/api/wali-kelas/approve-grades', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });
 
-      console.log('[ApprovalModal] Approve response status:', response.status);
-      console.log('[ApprovalModal] Response OK?:', response.ok);
-
       if (!response.ok) {
         const errorData = await response.json();
-        console.log('[ApprovalModal] Error response data:', errorData);
         const errorMessage = errorData.error || errorData.data?.message || 'Gagal menyetujui penilaian';
         
         // Handle 409 Conflict specifically
@@ -200,16 +184,13 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
       }
 
       const result = await response.json();
-      console.log('[ApprovalModal] Success response data:', JSON.stringify(result, null, 2));
       const approvedCount = result.data?.count ?? 0;
       const totalGrades = result.data?.totalGrades ?? 0;
       const message = result.data?.message || 'Unknown';
-      console.log('[ApprovalModal] Approved count:', approvedCount, 'out of', totalGrades);
-      console.log('[ApprovalModal] Server message:', message);
       
       if (approvedCount === 0 && totalGrades > 0) {
         setError(`⚠️ API returned success but created 0 records! Total grades: ${totalGrades}. Message: ${message}`);
-        console.error('[ApprovalModal] WARNING: Zero records created despite API success!');
+        devError('[ApprovalModal] WARNING: Zero records created despite API success!');
         return;
       }
       
@@ -222,9 +203,9 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
 
       // Clear success message after 3 seconds
       setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      console.error('[ApprovalModal] Error during approval:', err);
-      setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
+    } catch (error) {
+      devError('[ApprovalModal] Error during approval:', error);
+      setError(error instanceof Error ? error.message : 'Terjadi kesalahan');
     } finally {
       setApproving(null);
     }
@@ -363,7 +344,6 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
                 </h3>
                 <button
                   onClick={() => {
-                    console.log('[Debug] Closing modal, selectedSubject:', selectedSubject);
                     setSelectedSubject(null);
                   }}
                   className="text-gray-500 hover:text-gray-700"
@@ -449,7 +429,7 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
                           Total: {selectedSubject.approvedData.length} siswa telah di-approve
                         </p>
                         
-                        {selectedSubject.approvedData.slice(0, 5).map((approval: any, idx: number) => (
+                        {selectedSubject.approvedData.slice(0, 5).map((approval: GradeSampleItem, idx: number) => (
                           <div key={idx} className="bg-white rounded p-3 text-xs">
                             <div className="font-semibold text-gray-900 mb-2">
                               {idx + 1}. {approval.student?.name || approval.studentName || 'N/A'} ({approval.student?.studentNo || 'N/A'})

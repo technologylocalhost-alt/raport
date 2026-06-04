@@ -1,23 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/db';
+import { requireTeacherWaliAdminPrincipal } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const token = request.headers.get('Authorization')?.replace('Bearer ', '');
-
-    if (!token) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    const decoded = verifyAccessToken(token);
-    if (!decoded || !decoded.userId) {
+    const user = await requireTeacherWaliAdminPrincipal(request);
+    if (!user) {
       return NextResponse.json(
         { success: false, message: 'Invalid token' },
         { status: 401 }
@@ -28,7 +20,7 @@ export async function GET(
     const subjectId = request.nextUrl.searchParams.get('subjectId');
 
     // Get grades for this student
-    const gradesQueryWhere: any = {
+    const gradesQueryWhere: Record<string, unknown> = {
       studentId: id,
     };
 
@@ -70,7 +62,7 @@ export async function GET(
       })),
     });
   } catch (error) {
-    console.error('Error fetching grades:', error);
+    serverError('Error fetching grades:', error);
     return NextResponse.json(
       { success: false, message: 'Gagal memuat nilai' },
       { status: 500 }

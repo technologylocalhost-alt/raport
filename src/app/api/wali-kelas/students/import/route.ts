@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireWaliKelasAdminPrincipal } from '@/lib/auth/role-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import * as XLSX from 'xlsx';
+import { serverError } from '@/lib/server-log';
 
 interface ImportRow {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface NormalizedRow {
@@ -32,42 +33,26 @@ function normalizeRow(row: ImportRow): NormalizedRow {
   const columnMap = Object.keys(row).reduce((acc, key) => {
     acc[normalizeColumnName(key)] = row[key];
     return acc;
-  }, {} as Record<string, any>);
+  }, {} as Record<string, unknown>);
 
-  normalized.studentNo = columnMap['nomorinduk'] || columnMap['studentno'] || columnMap['nomor'];
-  normalized.name = columnMap['nama'] || columnMap['name'];
-  normalized.nourut = columnMap['nourut'] || columnMap['nomourut'] || columnMap['urut'];
-  normalized.gender = columnMap['jeniskelamin'] || columnMap['gender'] || 'MALE';
-  normalized.email = columnMap['email'] || columnMap['surel'];
-  normalized.phone = columnMap['telepon'] || columnMap['phone'] || columnMap['notelepon'];
-  normalized.address = columnMap['alamat'] || columnMap['address'];
-  normalized.birthDate = columnMap['tanggallahir'] || columnMap['birthdate'] || columnMap['dob'];
-  normalized.parentPhoneNo = columnMap['telpwalimurid'] || columnMap['parentphone'] || columnMap['phonewalimurid'];
+  normalized.studentNo = columnMap['nomorinduk'] ? String(columnMap['nomorinduk']) : columnMap['studentno'] ? String(columnMap['studentno']) : columnMap['nomor'] ? String(columnMap['nomor']) : undefined;
+  normalized.name = columnMap['nama'] ? String(columnMap['nama']) : columnMap['name'] ? String(columnMap['name']) : undefined;
+  const nourutValue = columnMap['nourut'] ?? columnMap['nomourut'] ?? columnMap['urut'];
+  if (typeof nourutValue === 'string' || typeof nourutValue === 'number') {
+    normalized.nourut = nourutValue;
+  }
+  normalized.gender = columnMap['jeniskelamin'] ? String(columnMap['jeniskelamin']) : columnMap['gender'] ? String(columnMap['gender']) : 'MALE';
+  normalized.email = columnMap['email'] ? String(columnMap['email']) : columnMap['surel'] ? String(columnMap['surel']) : undefined;
+  normalized.phone = columnMap['telepon'] ? String(columnMap['telepon']) : columnMap['phone'] ? String(columnMap['phone']) : columnMap['notelepon'] ? String(columnMap['notelepon']) : undefined;
+  normalized.address = columnMap['alamat'] ? String(columnMap['alamat']) : columnMap['address'] ? String(columnMap['address']) : undefined;
+  normalized.birthDate = columnMap['tanggallahir'] ? String(columnMap['tanggallahir']) : columnMap['birthdate'] ? String(columnMap['birthdate']) : columnMap['dob'] ? String(columnMap['dob']) : undefined;
+  normalized.parentPhoneNo = columnMap['telpwalimurid'] ? String(columnMap['telpwalimurid']) : columnMap['parentphone'] ? String(columnMap['parentphone']) : columnMap['phonewalimurid'] ? String(columnMap['phonewalimurid']) : undefined;
 
   return normalized;
 }
 
 async function verifyWaliKelas(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (user && (user.role === 'WALI_KELAS' || user.role === 'ADMIN' || user.role === 'PRINCIPAL')) {
-    return user;
-  }
-  return null;
+  return requireWaliKelasAdminPrincipal(req);
 }
 
 export async function POST(request: NextRequest) {
@@ -114,9 +99,7 @@ export async function POST(request: NextRequest) {
     const worksheet = workbook.Sheets[sheetName];
     const rawRows: ImportRow[] = XLSX.utils.sheet_to_json(worksheet);
 
-    console.log('[Import Students] Raw rows:', rawRows.length);
     if (rawRows.length > 0) {
-      console.log('[Import Students] First row keys:', Object.keys(rawRows[0]));
     }
 
     // Normalize rows
@@ -159,11 +142,6 @@ export async function POST(request: NextRequest) {
         const birthDateStr = row.birthDate?.toString().trim() || '';
         const parentPhoneNo = row.parentPhoneNo?.toString().trim() || '';
 
-        console.log(`[Import Students] Row ${rowNumber}:`, {
-          studentNo,
-          name,
-          birthDateStr,
-        });
 
         // Validate required fields
         if (!studentNo) {
@@ -202,8 +180,8 @@ export async function POST(request: NextRequest) {
             if (isNaN(birthDate.getTime())) {
               birthDate = null;
             }
-          } catch (error) {
-            console.error(`[Import Students] Invalid date for row ${rowNumber}:`, birthDateStr);
+          } catch {
+            serverError(`[Import Students] Invalid date for row ${rowNumber}:`, birthDateStr);
             birthDate = null;
           }
         }
@@ -220,14 +198,14 @@ export async function POST(request: NextRequest) {
             birthDate,
             parentPhoneNo: parentPhoneNo || null,
             classId,
-            gender,
+            gender: gender === 'FEMALE' ? 'FEMALE' : 'MALE',
           },
         });
 
         results.success++;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Error tidak diketahui';
-        console.error(`[Import Students] Row ${rowNumber} error:`, errorMessage);
+        serverError(`[Import Students] Row ${rowNumber} error:`, errorMessage);
         results.errors.push({
           row: rowNumber,
           message: errorMessage,
@@ -278,7 +256,7 @@ export async function POST(request: NextRequest) {
       });
     }
     
-    console.error('[Import Students] Fatal error:', error);
+    serverError('[Import Students] Fatal error:', error);
     return NextResponse.json(
       {
         error: 'Terjadi kesalahan saat mengimpor file',

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/db';
+import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
 import * as XLSX from 'xlsx';
+import { serverError } from '@/lib/server-log';
 
 const DETAIL_SECTIONS = [
   { title: 'Identitas Pendaftaran', fields: [
@@ -200,25 +201,18 @@ const DETAIL_SECTIONS = [
 // Flatten all fields for column mapping
 const ALL_FIELDS = DETAIL_SECTIONS.flatMap(s => s.fields);
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  if (!payload) return null;
-  const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) return user;
-  return null;
+async function requireSantriExportAccess(req: NextRequest) {
+  return requireAdminOrPrincipal(req);
 }
 
-function formatValue(value: any, field: { key: string; type?: string }): string {
+function formatValue(value: unknown, field: { key: string; type?: string }): string {
   if (value === null || value === undefined) return '';
   if (field.key === 'gender') {
     return value === 'MALE' ? 'Laki-laki' : value === 'FEMALE' ? 'Perempuan' : String(value);
   }
   if (field.type === 'date' && value) {
     try {
-      return new Date(value).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
+      return new Date(String(value)).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
     } catch { return String(value); }
   }
   return String(value);
@@ -230,7 +224,7 @@ function formatValue(value: any, field: { key: string; type?: string }): string 
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await verifyAdmin(request);
+    const user = await requireSantriExportAccess(request);
     if (!user) {
       return new NextResponse('Unauthorized', { status: 401 });
     }
@@ -240,10 +234,11 @@ export async function GET(request: NextRequest) {
     });
 
     // Map data to Excel rows using DETAIL_SECTIONS headers
-    const exportData = santriList.map((s: any) => {
+    const exportData = santriList.map((santri) => {
       const row: Record<string, string> = {};
+      const santriRecord = santri as unknown as Record<string, unknown>;
       for (const field of ALL_FIELDS) {
-        row[field.label] = formatValue(s[field.key], field);
+        row[field.label] = formatValue(santriRecord[field.key], field);
       }
       return row;
     });
@@ -267,8 +262,8 @@ export async function GET(request: NextRequest) {
         'Content-Disposition': `attachment; filename="${fileName}"`,
       },
     });
-  } catch (error: any) {
-    console.error('Export santri error:', error);
+  } catch (error: unknown) {
+    serverError('Export santri error:', error);
     return new NextResponse('Failed to export santri', { status: 500 });
   }
 }

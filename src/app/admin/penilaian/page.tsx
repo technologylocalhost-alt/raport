@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { Library, AlertCircle, X, Search, RotateCw } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface School {
   id: string;
@@ -31,12 +33,6 @@ interface Subject {
   classes: Array<{ id: string; name: string; schoolYearId?: string }>;
 }
 
-interface Class {
-  id: string;
-  name: string;
-  schoolYearId?: string;
-}
-
 export default function AdminPenilaianPage() {
   const [schools, setSchools] = useState<School[]>([]);
   const [levels, setLevels] = useState<Level[]>([]);
@@ -59,29 +55,25 @@ export default function AdminPenilaianPage() {
   async function fetchInitialData() {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('accessToken');
-      const headers = { Authorization: `Bearer ${token}` };
 
       // Fetch schools
-      const schoolsRes = await fetch('/api/admin/schools?limit=100', { headers });
+      const schoolsRes = await apiFetch('/api/admin/schools?limit=100');
       const schoolsData = await schoolsRes.json();
       setSchools(schoolsData.data || []);
 
       // Fetch levels with their school info
-      const levelsRes = await fetch('/api/admin/levels?limit=1000', { headers });
+      const levelsRes = await apiFetch('/api/admin/levels?limit=1000');
       const levelsData = await levelsRes.json();
       setLevels(levelsData.data || []);
 
       // Fetch school years
-      const yearsRes = await fetch('/api/admin/school-years?limit=100', { headers });
+      const yearsRes = await apiFetch('/api/admin/school-years?limit=100');
       const yearsData = await yearsRes.json();
       setSchoolYears(yearsData.data || []);
 
       // Fetch subjects with their classes
-      const subjectsResponse = await fetch(`/api/admin/subjects-with-classes`, { headers });
+      const subjectsResponse = await apiFetch(`/api/admin/subjects-with-classes`);
       const subjectsData = await subjectsResponse.json();
-
-      console.log('Subjects from admin endpoint:', subjectsData);
 
       if (!subjectsResponse.ok) {
         setErrorMessage('Gagal memuat mata pelajaran');
@@ -92,7 +84,7 @@ export default function AdminPenilaianPage() {
       setSubjects(fetchedSubjects);
       setErrorMessage('');
     } catch (error) {
-      console.error('Error:', error);
+      devError('Error:', error);
       setErrorMessage('Gagal memuat mata pelajaran');
     } finally {
       setIsLoading(false);

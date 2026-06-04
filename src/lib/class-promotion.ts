@@ -66,8 +66,7 @@ export function parseClassName(className: string): ClassInfo | null {
  */
 export function calculateNextClass(
   currentClass: ClassInfo,
-  currentLevel: LevelInfo,
-  nextLevel: LevelInfo | null
+  currentLevel: LevelInfo
 ): { nextLevelCode: string; nextClassNumber: number } | null {
   // ALWAYS try to promote within the same level first
   // The next level logic will be handled by filterering target classes
@@ -110,7 +109,7 @@ export function getPossibleTargetClasses(
   nextLevel: LevelInfo | null,
   classes: Array<{ id: string; name: string; levelId: string }>
 ) {
-  const next = calculateNextClass(sourceClass, currentLevel, nextLevel);
+  const next = calculateNextClass(sourceClass, currentLevel);
   if (!next) return [];
   
   // Return classes matching the next level and possible numbers

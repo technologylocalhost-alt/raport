@@ -1,29 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/db';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import * as XLSX from 'xlsx';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (user && user.role === 'ADMIN') {
-    return user;
-  }
-  return null;
+async function requireUserExportAccess(req: NextRequest) {
+  return requireMenuAccess(req, '/admin/users', ['ADMIN']);
 }
 
 /**
@@ -32,7 +14,7 @@ async function verifyAdmin(req: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await verifyAdmin(request);
+    const user = await requireUserExportAccess(request);
     if (!user) {
       return new NextResponse('Unauthorized', { status: 401 });
     }
@@ -41,6 +23,9 @@ export async function GET(request: NextRequest) {
       include: {
         school: {
           select: { name: true },
+        },
+        bagianList: {
+          select: { bagian: true },
         },
       },
       orderBy: { name: 'asc' },
@@ -59,6 +44,7 @@ export async function GET(request: NextRequest) {
       'Nama': u.name,
       'Role': roleLabels[u.role] || u.role,
       'Sekolah': u.school?.name || '-',
+      'Bagian': u.bagianList.map((b) => b.bagian).join(', ') || '-',
       'Status': u.isActive ? 'AKTIF' : 'NONAKTIF',
       'Dibuat': new Date(u.createdAt).toLocaleDateString('id-ID'),
     }));
@@ -74,6 +60,7 @@ export async function GET(request: NextRequest) {
       { wch: 25 },
       { wch: 15 },
       { wch: 25 },
+      { wch: 30 },
       { wch: 12 },
       { wch: 15 },
     ];
@@ -91,8 +78,8 @@ export async function GET(request: NextRequest) {
         'Content-Disposition': `attachment; filename="${fileName}"`,
       },
     });
-  } catch (error: any) {
-    console.error('Export users error:', error);
+  } catch (error: unknown) {
+    serverError('Export users error:', error);
     return new NextResponse('Failed to export users', { status: 500 });
   }
 }

@@ -2,19 +2,14 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { verifyAccessToken } from '@/lib/auth/jwt';
-import { extractAccessToken } from '@/lib/auth/token-extractor';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
+import { AuthenticatedUser } from '@/lib/auth/access';
 import { parseClassName, calculateNextClass } from '@/lib/class-promotion';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const token = extractAccessToken(req);
-  if (!token) return null;
-  const payload = verifyAccessToken(token);
-  if (!payload) return null;
-  const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) return user;
-  return null;
+async function requirePromoteAccess(req: NextRequest) {
+  return requireMenuAccess(req, '/admin/naik-kelas', ['ADMIN', 'PRINCIPAL']);
 }
 
 const promoteSchema = z.object({
@@ -43,9 +38,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let admin: AuthenticatedUser | null = null;
   try {
     const { id: sourceClassId } = await params;
-    const admin = await verifyAdmin(request);
+    admin = await requirePromoteAccess(request);
     if (!admin) return errorResponse('Unauthorized', 401);
 
     const body = await request.json();
@@ -59,9 +55,9 @@ export async function POST(
     const isNewFormat = !!studentAssignments && studentAssignments.length > 0;
     
     // Konversi new format ke old format jika perlu (untuk backward compatibility)
-    let actualTargetClassId = targetClassId;
+    const actualTargetClassId = targetClassId;
     let actualPromoteStudentIds = promoteStudentIds || [];
-    let studentToTargetClassMap: Record<string, string> = {};
+    const studentToTargetClassMap: Record<string, string> = {};
     
     if (isNewFormat && studentAssignments) {
       // New format: check all students punya valid targetClassId
@@ -93,13 +89,24 @@ export async function POST(
     if (!sourceClass) return errorResponse('Source class not found', 404);
 
     // Ambil data kelas tujuan
-    let targetClasses: any[] = [];
-    let targetClassIds: string[] = [];
-    
+    const uniqueTargetIds = isNewFormat && studentAssignments
+      ? [...new Set(studentAssignments.map((a) => a.targetClassId))]
+      : [];
+
+    let targetClasses: Awaited<
+      ReturnType<
+        typeof prisma.class.findMany<{
+          where: { id: { in: string[] } };
+          include: {
+            level: true;
+            semester: true;
+            _count: { select: { students: true } };
+          };
+        }>
+      >
+    > = [];
+
     if (isNewFormat && studentAssignments) {
-      // Fetch semua unique target classes
-      const uniqueTargetIds = [...new Set(studentAssignments.map(a => a.targetClassId))];
-      targetClassIds = uniqueTargetIds;
       targetClasses = await prisma.class.findMany({
         where: { id: { in: uniqueTargetIds } },
         include: {
@@ -108,13 +115,13 @@ export async function POST(
           _count: { select: { students: true } },
         },
       });
-      
+
       if (targetClasses.length === 0) {
         return errorResponse('Target classes tidak ditemukan', 404);
       }
-      
+
       // Validasi bahwa semua target classes berada di level yang sama
-      const uniqueLevelIds = new Set(targetClasses.map(c => c.levelId));
+      const uniqueLevelIds = new Set(targetClasses.map((c) => c.levelId));
       if (uniqueLevelIds.size > 1) {
         return errorResponse('Semua kelas tujuan harus berada di level yang sama', 400);
       }
@@ -128,10 +135,9 @@ export async function POST(
           _count: { select: { students: true } },
         },
       });
-      
+
       if (!targetClass) return errorResponse('Target class not found', 404);
       targetClasses = [targetClass];
-      targetClassIds = [actualTargetClassId!];
     }
 
     // Validasi dengan intelligent class promotion logic
@@ -151,6 +157,9 @@ export async function POST(
 
     // Use first target class for validation purposes
     const targetClass = targetClasses[0];
+    if (!targetClass) {
+      return errorResponse('Target class not found', 404);
+    }
     
     // Deteksi tipe promosi berdasarkan target (semester atau level)
     const targetParsed = parseClassName(targetClass.name);
@@ -169,36 +178,14 @@ export async function POST(
       (targetParsed.levelCode !== sourceParsed.levelCode ||
        targetParsed.levelNumber !== sourceParsed.levelNumber);
 
-    // Get next level jika ada (untuk level progression validation)
-    let nextLevel = null;
-    if (!isSemesterProgression) {
-      nextLevel = await prisma.level.findFirst({
-        where: {
-          schoolId: sourceClass.level.schoolId,
-          order: sourceClass.level.order + 1,
-        },
-        select: { id: true, code: true, order: true, levelCount: true },
-      });
-    }
-
     // Calculate next class yang seharusnya (untuk level progression)
     let nextClassInfo = null;
     if (!isSemesterProgression) {
-      nextClassInfo = calculateNextClass(
-        sourceParsed,
-        {
-          code: sourceClass.level.code,
-          levelCount: sourceClass.level.levelCount || 0,
-          order: sourceClass.level.order,
-        },
-        nextLevel
-          ? {
-              code: nextLevel.code,
-              levelCount: nextLevel.levelCount || 0,
-              order: nextLevel.order,
-            }
-          : null
-      );
+      nextClassInfo = calculateNextClass(sourceParsed, {
+        code: sourceClass.level.code,
+        levelCount: sourceClass.level.levelCount || 0,
+        order: sourceClass.level.order,
+      });
 
       if (!nextClassInfo) {
         return errorResponse(
@@ -285,7 +272,7 @@ export async function POST(
     }
 
     // Validasi: semua promoteStudentIds harus berasal dari kelas sumber
-    const sourceStudentIds = new Set(sourceClass.students.map((s: { id: string }) => s.id));
+    const sourceStudentIds = new Set(sourceClass.students.map((s) => s.id));
     const invalidStudents = actualPromoteStudentIds.filter((id) => !sourceStudentIds.has(id));
     if (invalidStudents.length > 0) {
       return errorResponse(
@@ -296,8 +283,8 @@ export async function POST(
 
     // Gate server-side: cek semua mata pelajaran sudah di-approve
     const totalStudents = sourceClass.students.length;
-    const studentIds = sourceClass.students.map((s: { id: string }) => s.id);
-    const subjects = sourceClass.subjects.map((cs: { subject: { id: string; name: string } }) => cs.subject);
+    const studentIds = sourceClass.students.map((s) => s.id);
+    const subjects = sourceClass.subjects.map((cs) => cs.subject);
 
     if (subjects.length === 0) {
       return errorResponse('Kelas tidak memiliki mata pelajaran terdaftar', 400);
@@ -366,14 +353,17 @@ export async function POST(
 
     // 3. Create duplikat students di kelas baru dengan urutan berdasarkan nilai
     // Nomor siswa (studentNo) tetap sama, hanya nourut yang berdasarkan ranking nilai
-    const createdStudents = [];
+    const createdStudents: Array<{ id: string }> = [];
     
     if (isNewFormat && studentAssignments) {
       // New format: assign students to their respective target classes
       // Group students by target class
-      const studentsByTargetClass: Record<string, any[]> = {};
+      const studentsByTargetClass: Record<string, typeof studentsWithScores> = {};
       for (const student of studentsWithScores) {
         const targetCls = studentToTargetClassMap[student.id];
+        if (!targetCls) {
+          return errorResponse(`Target class untuk siswa ${student.name} tidak ditemukan`, 400);
+        }
         if (!studentsByTargetClass[targetCls]) {
           studentsByTargetClass[targetCls] = [];
         }
@@ -467,7 +457,7 @@ export async function POST(
         retainedCount: retainStudentIds.length,
         targetClassId: targetClass.id,
         sourceClassId: sourceClass.id,
-        studentIds: createdStudents.map((s: { id: string }) => s.id),
+        studentIds: createdStudents.map((s) => s.id),
       },
       ipAddress: getClientIp(request),
       userAgent: getUserAgent(request),
@@ -482,29 +472,20 @@ export async function POST(
     if (error instanceof z.ZodError) {
       return errorResponse('Validation error', 400, error.issues);
     }
-    console.error('Promote error:', error);
+    serverError('Promote error:', error);
 
     // Log failed promotion
-    const token = extractAccessToken(request);
-    if (token) {
-      const payload = verifyAccessToken(token);
-      if (payload) {
-        const admin = await prisma.user.findUnique({
-          where: { id: payload.userId },
-        });
-        if (admin) {
-          await logActivity({
-            userId: admin.id,
-            action: 'CREATE',
-            resourceType: 'StudentPromotion',
-            description: 'Failed to process class promotion',
-            ipAddress: getClientIp(request),
-            userAgent: getUserAgent(request),
-            status: 'FAILED',
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
-          });
-        }
-      }
+    if (admin) {
+      await logActivity({
+        userId: admin.id,
+        action: 'CREATE',
+        resourceType: 'StudentPromotion',
+        description: 'Failed to process class promotion',
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'FAILED',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
 
     return errorResponse('Failed to process class promotion', 500);

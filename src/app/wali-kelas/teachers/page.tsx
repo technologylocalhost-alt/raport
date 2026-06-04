@@ -1,7 +1,10 @@
 'use client';
 
-import { useEffect, useState, FormEvent } from 'react';
-import { Users, Plus, Trash2, X, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
+import { useCallback, useEffect, useState, FormEvent } from 'react';
+import { Plus, Trash2, X, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { getCurrentUser } from '@/lib/auth/client';
+import { devError } from '@/lib/dev-log';
 
 interface Class {
   id: string;
@@ -56,27 +59,16 @@ export default function WaliKelasTeachersPage() {
   const [formData, setFormData] = useState<FormData>({ teacherId: '', subjectId: '' });
 
   useEffect(() => {
-    const user = localStorage.getItem('user');
-    if (user) {
-      const parsedUser = JSON.parse(user);
-      fetchClasses(parsedUser.id);
+    const parsedUser = getCurrentUser();
+    if (parsedUser) {
+      void fetchClasses(parsedUser.id);
     }
   }, []);
-
-  useEffect(() => {
-    if (selectedClassId) {
-      fetchClassTeachers();
-      fetchClassSubjects();
-    }
-  }, [selectedClassId]);
 
   async function fetchClasses(waliKelasId: string) {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('accessToken');
-      const headers = { Authorization: `Bearer ${token}` };
-
-      const response = await fetch(`/api/admin/classes?limit=100&waliKelasId=${waliKelasId}`, { headers });
+      const response = await apiFetch(`/api/admin/classes?limit=100&waliKelasId=${waliKelasId}`);
       const data = await response.json();
 
       if (response.ok) {
@@ -85,63 +77,61 @@ export default function WaliKelasTeachersPage() {
         setErrorMessage('Gagal memuat daftar kelas');
       }
     } catch (error) {
-      console.error('Error fetching classes:', error);
+      devError('Error fetching classes:', error);
       setErrorMessage('Gagal memuat daftar kelas');
     } finally {
       setIsLoading(false);
     }
   }
 
-  async function fetchClassTeachers() {
+  const fetchClassTeachers = useCallback(async () => {
     if (!selectedClassId) return;
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const headers = { Authorization: `Bearer ${token}` };
-
-      const response = await fetch(`/api/admin/classes/${selectedClassId}/teachers`, { headers });
+      const response = await apiFetch(`/api/admin/classes/${selectedClassId}/teachers`);
       const data = await response.json();
 
       if (response.ok) {
         setClassTeachers(data.data || []);
       }
     } catch (error) {
-      console.error('Error fetching class teachers:', error);
+      devError('Error fetching class teachers:', error);
     }
-  }
+  }, [selectedClassId]);
 
-  async function fetchClassSubjects() {
+  const fetchClassSubjects = useCallback(async () => {
     if (!selectedClassId) return;
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const headers = { Authorization: `Bearer ${token}` };
-
-      const response = await fetch(`/api/admin/classes/${selectedClassId}/subjects`, { headers });
+      const response = await apiFetch(`/api/admin/classes/${selectedClassId}/subjects`);
       const data = await response.json();
 
       if (response.ok) {
-        setSubjects(data.data?.map((cs: any) => cs.subject) || []);
+        setSubjects(data.data?.map((cs: { subject: Subject }) => cs.subject) || []);
       }
     } catch (error) {
-      console.error('Error fetching subjects:', error);
+      devError('Error fetching subjects:', error);
     }
-  }
+  }, [selectedClassId]);
+
+  useEffect(() => {
+    if (selectedClassId) {
+      void fetchClassTeachers();
+      void fetchClassSubjects();
+    }
+  }, [selectedClassId, fetchClassTeachers, fetchClassSubjects]);
 
   async function fetchTeachers() {
     try {
-      const token = localStorage.getItem('accessToken');
-      const headers = { Authorization: `Bearer ${token}` };
-
       // Fetch teachers with TEACHER or WALI_KELAS role
-      const response = await fetch(`/api/admin/users?limit=100&role=TEACHER`, { headers });
+      const response = await apiFetch(`/api/admin/users?limit=100&role=TEACHER`);
       const data = await response.json();
 
       if (response.ok) {
         setTeachers(data.data || []);
       }
     } catch (error) {
-      console.error('Error fetching teachers:', error);
+      devError('Error fetching teachers:', error);
     }
   }
 
@@ -154,15 +144,11 @@ export default function WaliKelasTeachersPage() {
     }
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      };
-
-      const response = await fetch(`/api/admin/classes/${selectedClassId}/teachers`, {
+      const response = await apiFetch(`/api/admin/classes/${selectedClassId}/teachers`, {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(formData),
       });
 
@@ -170,13 +156,13 @@ export default function WaliKelasTeachersPage() {
         setSuccessMessage('Guru berhasil ditambahkan');
         setShowForm(false);
         setFormData({ teacherId: '', subjectId: '' });
-        fetchClassTeachers();
+        void fetchClassTeachers();
       } else {
         const error = await response.json();
         setErrorMessage(error.error || 'Terjadi kesalahan');
       }
     } catch (error) {
-      console.error('Error submitting form:', error);
+      devError('Error submitting form:', error);
       setErrorMessage('Terjadi kesalahan saat menyimpan data');
     }
   }
@@ -185,20 +171,18 @@ export default function WaliKelasTeachersPage() {
     if (!confirm('Hapus guru dari kelas?')) return;
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/classes/${selectedClassId}/teachers/${classTeacherId}`, {
+      const response = await apiFetch(`/api/admin/classes/${selectedClassId}/teachers/${classTeacherId}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` },
       });
 
       if (response.ok) {
         setSuccessMessage('Guru berhasil dihapus');
-        fetchClassTeachers();
+        void fetchClassTeachers();
       } else {
         setErrorMessage('Gagal menghapus guru');
       }
     } catch (error) {
-      console.error('Error deleting:', error);
+      devError('Error deleting:', error);
       setErrorMessage('Terjadi kesalahan');
     }
   }
@@ -238,7 +222,7 @@ export default function WaliKelasTeachersPage() {
                 onClick={() => {
                   setSelectedClassId(classItem.id);
                   setSelectedClassName(classItem.name);
-                  fetchTeachers();
+                  void fetchTeachers();
                 }}
                 className="bg-white rounded-lg shadow-lg hover:shadow-xl transition-all cursor-pointer border-l-4 border-emerald-500 p-6 group"
               >

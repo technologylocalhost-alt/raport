@@ -1,30 +1,33 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
+import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { getAuthenticatedUser } from '@/lib/auth/access';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
+async function requireSubjectManagement(req: NextRequest) {
+  return requireMenuAccess(req, '/admin/subjects', ['ADMIN', 'PRINCIPAL']);
+}
+
+async function requireSubjectListAccess(req: NextRequest) {
+  const user = await getAuthenticatedUser(req);
+  if (!user) return null;
+
+  if (user.role === 'ADMIN' || user.role === 'PRINCIPAL') {
+    return requireMenuAccess(req, '/admin/subjects', ['ADMIN', 'PRINCIPAL']);
   }
 
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  
-  if (!payload) {
-    return null;
+  if (user.role === 'WALI_KELAS') {
+    return requireMenuAccess(req, '/wali-kelas/management', ['WALI_KELAS']);
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-  
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) {
-    return user;
+  if (user.role === 'TEACHER') {
+    return requireMenuAccess(req, '/teacher/subjects', ['TEACHER']);
   }
+
   return null;
 }
 
@@ -43,6 +46,11 @@ const subjectSchema = z.object({
  */
 export async function GET(request: NextRequest) {
   try {
+    const user = await requireSubjectListAccess(request);
+    if (!user) {
+      return errorResponse('Unauthorized', 401);
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
@@ -52,11 +60,11 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-    let where: any = {
+    const where: Prisma.SubjectWhereInput = {
       ...(search && {
         OR: [
-          { name: { contains: search, mode: 'insensitive' as const } },
-          { code: { contains: search, mode: 'insensitive' as const } },
+          { name: { contains: search, mode: 'insensitive' } },
+          { code: { contains: search, mode: 'insensitive' } },
         ],
       }),
     };
@@ -95,7 +103,7 @@ export async function GET(request: NextRequest) {
 
     return paginatedResponse(subjects, total, page, limit);
   } catch (error) {
-    console.error('Get subjects error:', error);
+    serverError('Get subjects error:', error);
     return errorResponse('Failed to fetch subjects', 500);
   }
 }
@@ -105,24 +113,10 @@ export async function GET(request: NextRequest) {
  * Create a new subject
  */
 export async function POST(request: NextRequest) {
+  let admin;
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return errorResponse('Unauthorized', 401);
-    }
-
-    const token = authHeader.slice(7);
-    const payload = verifyAccessToken(token);
-    
-    if (!payload) {
-      return errorResponse('Unauthorized', 401);
-    }
-
-    const admin = await prisma.user.findUnique({
-      where: { id: payload.userId },
-    });
-    
-    if (!admin || (admin.role !== 'ADMIN' && admin.role !== 'PRINCIPAL')) {
+    admin = await requireSubjectManagement(request);
+    if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
 
@@ -176,30 +170,20 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return errorResponse('Validation error', 400, error.issues);
     }
-    console.error('Create subject error:', error);
+    serverError('Create subject error:', error);
     
     // Log failed subject creation
-    const authHeader = request.headers.get('authorization');
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.slice(7);
-      const payload = verifyAccessToken(token);
-      if (payload) {
-        const admin = await prisma.user.findUnique({
-          where: { id: payload.userId },
-        });
-        if (admin) {
-          await logActivity({
-            userId: admin.id,
-            action: 'CREATE',
-            resourceType: 'Subject',
-            description: 'Failed to create subject',
-            ipAddress: getClientIp(request),
-            userAgent: getUserAgent(request),
-            status: 'FAILED',
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
-          });
-        }
-      }
+    if (admin) {
+      await logActivity({
+        userId: admin.id,
+        action: 'CREATE',
+        resourceType: 'Subject',
+        description: 'Failed to create subject',
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'FAILED',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
 
     return errorResponse('Failed to create subject', 500);

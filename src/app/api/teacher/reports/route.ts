@@ -1,29 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireTeacherOnly } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
-async function getTeacher(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  
-  if (!payload) {
-    return null;
-  }
-
-  const teacher = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-  return teacher;
+async function requireTeacherAccess(req: NextRequest) {
+  return requireTeacherOnly(req);
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const teacher = await getTeacher(req);
+    const teacher = await requireTeacherAccess(req);
     if (!teacher || teacher.role !== 'TEACHER') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -46,7 +32,7 @@ export async function GET(req: NextRequest) {
     const classIds = teacherClasses.map((ct) => ct.classId);
 
     // Get students with their enrollment info
-    const whereClause: any = {
+    const whereClause: Record<string, unknown> = {
       classId: { in: classIds },
     };
 
@@ -86,7 +72,6 @@ export async function GET(req: NextRequest) {
       ],
     });
 
-    const total = await prisma.student.count({ where: whereClause });
 
     // Transform students into report-like structure
     const reports = students.map((student) => {
@@ -124,14 +109,14 @@ export async function GET(req: NextRequest) {
       total: filteredReports.length,
     });
   } catch (error) {
-    console.error('Error fetching reports:', error);
+    serverError('Error fetching reports:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const teacher = await getTeacher(req);
+    const teacher = await requireTeacherAccess(req);
     if (!teacher || teacher.role !== 'TEACHER') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -198,7 +183,7 @@ export async function POST(req: NextRequest) {
       data: report,
     });
   } catch (error) {
-    console.error('Error generating report:', error);
+    serverError('Error generating report:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

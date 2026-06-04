@@ -1,29 +1,11 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireTeacherOnly } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
-async function getTeacher(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const teacher = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (teacher && teacher.role === 'TEACHER') {
-    return teacher;
-  }
-  return null;
+async function requireTeacherAccess(req: NextRequest) {
+  return requireTeacherOnly(req);
 }
 
 /**
@@ -32,7 +14,7 @@ async function getTeacher(req: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const teacher = await getTeacher(request);
+    const teacher = await requireTeacherAccess(request);
     if (!teacher) {
       return errorResponse('Unauthorized', 401);
     }
@@ -102,7 +84,7 @@ export async function GET(request: NextRequest) {
       })),
     });
   } catch (error) {
-    console.error('Get options error:', error);
+    serverError('Get options error:', error);
     return errorResponse('Failed to fetch options', 500);
   }
 }

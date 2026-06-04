@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { Library, AlertCircle, X, Search, RotateCw } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { getCurrentUser } from '@/lib/auth/client';
+import { devError } from '@/lib/dev-log';
 
 interface Subject {
   id: string;
@@ -14,24 +17,6 @@ interface Subject {
   assessmentTypes?: string[];
 }
 
-interface Class {
-  id: string;
-  name: string;
-  levelId: string;
-  levelName?: string;
-}
-
-interface ClassSubject {
-  id: string;
-  subject: {
-    id: string;
-    code: string;
-    name: string;
-    nameArabic?: string;
-    description?: string;
-    creditHours?: number;
-  };
-}
 
 export default function WaliKelasSubjectsPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -43,34 +28,19 @@ export default function WaliKelasSubjectsPage() {
   const [searchText, setSearchText] = useState('');
   const itemsPerPage = 10;
 
-  const assessmentTypeLabels: { [key: string]: string } = {
-    UTS_1: 'UTS 1',
-    UAS_1: 'UAS 1',
-    UTS_2: 'UTS 2',
-    UAS_2: 'UAS 2',
-    FINAL_EXAM_1: 'Final Exam 1',
-    FINAL_EXAM_2: 'Final Exam 2',
-  };
-
   useEffect(() => {
-    const user = localStorage.getItem('user');
+    const user = getCurrentUser();
     if (user) {
-      const parsedUser = JSON.parse(user);
-      fetchAllSubjects(parsedUser.id);
+      void fetchAllSubjects();
     }
   }, []);
 
-  async function fetchAllSubjects(waliKelasId: string) {
+  async function fetchAllSubjects() {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('accessToken');
-      const headers = { Authorization: `Bearer ${token}` };
-
       // Fetch subjects assigned to this user (wali kelas/teacher) via ClassTeacher
-      const subjectsResponse = await fetch(`/api/teacher/subjects`, { headers });
+      const subjectsResponse = await apiFetch(`/api/teacher/subjects`);
       const subjectsData = await subjectsResponse.json();
-
-      console.log('Subjects from ClassTeacher:', subjectsData);
 
       if (!subjectsResponse.ok) {
         setErrorMessage('Gagal memuat mata pelajaran');
@@ -78,18 +48,17 @@ export default function WaliKelasSubjectsPage() {
       }
 
       const fetchedSubjects: Subject[] = (subjectsData.data || []);
-      console.log('Final unique subjects:', fetchedSubjects);
       
       // Fetch assessment status for all subjects in one request
       let statusMap: Record<string, string[]> = {};
       try {
-        const statusResponse = await fetch(`/api/wali-kelas/assessment-status`, { headers });
+        const statusResponse = await apiFetch(`/api/wali-kelas/assessment-status`);
         if (statusResponse.ok) {
           const statusData = await statusResponse.json();
           statusMap = statusData.data || {};
         }
       } catch (error) {
-        console.error('Failed to fetch assessment status:', error);
+        devError('Failed to fetch assessment status:', error);
       }
 
       const subjectsWithAssessments: Subject[] = fetchedSubjects.map((subject) => ({
@@ -100,7 +69,7 @@ export default function WaliKelasSubjectsPage() {
       setSubjects(subjectsWithAssessments);
       setErrorMessage('');
     } catch (error) {
-      console.error('Error:', error);
+      devError('Error:', error);
       setErrorMessage('Gagal memuat mata pelajaran');
     } finally {
       setIsLoading(false);
@@ -139,12 +108,11 @@ export default function WaliKelasSubjectsPage() {
   }, [selectedClass, searchText]);
 
   const handleRefresh = async () => {
-    const user = localStorage.getItem('user');
+    const user = getCurrentUser();
     if (user) {
-      const parsedUser = JSON.parse(user);
       setIsRefreshing(true);
       try {
-        await fetchAllSubjects(parsedUser.id);
+        await fetchAllSubjects();
       } finally {
         setIsRefreshing(false);
       }

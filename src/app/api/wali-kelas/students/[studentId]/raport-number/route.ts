@@ -1,21 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireTeacherWaliAdminPrincipal } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ studentId: string }> }
 ) {
   try {
-    const token = request.headers.get('authorization')?.split(' ')[1];
-    if (!token) {
-      return NextResponse.json(
-        { success: false, message: 'Token tidak ditemukan', data: null },
-        { status: 401 }
-      );
-    }
-    const payload = await verifyAccessToken(token);
-    if (!payload) {
+    const user = await requireTeacherWaliAdminPrincipal(request);
+    if (!user) {
       return NextResponse.json(
         { success: false, message: 'Token tidak valid', data: null },
         { status: 401 }
@@ -45,9 +39,6 @@ export async function GET(
       ? nilaiApproveRecords[0].nomorRaport 
       : null;
 
-    // Log untuk debugging
-    console.log(`Student ID: ${studentId}, Nomor Raport: ${nomorRaport}`);
-
     return NextResponse.json(
       { 
         success: true, 
@@ -60,7 +51,7 @@ export async function GET(
       { status: 200 }
     );
   } catch (error) {
-    console.error('Error fetching raport number:', error);
+    serverError('Error fetching raport number:', error);
     return NextResponse.json(
       { success: false, message: 'Terjadi kesalahan server', data: null },
       { status: 500 }

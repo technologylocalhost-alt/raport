@@ -1,14 +1,17 @@
+/* eslint-disable @next/next/no-img-element */
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Download } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface Student {
   id: string;
   name: string;
   studentNo: string;
-  raportNo?: string;
+  raportNo?: string | null;
   gender?: string;
 }
 
@@ -32,6 +35,14 @@ interface SchoolYearData {
   year: string;
   tahunAkademik?: string;
   tahunAkademikArabic?: string;
+}
+
+interface StudentApiItem {
+  id: string;
+  name?: string;
+  studentNo?: string;
+  raportNo?: string | null;
+  gender?: string;
 }
 
 function CoverPreviewContent() {
@@ -62,16 +73,8 @@ function CoverPreviewContent() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const token = localStorage.getItem('accessToken');
-        if (!token) {
-          setError('Sesi Anda telah berakhir');
-          return;
-        }
-
         // Fetch class data
-        const classResponse = await fetch(`/api/admin/classes/${classId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const classResponse = await apiFetch(`/api/admin/classes/${classId}`);
 
         if (classResponse.ok) {
           const classDataJson = await classResponse.json();
@@ -87,52 +90,44 @@ function CoverPreviewContent() {
             // Fetch semester data if semesterId exists
             if (classDataJson.data.semesterId) {
               try {
-                const semesterResponse = await fetch(`/api/admin/semesters/${classDataJson.data.semesterId}`, {
-                  headers: { Authorization: `Bearer ${token}` },
-                });
+                const semesterResponse = await apiFetch(`/api/admin/semesters/${classDataJson.data.semesterId}`);
                 if (semesterResponse.ok) {
                   const semesterDataJson = await semesterResponse.json();
                   if (semesterDataJson.success) {
                     setSemesterData(semesterDataJson.data);
                   }
                 } else {
-                  console.log('Semester fetch returned:', semesterResponse.status);
                 }
               } catch (semErr) {
-                console.error('Error fetching semester:', semErr);
+                devError('Error fetching semester:', semErr);
               }
             }
             
             // Fetch school year data if schoolYearId exists
             if (classDataJson.data.schoolYearId) {
               try {
-                const schoolYearResponse = await fetch(`/api/admin/school-years/${classDataJson.data.schoolYearId}`, {
-                  headers: { Authorization: `Bearer ${token}` },
-                });
+                const schoolYearResponse = await apiFetch(`/api/admin/school-years/${classDataJson.data.schoolYearId}`);
                 if (schoolYearResponse.ok) {
                   const schoolYearDataJson = await schoolYearResponse.json();
                   if (schoolYearDataJson.success) {
                     setSchoolYearData(schoolYearDataJson.data);
                   }
                 } else {
-                  console.log('School year fetch returned:', schoolYearResponse.status);
                 }
               } catch (syErr) {
-                console.error('Error fetching school year:', syErr);
+                devError('Error fetching school year:', syErr);
               }
             }
           }
         }
 
         // Fetch student data with raport number
-        const studentResponse = await fetch(`/api/admin/classes/${classId}/students?limit=1000`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const studentResponse = await apiFetch(`/api/admin/classes/${classId}/students?limit=1000`);
 
         if (studentResponse.ok) {
           const studentData = await studentResponse.json();
           if (studentData.success && Array.isArray(studentData.data)) {
-            const students = studentData.data.map((s: any) => ({
+            const students = (studentData.data as StudentApiItem[]).map((s) => ({
               id: s.id,
               name: s.name || 'N/A',
               studentNo: s.studentNo || 'N/A',
@@ -141,15 +136,15 @@ function CoverPreviewContent() {
             }));
             setAllStudents(students);
             
-            const foundIndex = students.findIndex((s: any) => s.id === studentId);
+            const foundIndex = students.findIndex((s) => s.id === studentId);
             if (foundIndex !== -1) {
               setStudent(students[foundIndex]);
               setCurrentStudentIndex(foundIndex);
             }
           }
         }
-      } catch (err) {
-        console.error('Error fetching student:', err);
+      } catch (error) {
+        devError('Error fetching student:', error);
         setError('Gagal memuat data siswa');
       } finally {
         setIsLoading(false);
@@ -208,18 +203,10 @@ function CoverPreviewContent() {
         return;
       }
 
-      console.log('Generate PDF dengan data:', {
-        student: student.name,
-        className: classData.name,
-        semester: semesterData?.semesterLabelArabic,
-        schoolYear: schoolYearData?.tahunAkademikArabic,
-      });
-
-      const response = await fetch('/api/wali-kelas/generate-cover-pdf', {
+      const response = await apiFetch('/api/wali-kelas/generate-cover-pdf', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
         body: JSON.stringify({
           studentName: student.name,
@@ -233,16 +220,13 @@ function CoverPreviewContent() {
         }),
       });
 
-      console.log('[handleGeneratePDF] Response status:', response.status);
-
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('[handleGeneratePDF] Error response:', errorData);
+        devError('[handleGeneratePDF] Error response:', errorData);
         throw new Error(errorData.error || 'Gagal membuat PDF cover');
       }
 
       const result = await response.json();
-      console.log('[handleGeneratePDF] PDF generated successfully');
       
       if (!result.pdf) {
         throw new Error('PDF data tidak diterima dari server');
@@ -255,10 +239,8 @@ function CoverPreviewContent() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
-      console.log('[handleGeneratePDF] PDF downloaded successfully');
     } catch (error) {
-      console.error('Error generating cover PDF:', error);
+      devError('Error generating cover PDF:', error);
       alert(`Gagal membuat PDF cover: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
@@ -270,18 +252,10 @@ function CoverPreviewContent() {
         return;
       }
 
-      const token = localStorage.getItem('accessToken');
-      if (!token) {
-        alert('Sesi Anda telah berakhir. Silakan login kembali');
-        router.push('/login');
-        return;
-      }
-
-      const response = await fetch('/api/wali-kelas/generate-cover-pdf-all-students', {
+      const response = await apiFetch('/api/wali-kelas/generate-cover-pdf-all-students', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           classId,
@@ -311,7 +285,7 @@ function CoverPreviewContent() {
       link.click();
       document.body.removeChild(link);
     } catch (error) {
-      console.error('Error downloading all covers:', error);
+      devError('Error downloading all covers:', error);
       alert(`Gagal download cover semua siswa: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };

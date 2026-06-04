@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { withAuth } from '@/lib/auth/middleware';
 import { TokenPayload } from '@/types';
+import { serverError } from '@/lib/server-log';
 
 // GET: Fetch students for teacher
 export async function GET(req: NextRequest) {
@@ -38,7 +39,14 @@ async function handleGET(
 
     const classIds = teacherClasses.map((ct) => ct.classId);
 
-    const whereClause: any = {
+    const whereClause: {
+      classId: string | { in: string[] };
+      OR?: Array<{
+        name?: { contains: string; mode: 'insensitive' };
+        studentNo?: { contains: string; mode: 'insensitive' };
+        email?: { contains: string; mode: 'insensitive' };
+      }>;
+    } = {
       classId: { in: classIds },
     };
 
@@ -91,7 +99,7 @@ async function handleGET(
       total,
     });
   } catch (error) {
-    console.error('Error fetching students:', error);
+    serverError('Error fetching students:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -154,7 +162,7 @@ async function handlePOST(
       data: student,
     });
   } catch (error) {
-    console.error('Error creating student:', error);
+    serverError('Error creating student:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

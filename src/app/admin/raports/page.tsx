@@ -1,8 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Filter, FileText } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { clearAuthData } from '@/lib/auth/client';
+import { devError } from '@/lib/dev-log';
 
 interface School {
   id: string;
@@ -61,6 +64,33 @@ interface PaginatedResponse {
   };
 }
 
+interface ClassResponseItem {
+  id: string;
+  name: string;
+  levelId?: string;
+}
+
+interface ClassSubjectResponseItem {
+  subject?: { id: string; name: string; code?: string };
+  id?: string;
+  name?: string;
+  code?: string;
+}
+
+interface StudentResponseItem {
+  id: string;
+  name: string;
+  studentNo: string;
+}
+
+interface ClassSubjectsResponse {
+  data?: ClassSubjectResponseItem[];
+}
+
+interface ClassStudentsResponse {
+  data?: StudentResponseItem[];
+}
+
 export default function RaportsPage() {
   const router = useRouter();
   const [raports, setRaports] = useState<RaportData[]>([]);
@@ -78,7 +108,7 @@ export default function RaportsPage() {
   const [levels, setLevels] = useState<Level[]>([]);
   const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
   const [classes, setClasses] = useState<Array<{ id: string; name: string; levelId?: string }>>([]);
-  const [subjects, setSubjects] = useState<Array<{ id: string; name: string }>>([]);
+  const [subjects, setSubjects] = useState<Array<{ id: string; name: string; code?: string }>>([]);
   const [students, setStudents] = useState<Array<{ id: string; name: string; no: string }>>([]);
   const [isClient, setIsClient] = useState(false);
   const [filterSchoolYear, setFilterSchoolYear] = useState('');
@@ -87,8 +117,7 @@ export default function RaportsPage() {
 
   const limit = 1000; // No pagination in pivot view
 
-  // Transform raports data into pivot table format
-  const transformToPivotTable = () => {
+  const transformToPivotTable = useCallback(() => {
     const pivotMap: { [key: string]: StudentRowData } = {};
     const columnsSet = new Set<string>();
 
@@ -132,174 +161,95 @@ export default function RaportsPage() {
 
     setPivotData(result);
     setPivotColumns(sortedColumns);
-  };
+  }, [raports]);
 
   // Ensure we're on client side before accessing localStorage
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-  useEffect(() => {
-    if (isClient) {
-      fetchClasses();
-    }
-  }, [isClient]);
-
-  useEffect(() => {
-    if (filterClass) {
-      fetchSubjectsAndStudents();
-      setPage(1);
-      fetchRaports();
-    }
-  }, [filterSchool, filterClass, filterSchoolYear, filterSubject, filterStudent, filterAssessmentType, search, page]);
-
-  useEffect(() => {
-    // Transform data to pivot table format when raports change
-    if (raports.length > 0) {
-      transformToPivotTable();
-    }
-  }, [raports]);
-
-  const getSchoolIdForClass = (classId: string): string | undefined => {
-    const classObj = classes.find(c => c.id === classId);
-    if (!classObj?.levelId) return undefined;
-    const level = levels.find(l => l.id === classObj.levelId);
-    return level?.schoolId;
-  };
-
-  async function fetchClasses() {
+  const fetchClasses = useCallback(async () => {
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-      if (!token) {
-        console.warn('No access token found, redirecting to login');
-        router.push('/login');
-        return;
-      }
-
-      // Fetch school years
-      const yearsResponse = await fetch('/api/admin/school-years?limit=100', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const yearsResponse = await apiFetch('/api/admin/school-years?limit=100');
       const yearsData = await yearsResponse.json();
       setSchoolYears(yearsData.data || []);
 
-      // Fetch schools
-      const schoolsResponse = await fetch('/api/admin/schools?limit=1000', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const schoolsResponse = await apiFetch('/api/admin/schools?limit=1000');
       const schoolsData = await schoolsResponse.json();
       setSchools(schoolsData.data || []);
 
-      // Fetch levels
-      const levelsResponse = await fetch('/api/admin/levels?limit=1000', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const levelsResponse = await apiFetch('/api/admin/levels?limit=1000');
       const levelsData = await levelsResponse.json();
       setLevels(levelsData.data || []);
 
-      const response = await fetch(`/api/admin/classes?limit=1000${filterSchoolYear ? `&schoolYearId=${filterSchoolYear}` : ''}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch(`/api/admin/classes?limit=1000${filterSchoolYear ? `&schoolYearId=${filterSchoolYear}` : ''}`);
 
-      // If token expired (401), redirect to login
       if (response.status === 401) {
-        console.warn('Token expired, redirecting to login');
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('user');
+        clearAuthData();
         router.push('/login');
         return;
       }
 
       if (!response.ok) {
-        console.error('Failed to fetch classes:', response.statusText);
+        devError('Failed to fetch classes:', response.statusText as unknown);
         return;
       }
 
-      const data: any = await response.json();
+      const data: { success: boolean; data?: ClassResponseItem[] } = await response.json();
       if (data.success && data.data) {
-        setClasses(data.data.map((c: any) => ({ id: c.id, name: c.name, levelId: c.levelId })));
+        setClasses(data.data.map((c) => ({ id: c.id, name: c.name, levelId: c.levelId })));
       }
     } catch (error) {
-      console.error('Failed to fetch classes:', error);
+      devError('Failed to fetch classes:', error);
     }
-  }
+  }, [filterSchoolYear, router]);
 
-  async function fetchSubjectsAndStudents() {
+  const fetchSubjectsAndStudents = useCallback(async () => {
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-      if (!token) {
-        console.warn('No access token found');
-        return;
-      }
+      const subjectsResponse = await apiFetch(`/api/admin/classes/${filterClass}/subjects`);
+      const studentsResponse = await apiFetch(`/api/admin/classes/${filterClass}/students?limit=1000`);
 
-      // Fetch subjects for the class
-      const subjectsResponse = await fetch(`/api/admin/classes/${filterClass}/subjects`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      // Fetch students for the class
-      const studentsResponse = await fetch(`/api/admin/classes/${filterClass}/students?limit=1000`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      // If token expired (401), redirect to login
       if (subjectsResponse.status === 401 || studentsResponse.status === 401) {
-        console.warn('Token expired');
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('user');
+        clearAuthData();
         router.push('/login');
         return;
       }
 
       if (!subjectsResponse.ok) {
-        console.error('Failed to fetch subjects:', subjectsResponse.statusText);
+        devError('Failed to fetch subjects:', subjectsResponse.statusText as unknown);
         setSubjects([]);
       } else {
-        const subjectsData = await subjectsResponse.json();
+        const subjectsData: ClassSubjectsResponse = await subjectsResponse.json();
         const subjectsArray = subjectsData.data || [];
-        // Handle both direct subject objects and classSubject wrapper objects
-        setSubjects(subjectsArray.map((item: any) => ({
-          id: item.subject?.id || item.id,
-          name: item.subject?.name || item.name,
-          code: item.subject?.code || item.code,
+        setSubjects(subjectsArray.map((item: ClassSubjectResponseItem) => ({
+          id: item.subject?.id || item.id || '',
+          name: item.subject?.name || item.name || '',
+          code: item.subject?.code || '',
         })));
       }
 
       if (!studentsResponse.ok) {
-        console.error('Failed to fetch students:', studentsResponse.statusText);
+        devError('Failed to fetch students:', studentsResponse.statusText as unknown);
         setStudents([]);
       } else {
-        const studentsData = await studentsResponse.json();
+        const studentsData: ClassStudentsResponse = await studentsResponse.json();
         const studentsArray = studentsData.data || [];
-        setStudents(studentsArray.map((s: any) => ({
+        setStudents(studentsArray.map((s: StudentResponseItem) => ({
           id: s.id,
           name: s.name,
           no: s.studentNo,
         })));
       }
     } catch (error) {
-      console.error('Failed to fetch subjects and students:', error);
+      devError('Failed to fetch subjects and students:', error);
     }
-  }
+  }, [filterClass, router]);
 
-  async function fetchRaports() {
+  const fetchRaports = useCallback(async () => {
     if (!filterClass || !selectedClassName) return;
 
     try {
       setIsLoading(true);
-      const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-      if (!token) {
-        console.warn('No access token found');
-        setIsLoading(false);
-        return;
-      }
-
       const queryParams = new URLSearchParams({
         page: page.toString(),
         limit: limit.toString(),
@@ -309,23 +259,16 @@ export default function RaportsPage() {
         ...(filterStudent && { student: filterStudent }),
         ...(filterAssessmentType && { assessmentType: filterAssessmentType }),
       });
-      const response = await fetch(`/api/admin/raports?${queryParams}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch(`/api/admin/raports?${queryParams}`);
 
-      // If token expired (401), redirect to login
       if (response.status === 401) {
-        console.warn('Token expired');
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('user');
+        clearAuthData();
         router.push('/login');
         return;
       }
 
       if (!response.ok) {
-        console.error('Failed to fetch raports:', response.statusText);
+        devError('Failed to fetch raports:', response.statusText as unknown);
         return;
       }
 
@@ -333,11 +276,39 @@ export default function RaportsPage() {
       setRaports(data.data || []);
       setTotal(data.pagination?.total || 0);
     } catch (error) {
-      console.error('Failed to fetch raports:', error);
+      devError('Failed to fetch raports:', error);
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [filterAssessmentType, filterClass, filterStudent, filterSubject, page, router, search, selectedClassName]);
+
+  useEffect(() => {
+    if (isClient) {
+      void fetchClasses();
+    }
+  }, [fetchClasses, isClient]);
+
+  useEffect(() => {
+    if (filterClass) {
+      void fetchSubjectsAndStudents();
+      setPage(1);
+      void fetchRaports();
+    }
+  }, [fetchRaports, fetchSubjectsAndStudents, filterClass]);
+
+  useEffect(() => {
+    if (raports.length > 0) {
+      transformToPivotTable();
+    }
+  }, [raports.length, transformToPivotTable]);
+
+  const getSchoolIdForClass = (classId: string): string | undefined => {
+    const classObj = classes.find(c => c.id === classId);
+    if (!classObj?.levelId) return undefined;
+    const level = levels.find(l => l.id === classObj.levelId);
+    return level?.schoolId;
+  };
+
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(e.target.value);

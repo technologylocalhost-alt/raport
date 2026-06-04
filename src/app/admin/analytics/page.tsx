@@ -1,15 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Users, GraduationCap, BookOpen, TrendingUp, Filter, ChevronDown, ChevronUp, School } from 'lucide-react';
-
-interface Stats {
-  totalUsers: number;
-  totalStudents: number;
-  totalSubjects: number;
-  totalClasses: number;
-}
+import { Filter, ChevronDown, ChevronUp, School } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { getCurrentUser } from '@/lib/auth/client';
+import { devError } from '@/lib/dev-log';
 
 interface School {
   id: string;
@@ -63,13 +59,6 @@ interface SubjectGradesPerClass {
   subjects: SubjectGrade[];
 }
 
-interface SchoolRankingRecap {
-  schoolId: string;
-  schoolName: string;
-  totalStudents: number;
-  averageScore: number;
-}
-
 interface StudentRanking {
   studentId: string;
   studentName: string;
@@ -79,10 +68,22 @@ interface StudentRanking {
   averageScore: number;
 }
 
+interface StatsSummary {
+  totalUsers: number;
+  totalStudents: number;
+  totalSubjects: number;
+  totalClasses: number;
+}
+
 export default function AnalyticsPage() {
   const router = useRouter();
-  const [stats, setStats] = useState<Stats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [, setStats] = useState<StatsSummary>({
+    totalUsers: 0,
+    totalStudents: 0,
+    totalSubjects: 0,
+    totalClasses: 0,
+  });
   const [schools, setSchools] = useState<School[]>([]);
   const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
   const [levels, setLevels] = useState<Level[]>([]);
@@ -106,51 +107,20 @@ export default function AnalyticsPage() {
   const [schoolRankings, setSchoolRankings] = useState<StudentRanking[]>([]);
   const [isLoadingRankings, setIsLoadingRankings] = useState(false);
 
-  // Collapse/Expand states for main sections
   const [isNilaiSiswaExpanded, setIsNilaiSiswaExpanded] = useState(false);
   const [isMataAjaranExpanded, setIsMataAjaranExpanded] = useState(false);
   const [isRankingExpanded, setIsRankingExpanded] = useState(false);
 
-  // Pagination for ranking
   const [rankingCurrentPage, setRankingCurrentPage] = useState(1);
   const rankingItemsPerPage = 50;
 
-  useEffect(() => {
-    const user = localStorage.getItem('user');
-    if (!user) {
-      router.push('/login');
-      return;
-    }
-
-    fetchFilterOptions();
-    fetchStats();
-    fetchGradesPerClass();
-    fetchGradesPerSubject();
-    fetchSchoolRankings();
-  }, [router, filterSchool, filterSchoolYear, filterLevel, filterClass, filterSemester]);
-
-  // Fetch semesters when school year changes
-  useEffect(() => {
-    if (filterSchoolYear) {
-      fetchSemestersBySchoolYear(filterSchoolYear);
-      // Reset semester filter when school year changes
-      setFilterSemester('');
-    } else {
-      setSemesters([]);
-      setFilterSemester('');
-    }
-  }, [filterSchoolYear]);
-
-  async function fetchFilterOptions() {
+  const fetchFilterOptions = useCallback(async () => {
     try {
-      const token = localStorage.getItem('accessToken');
-      const headers = { 'Authorization': `Bearer ${token}` };
-
       const [schoolsRes, yearsRes, levelsRes, classesRes] = await Promise.all([
-        fetch('/api/admin/schools?limit=1000', { headers }),
-        fetch('/api/admin/school-years?limit=100', { headers }),
-        fetch('/api/admin/levels?limit=100', { headers }),
-        fetch('/api/admin/classes?limit=100', { headers }),
+        apiFetch('/api/admin/schools?limit=1000'),
+        apiFetch('/api/admin/school-years?limit=100'),
+        apiFetch('/api/admin/levels?limit=100'),
+        apiFetch('/api/admin/classes?limit=100'),
       ]);
 
       const schoolsData = await schoolsRes.json();
@@ -162,29 +132,24 @@ export default function AnalyticsPage() {
       setSchoolYears(yearsData.data || []);
       setLevels(levelsData.data || []);
       setClasses(classesData.data || []);
-      // Don't fetch semesters here - will fetch when school year is selected
     } catch (error) {
-      console.error('Error fetching filter options:', error);
+      devError('Error fetching filter options:', error);
     }
-  }
+  }, []);
 
-  async function fetchSemestersBySchoolYear(schoolYearId: string) {
+  const fetchSemestersBySchoolYear = useCallback(async (schoolYearId: string) => {
     try {
-      const token = localStorage.getItem('accessToken');
-      const headers = { 'Authorization': `Bearer ${token}` };
-
-      const semestersRes = await fetch(
-        `/api/admin/semesters?limit=100&schoolYearId=${schoolYearId}`,
-        { headers }
+      const semestersRes = await apiFetch(
+        `/api/admin/semesters?limit=100&schoolYearId=${schoolYearId}`
       );
 
       const semestersData = await semestersRes.json();
       setSemesters(semestersData.data || []);
     } catch (error) {
-      console.error('Error fetching semesters:', error);
+      devError('Error fetching semesters:', error);
       setSemesters([]);
     }
-  }
+  }, []);
 
   const toggleStudentClassExpand = (classId: string) => {
     const newExpanded = new Set(expandedStudentClasses);
@@ -206,11 +171,9 @@ export default function AnalyticsPage() {
     setExpandedSubjectClasses(newExpanded);
   };
 
-  async function fetchGradesPerSubject() {
+  const fetchGradesPerSubject = useCallback(async () => {
     try {
       setIsLoadingSubjectGrades(true);
-      const token = localStorage.getItem('accessToken');
-      const headers = { 'Authorization': `Bearer ${token}` };
 
       const params = new URLSearchParams();
       params.append('limit', '1000');
@@ -219,24 +182,22 @@ export default function AnalyticsPage() {
       if (filterLevel) params.append('levelId', filterLevel);
       if (filterSemester) params.append('semesterId', filterSemester);
 
-      const res = await fetch(`/api/admin/grades/per-subject?${params}`, { headers });
+      const res = await apiFetch(`/api/admin/grades/per-subject?${params}`);
       const data = await res.json();
       
       if (data.success) {
         setGradesPerSubject(data.data || []);
       }
     } catch (error) {
-      console.error('Error fetching grades per subject:', error);
+      devError('Error fetching grades per subject:', error);
     } finally {
       setIsLoadingSubjectGrades(false);
     }
-  }
+  }, [filterLevel, filterSchool, filterSchoolYear, filterSemester]);
 
-  async function fetchGradesPerClass() {
+  const fetchGradesPerClass = useCallback(async () => {
     try {
       setIsLoadingGrades(true);
-      const token = localStorage.getItem('accessToken');
-      const headers = { 'Authorization': `Bearer ${token}` };
 
       const params = new URLSearchParams();
       params.append('limit', '1000');
@@ -245,29 +206,23 @@ export default function AnalyticsPage() {
       if (filterLevel) params.append('levelId', filterLevel);
       if (filterSemester) params.append('semesterId', filterSemester);
 
-      const res = await fetch(`/api/admin/grades/per-class?${params}`, { headers });
+      const res = await apiFetch(`/api/admin/grades/per-class?${params}`);
       const data = await res.json();
       
       if (data.success) {
         setGradesPerClass(data.data || []);
       }
     } catch (error) {
-      console.error('Error fetching grades per class:', error);
+      devError('Error fetching grades per class:', error);
     } finally {
       setIsLoadingGrades(false);
     }
-  }
+  }, [filterLevel, filterSchool, filterSchoolYear, filterSemester]);
 
-  async function fetchStats() {
+  const fetchStats = useCallback(async () => {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('accessToken');
-      
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-      };
 
-      // Build query parameters
       const params = new URLSearchParams();
       params.append('limit', '1000');
       if (filterSchool) params.append('schoolId', filterSchool);
@@ -276,12 +231,11 @@ export default function AnalyticsPage() {
       if (filterClass) params.append('classId', filterClass);
       if (filterSemester) params.append('semesterId', filterSemester);
 
-      // Fetch statistics with filters
       const [usersRes, studentsRes, subjectsRes, classesRes] = await Promise.all([
-        fetch(`/api/admin/users?${params}`, { headers }),
-        fetch(`/api/admin/students?${params}`, { headers }).catch(() => null),
-        fetch(`/api/admin/subjects?${params}`, { headers }),
-        fetch(`/api/admin/classes?${params}`, { headers }),
+        apiFetch(`/api/admin/users?${params}`),
+        apiFetch(`/api/admin/students?${params}`).catch(() => null),
+        apiFetch(`/api/admin/subjects?${params}`),
+        apiFetch(`/api/admin/classes?${params}`),
       ]);
 
       const usersData = await usersRes.json();
@@ -296,17 +250,15 @@ export default function AnalyticsPage() {
         totalClasses: classesData.total || classesData.pagination?.total || 0,
       });
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      devError('Error fetching stats:', error);
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [filterClass, filterLevel, filterSchool, filterSchoolYear, filterSemester]);
 
-  async function fetchSchoolRankings() {
+  const fetchSchoolRankings = useCallback(async () => {
     try {
       setIsLoadingRankings(true);
-      const token = localStorage.getItem('accessToken');
-      const headers = { 'Authorization': `Bearer ${token}` };
 
       const params = new URLSearchParams();
       params.append('limit', '10000');
@@ -314,11 +266,10 @@ export default function AnalyticsPage() {
       if (filterLevel) params.append('levelId', filterLevel);
       if (filterSemester) params.append('semesterId', filterSemester);
 
-      const res = await fetch(`/api/admin/grades/per-class?${params}`, { headers });
+      const res = await apiFetch(`/api/admin/grades/per-class?${params}`);
       const data = await res.json();
 
       if (data.success && data.data) {
-        // Collect all students from all classes
         const allStudents: StudentRanking[] = [];
 
         data.data.forEach((classData: GradePerClass) => {
@@ -334,18 +285,41 @@ export default function AnalyticsPage() {
           });
         });
 
-        // Sort by average score descending
         const rankings = allStudents.sort((a, b) => b.averageScore - a.averageScore);
 
         setSchoolRankings(rankings);
-        setRankingCurrentPage(1); // Reset to page 1 when data changes
+        setRankingCurrentPage(1);
       }
     } catch (error) {
-      console.error('Error fetching school rankings:', error);
+      devError('Error fetching school rankings:', error);
     } finally {
       setIsLoadingRankings(false);
     }
-  }
+  }, [filterLevel, filterSchoolYear, filterSemester]);
+
+  useEffect(() => {
+    const user = getCurrentUser();
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    void fetchFilterOptions();
+    void fetchStats();
+    void fetchGradesPerClass();
+    void fetchGradesPerSubject();
+    void fetchSchoolRankings();
+  }, [router, fetchFilterOptions, fetchGradesPerClass, fetchGradesPerSubject, fetchSchoolRankings, fetchStats]);
+
+  useEffect(() => {
+    if (filterSchoolYear) {
+      void fetchSemestersBySchoolYear(filterSchoolYear);
+      setFilterSemester('');
+    } else {
+      setSemesters([]);
+      setFilterSemester('');
+    }
+  }, [fetchSemestersBySchoolYear, filterSchoolYear]);
 
   if (isLoading) {
     return (
@@ -642,7 +616,7 @@ export default function AnalyticsPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {classData.subjects.map((subject, idx) => (
+                          {classData.subjects.map((subject) => (
                             <tr key={subject.subjectId} className="border-b border-gray-100 hover:bg-gray-50">
                               <td className="px-3 py-2 text-gray-900 font-medium">{subject.subjectName}</td>
                               <td className="px-3 py-2 text-right">

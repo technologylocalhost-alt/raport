@@ -3,6 +3,8 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Printer } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface Student {
   id: string;
@@ -48,6 +50,14 @@ interface ReportData {
   school: School;
 }
 
+interface TeacherGradeApiItem {
+  id: string;
+  competencyName?: string;
+  subjectName?: string;
+  score?: string | number;
+  assessmentType?: string;
+}
+
 function ReportDetailContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -57,282 +67,236 @@ function ReportDetailContent() {
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const paramError = !classId || classId.trim() === ''
+    ? 'ID Kelas tidak valid'
+    : !studentId || studentId.trim() === ''
+      ? 'ID Siswa tidak valid'
+      : '';
 
-  // Validation: Check required parameters on mount
   useEffect(() => {
-    // Validation: classId and studentId must exist
-    if (!classId || classId.trim() === '') {
-      setError('ID Kelas tidak valid');
-      setIsLoading(false);
-      return;
-    }
-    
-    if (!studentId || studentId.trim() === '') {
-      setError('ID Siswa tidak valid');
-      setIsLoading(false);
+    if (paramError || !classId || !studentId) {
       return;
     }
 
-    if (classId && studentId) {
-      fetchReportData();
-    }
-  }, [classId, studentId]);
+    let isActive = true;
 
-  async function fetchReportData() {
-    try {
-      setError('');
-      setIsLoading(true);
-      const token = localStorage.getItem('accessToken');
+    const loadReportData = async () => {
+      try {
+        if (isActive) {
+          setError('');
+          setIsLoading(true);
+        }
 
-      // Validation: Check token
-      if (!token || token.trim() === '') {
-        setError('Sesi Anda telah berakhir. Silakan login kembali');
-        setTimeout(() => router.push('/login'), 1500);
-        setIsLoading(false);
-        return;
-      }
+        const classResponse = await apiFetch(`/api/admin/classes/${classId}`);
 
-      console.log('📋 Fetching report data...');
-      console.log('classId:', classId);
-      console.log('studentId:', studentId);
-      console.log('token exists:', !!token);
+        if (classResponse.status === 401) {
+          if (isActive) {
+            setError('Sesi Anda telah berakhir. Silakan login kembali');
+            setIsLoading(false);
+          }
+          setTimeout(() => router.push('/login'), 1500);
+          return;
+        }
 
-      // Fetch class data to get school
-      const classResponse = await fetch(`/api/admin/classes/${classId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+        if (classResponse.status === 403) {
+          if (isActive) {
+            setError('Anda tidak memiliki akses untuk melihat laporan kelas ini');
+            setIsLoading(false);
+          }
+          return;
+        }
 
-      console.log('✓ Class API response:', classResponse.status);
+        if (classResponse.status === 404) {
+          if (isActive) {
+            setError('Kelas tidak ditemukan');
+            setIsLoading(false);
+          }
+          return;
+        }
 
-      // Validation: Check class response status
-      if (classResponse.status === 401) {
-        setError('Sesi Anda telah berakhir. Silakan login kembali');
-        setTimeout(() => router.push('/login'), 1500);
-        setIsLoading(false);
-        return;
-      }
+        let school: School = {
+          id: '',
+          name: 'MADRASAH ALIYAH ISLAMIC SCHOOL',
+          address: 'Jl. Ahmad Yani No. 123, Jakarta, Indonesia',
+          phone: '(021) 555-1234',
+          email: 'info@mas.sch.id',
+          principal: 'K.H. KULLIYATUL MUALLAIMIN AL ISLAMIYAH, M.A.',
+        };
 
-      if (classResponse.status === 403) {
-        setError('Anda tidak memiliki akses untuk melihat laporan kelas ini');
-        setIsLoading(false);
-        return;
-      }
+        if (classResponse.ok) {
+          const classData = await classResponse.json();
+          if (classData.data?.school) {
+            school = {
+              id: classData.data.school.id,
+              name: classData.data.school.name || 'MADRASAH ALIYAH ISLAMIC SCHOOL',
+              address: classData.data.school.address || '',
+              phone: classData.data.school.phone || '(021) 555-1234',
+              email: classData.data.school.email || 'info@mas.sch.id',
+              principal: classData.data.school.principal || 'K.H. KULLIYATUL MUALLIMIN ALISLAMIYAH, M.A.',
+            };
+          }
+        }
 
-      if (classResponse.status === 404) {
-        setError('Kelas tidak ditemukan');
-        setIsLoading(false);
-        return;
-      }
+        const studentResponse = await apiFetch(`/api/admin/students/${studentId}`);
 
-      let school: School = {
-        id: '',
-        name: 'MADRASAH ALIYAH ISLAMIC SCHOOL',
-        address: 'Jl. Ahmad Yani No. 123, Jakarta, Indonesia',
-        phone: '(021) 555-1234',
-        email: 'info@mas.sch.id',
-        principal: 'K.H. KULLIYATUL MUALLAIMIN AL ISLAMIYAH, M.A.',
-      };
+        if (studentResponse.status === 401) {
+          if (isActive) {
+            setError('Sesi Anda telah berakhir. Silakan login kembali');
+            setIsLoading(false);
+          }
+          setTimeout(() => router.push('/login'), 1500);
+          return;
+        }
 
-      if (classResponse.ok) {
-        const classData = await classResponse.json();
-        if (classData.data?.school) {
-          school = {
-            id: classData.data.school.id,
-            name: classData.data.school.name || 'MADRASAH ALIYAH ISLAMIC SCHOOL',
-            address: classData.data.school.address || '',
-            phone: classData.data.school.phone || '(021) 555-1234',
-            email: classData.data.school.email || 'info@mas.sch.id',
-            principal: classData.data.school.principal || 'K.H. KULLIYATUL MUALLIMIN ALISLAMIYAH, M.A.',
-          };
+        if (studentResponse.status === 403) {
+          if (isActive) {
+            setError('Anda tidak memiliki akses untuk melihat data siswa ini');
+            setIsLoading(false);
+          }
+          return;
+        }
+
+        if (studentResponse.status === 404) {
+          if (isActive) {
+            setError('Siswa tidak ditemukan');
+            setIsLoading(false);
+          }
+          return;
+        }
+
+        if (!studentResponse.ok) {
+          if (isActive) {
+            setError(`Gagal memuat data siswa (Error: ${studentResponse.status})`);
+            setIsLoading(false);
+          }
+          return;
+        }
+
+        const studentData = await studentResponse.json();
+        if (!studentData.data || !studentData.data.id) {
+          if (isActive) {
+            setError('Format data siswa tidak valid');
+            setIsLoading(false);
+          }
+          return;
+        }
+
+        const student = {
+          id: studentData.data.id,
+          name: studentData.data.name || 'Unknown',
+          studentNo: studentData.data.nisn || '-',
+          birthDate: studentData.data.birthDate || '-',
+        };
+
+        const gradesResponse = await apiFetch(
+          `/api/teacher/grades?studentId=${studentId}&classId=${classId}&limit=100`
+        );
+
+        let grades: Grade[] = [];
+        if (gradesResponse.status === 401) {
+          if (isActive) {
+            setError('Sesi Anda telah berakhir. Silakan login kembali');
+            setIsLoading(false);
+          }
+          setTimeout(() => router.push('/login'), 1500);
+          return;
+        }
+
+        if (gradesResponse.ok) {
+          const gradesData = await gradesResponse.json();
+          if (gradesData.success && Array.isArray(gradesData.data)) {
+            grades = ((gradesData.data || []) as TeacherGradeApiItem[]).map((grade) => ({
+              id: grade.id,
+              competencyName: grade.competencyName || 'N/A',
+              subjectName: grade.subjectName || 'N/A',
+              score: String(grade.score || 0),
+              assessmentType: grade.assessmentType || 'DAILY',
+            }));
+          }
+        }
+
+        const attendanceResponse = await apiFetch(
+          `/api/teacher/students/${studentId}/attendance?classId=${classId}`
+        );
+
+        let attendance = {
+          HADIR: 0,
+          SAKIT: 0,
+          IZIN: 0,
+          ALFA: 0,
+        };
+
+        if (attendanceResponse.ok) {
+          const attendanceData = await attendanceResponse.json();
+          if (attendanceData.success && attendanceData.data?.summary) {
+            attendance = attendanceData.data.summary;
+          }
+        }
+
+        const notesResponse = await apiFetch(
+          `/api/teacher/students/${studentId}/notes?classId=${classId}`
+        );
+
+        let studentNotes = {
+          developmentNotes: '',
+          achievedCompetencies: '',
+          improvementAreas: '',
+        };
+
+        if (notesResponse.ok) {
+          const notesData = await notesResponse.json();
+          if (notesData.success && notesData.data) {
+            studentNotes = notesData.data;
+          }
+        }
+
+        if (isActive) {
+          setReportData({
+            student,
+            grades,
+            attendance,
+            studentNotes,
+            semester: 'Semester 1',
+            schoolYear: '2024/2025',
+            school,
+          });
+          setIsLoading(false);
+        }
+      } catch (error) {
+        devError('Error fetching report:', error);
+        if (isActive) {
+          setError('Terjadi kesalahan saat memuat laporan. Periksa koneksi Anda dan coba lagi');
+          setIsLoading(false);
         }
       }
+    };
 
-      // Fetch student data
-      const studentResponse = await fetch(`/api/admin/students/${studentId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+    void loadReportData();
 
-      console.log('✓ Student API response:', studentResponse.status);
-
-      // Validation: Check student response status
-      if (studentResponse.status === 401) {
-        setError('Sesi Anda telah berakhir. Silakan login kembali');
-        setTimeout(() => router.push('/login'), 1500);
-        setIsLoading(false);
-        return;
-      }
-
-      if (studentResponse.status === 403) {
-        setError('Anda tidak memiliki akses untuk melihat data siswa ini');
-        setIsLoading(false);
-        return;
-      }
-
-      if (studentResponse.status === 404) {
-        setError('Siswa tidak ditemukan');
-        setIsLoading(false);
-        return;
-      }
-
-      if (!studentResponse.ok) {
-        setError(`Gagal memuat data siswa (Error: ${studentResponse.status})`);
-        setIsLoading(false);
-        return;
-      }
-
-      const studentData = await studentResponse.json();
-      
-      // Validation: Check student data format
-      if (!studentData.data || !studentData.data.id) {
-        setError('Format data siswa tidak valid');
-        setIsLoading(false);
-        return;
-      }
-
-      const student = {
-        id: studentData.data.id,
-        name: studentData.data.name || 'Unknown',
-        studentNo: studentData.data.nisn || '-',
-        birthDate: studentData.data.birthDate || '-',
-      };
-
-      console.log('✓ Student data loaded:', student.name);
-
-      // Fetch grades for this student
-      const gradesResponse = await fetch(
-        `/api/teacher/grades?studentId=${studentId}&classId=${classId}&limit=100`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      console.log('✓ Grades API response:', gradesResponse.status);
-
-      let grades: any[] = [];
-      
-      // Validation: Grade API response
-      if (gradesResponse.status === 401) {
-        setError('Sesi Anda telah berakhir. Silakan login kembali');
-        setTimeout(() => router.push('/login'), 1500);
-        setIsLoading(false);
-        return;
-      }
-
-      if (!gradesResponse.ok) {
-        console.warn('⚠️ Grades API response not ok:', gradesResponse.status);
-      } else {
-        const gradesData = await gradesResponse.json();
-        
-        // Validation: Check grades data format
-        if (gradesData.success && Array.isArray(gradesData.data)) {
-          grades = (gradesData.data || []).map((grade: any) => ({
-            id: grade.id,
-            competencyName: grade.competencyName || 'N/A',
-            subjectName: grade.subjectName || 'N/A',
-            score: String(grade.score || 0),
-            assessmentType: grade.assessmentType || 'DAILY',
-          }));
-          console.log(`✓ Loaded ${grades.length} grades`);
-        } else {
-          console.warn('⚠️ Grades data format invalid');
-        }
-      }
-
-      // Fetch attendance data
-      const attendanceResponse = await fetch(
-        `/api/teacher/students/${studentId}/attendance?classId=${classId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      let attendance = {
-        HADIR: 0,
-        SAKIT: 0,
-        IZIN: 0,
-        ALFA: 0,
-      };
-
-      // Validation: Attendance API response
-      if (attendanceResponse.status === 401) {
-        console.warn('⚠️ Attendance API: Unauthorized');
-      } else if (attendanceResponse.ok) {
-        const attendanceData = await attendanceResponse.json();
-        
-        // Validation: Check attendance data format
-        if (attendanceData.success && attendanceData.data?.summary) {
-          attendance = attendanceData.data.summary;
-          console.log('✓ Attendance data loaded:', attendance);
-        } else {
-          console.warn('⚠️ Attendance data format invalid');
-        }
-      } else {
-        console.warn('⚠️ Attendance API response not ok:', attendanceResponse.status);
-      }
-
-      // Fetch student notes
-      const notesResponse = await fetch(
-        `/api/teacher/students/${studentId}/notes?classId=${classId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      let studentNotes = {
-        developmentNotes: '',
-        achievedCompetencies: '',
-        improvementAreas: '',
-      };
-
-      // Validation: Notes API response
-      if (notesResponse.status === 401) {
-        console.warn('⚠️ Notes API: Unauthorized');
-      } else if (notesResponse.ok) {
-        const notesData = await notesResponse.json();
-        
-        // Validation: Check notes data format
-        if (notesData.success && notesData.data) {
-          studentNotes = notesData.data;
-          console.log('✓ Student notes loaded');
-        } else {
-          console.warn('⚠️ Notes data format invalid');
-        }
-      } else {
-        console.warn('⚠️ Notes API response not ok:', notesResponse.status);
-      }
-
-      console.log('✅ All data loaded successfully');
-
-      setReportData({
-        student,
-        grades,
-        attendance,
-        studentNotes,
-        semester: 'Semester 1',
-        schoolYear: '2024/2025',
-        school,
-      });
-      setIsLoading(false);
-    } catch (err) {
-      console.error('Error fetching report:', err);
-      setError('Terjadi kesalahan saat memuat laporan. Periksa koneksi Anda dan coba lagi');
-      setIsLoading(false);
-    }
-  }
+    return () => {
+      isActive = false;
+    };
+  }, [classId, paramError, router, studentId]);
 
   const handlePrint = () => {
     window.print();
   };
+
+  if (paramError) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <p className="text-red-600">{paramError}</p>
+          <button
+            onClick={() => router.back()}
+            className="mt-4 text-emerald-600 hover:text-emerald-700"
+          >
+            ← Kembali
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -359,13 +323,6 @@ function ReportDetailContent() {
       </div>
     );
   }
-
-  const avgScore = reportData.grades.length > 0
-    ? (
-        reportData.grades.reduce((sum, g) => sum + parseFloat(g.score), 0) /
-        reportData.grades.length
-      ).toFixed(2)
-    : '0';
 
   return (
     <>

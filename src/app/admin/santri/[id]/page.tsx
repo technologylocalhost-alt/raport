@@ -4,17 +4,42 @@ import { use, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Edit, Trash2, FileDown } from 'lucide-react';
 import { DETAIL_SECTIONS } from '../components';
+import { apiFetch } from '@/lib/api-client';
+
+interface KamarHistoryItem {
+  kelas?: string;
+  tahun?: string;
+  smt1?: string;
+  smt2?: string;
+}
+
+interface ClassHistoryItem {
+  schoolYear?: string;
+  semester?: string;
+  levelName?: string;
+  className?: string;
+  waliKelasName?: string;
+}
+
+interface SantriDetail {
+  id: string;
+  name: string;
+  studentNo?: string;
+  gender?: string;
+  classHistory?: ClassHistoryItem[];
+  [key: string]: unknown;
+}
+
 
 export default function DetailSantriPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<SantriDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-    fetch(`/api/admin/santri/${id}`, { headers: { Authorization: `Bearer ${token}` } })
+    apiFetch(`/api/admin/santri/${id}`)
       .then(res => res.json())
       .then(result => {
         if (!result.success) { alert('Data tidak ditemukan'); router.push('/admin/santri'); return; }
@@ -26,9 +51,8 @@ export default function DetailSantriPage({ params }: { params: Promise<{ id: str
 
   const handleDelete = async () => {
     if (!confirm('Yakin ingin menghapus data santri ini?')) return;
-    const token = localStorage.getItem('accessToken');
-    const res = await fetch(`/api/admin/santri/${id}`, {
-      method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
+    const res = await apiFetch(`/api/admin/santri/${id}`, {
+      method: 'DELETE',
     });
     if (res.ok) { router.push('/admin/santri'); } else { alert('Gagal menghapus'); }
   };
@@ -36,10 +60,8 @@ export default function DetailSantriPage({ params }: { params: Promise<{ id: str
   const handleDownloadPdf = async () => {
     setIsGeneratingPdf(true);
     try {
-      const token = localStorage.getItem('accessToken');
-      const res = await fetch(`/api/admin/santri/${id}/generate-pdf`, {
+      const res = await apiFetch(`/api/admin/santri/${id}/generate-pdf`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
       });
       const result = await res.json();
       if (!result.success) { alert(result.error || 'Gagal membuat PDF'); return; }
@@ -61,7 +83,7 @@ export default function DetailSantriPage({ params }: { params: Promise<{ id: str
     return new Date(val).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
   };
 
-  const formatValue = (key: string, val: any) => {
+  const formatValue = (key: string, val: unknown) => {
     if (val === null || val === undefined || val === '') return '-';
     if (key === 'gender') return val === 'MALE' ? 'Laki-laki (Putra)' : 'Perempuan (Putri)';
     return String(val);
@@ -136,7 +158,7 @@ export default function DetailSantriPage({ params }: { params: Promise<{ id: str
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                          {data.classHistory.map((ch: any, idx: number) => (
+                          {data.classHistory.map((ch: ClassHistoryItem, idx: number) => (
                             <tr key={idx} className="hover:bg-gray-50">
                               <td className="px-4 py-2.5 text-gray-700">{idx + 1}</td>
                               <td className="px-4 py-2.5 text-gray-900 font-medium">{ch.schoolYear}</td>
@@ -162,7 +184,7 @@ export default function DetailSantriPage({ params }: { params: Promise<{ id: str
                     // Spesial rendering untuk Riwayat Kamar yang berbentuk JSON String
                     if (f.key === 'riwayatKamar' && val) {
                       try {
-                        const items = JSON.parse(val);
+                        const items = JSON.parse(String(val));
                         if (Array.isArray(items) && items.length > 0) {
                           return (
                             <div key={f.key}>
@@ -179,7 +201,7 @@ export default function DetailSantriPage({ params }: { params: Promise<{ id: str
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-gray-100">
-                                    {items.map((it: any, i: number) => (
+                                    {items.map((it: KamarHistoryItem, i: number) => (
                                       <tr key={i} className="hover:bg-gray-50">
                                         <td className="px-3 py-2 text-gray-500 text-xs">{i + 1}</td>
                                         <td className="px-3 py-2 text-gray-900 font-medium">{it.kelas || '-'}</td>
@@ -194,9 +216,8 @@ export default function DetailSantriPage({ params }: { params: Promise<{ id: str
                             </div>
                           );
                         }
-                      } catch (e) {
+                      } catch {
                          // Fallback ke teks biasa jika gagal diparse
-                         console.warn('Failed to parse riwayatKamar JSON:', e);
                       }
                     }
 
@@ -218,7 +239,7 @@ export default function DetailSantriPage({ params }: { params: Promise<{ id: str
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4">
                 {section.fields.map(f => {
                   const val = data[f.key];
-                  const displayVal = (f as any).type === 'date' ? formatDate(val) : formatValue(f.key, val);
+                  const displayVal = ('type' in f && f.type === 'date') ? formatDate(val as string | null) : formatValue(f.key, val);
                   return (
                     <div key={f.key}>
                       <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">{f.label}</dt>

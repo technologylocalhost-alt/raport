@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/db';
+import { requireRoles } from '@/lib/auth/access';
+import { serverError } from '@/lib/server-log';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const token = request.headers.get('Authorization')?.split(' ')[1];
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const user = verifyAccessToken(token);
+    const user = await requireRoles(request, ['TEACHER', 'WALI_KELAS', 'ADMIN']);
     if (!user) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
@@ -21,14 +17,13 @@ export async function GET(
     const classId = request.nextUrl.searchParams.get('classId');
     const semesterId = request.nextUrl.searchParams.get('semesterId');
 
-    console.log('📝 Notes GET - studentId:', studentId, 'classId:', classId, 'semesterId:', semesterId);
 
     if (!classId) {
       return NextResponse.json({ error: 'classId is required' }, { status: 400 });
     }
 
     // Get student note
-    const whereClause: any = {
+    const whereClause: Record<string, string> = {
       studentId: studentId,
       classId: classId,
     };
@@ -37,13 +32,11 @@ export async function GET(
       whereClause.semesterId = semesterId;
     }
 
-    console.log('📝 Notes GET - whereClause:', whereClause);
 
     const studentNote = await prisma.studentNote.findFirst({
       where: whereClause,
     });
 
-    console.log('📝 Notes GET - studentNote:', studentNote);
 
     if (!studentNote) {
       return NextResponse.json({
@@ -66,7 +59,7 @@ export async function GET(
       },
     });
   } catch (error) {
-    console.error('Error fetching student note:', error);
+    serverError('Error fetching student note:', error);
     return NextResponse.json({ error: 'Internal server error', details: String(error) }, { status: 500 });
   }
 }
@@ -76,13 +69,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const token = request.headers.get('Authorization')?.split(' ')[1];
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const user = verifyAccessToken(token);
-    if (!user || (user.role !== 'WALI_KELAS' && user.role !== 'ADMIN')) {
+    const user = await requireRoles(request, ['WALI_KELAS', 'ADMIN']);
+    if (!user) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -90,14 +78,13 @@ export async function POST(
     const body = await request.json();
     const { classId, semesterId, developmentNotes, achievedCompetencies, improvementAreas } = body;
 
-    console.log('📝 Notes POST - studentId:', studentId, 'classId:', classId, 'semesterId:', semesterId);
 
     if (!classId) {
       return NextResponse.json({ error: 'classId is required' }, { status: 400 });
     }
 
     // Find existing note
-    const whereClause: any = {
+    const whereClause: Record<string, string | null> = {
       studentId: studentId,
       classId: classId,
     };
@@ -108,13 +95,11 @@ export async function POST(
       whereClause.semesterId = null;
     }
 
-    console.log('📝 Notes POST - whereClause:', whereClause);
 
     const existingNote = await prisma.studentNote.findFirst({
       where: whereClause,
     });
 
-    console.log('📝 Notes POST - existingNote:', existingNote);
 
     let studentNote;
     if (existingNote) {
@@ -127,7 +112,6 @@ export async function POST(
           improvementAreas,
         },
       });
-      console.log('📝 Notes POST - Updated note');
     } else {
       // Create new
       studentNote = await prisma.studentNote.create({
@@ -140,7 +124,6 @@ export async function POST(
           improvementAreas,
         },
       });
-      console.log('📝 Notes POST - Created new note');
     }
 
     return NextResponse.json({
@@ -148,7 +131,7 @@ export async function POST(
       data: studentNote,
     });
   } catch (error) {
-    console.error('Error creating/updating student note:', error);
+    serverError('Error creating/updating student note:', error);
     return NextResponse.json({ error: 'Internal server error', details: String(error) }, { status: 500 });
   }
 }

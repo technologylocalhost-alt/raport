@@ -1,33 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireWaliKelasOnly } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
-async function getWaliKelas(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (user && user.role === 'WALI_KELAS') {
-    return user;
-  }
-  return null;
+async function requireWaliKelasAccess(req: NextRequest) {
+  return requireWaliKelasOnly(req);
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const waliKelas = await getWaliKelas(req);
+    const waliKelas = await requireWaliKelasAccess(req);
     if (!waliKelas || waliKelas.role !== 'WALI_KELAS') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -40,7 +22,7 @@ export async function GET(req: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-    const whereClause: any = {};
+    const whereClause: Record<string, unknown> = {};
 
     if (classId) {
       whereClause.classId = classId;
@@ -93,7 +75,7 @@ export async function GET(req: NextRequest) {
       total,
     });
   } catch (error) {
-    console.error('Error fetching students:', error);
+    serverError('Error fetching students:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

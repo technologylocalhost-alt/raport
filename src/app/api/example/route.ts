@@ -5,6 +5,7 @@
  * in your API routes.
  */
 
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@/middleware/auth';
 import { asyncHandler } from '@/middleware/errorHandler';
@@ -14,11 +15,22 @@ import { logger } from '@/lib/logger';
 import { prisma } from '@/lib/db';
 import type { TokenPayload } from '@/types';
 
+function ensureExampleRouteEnabled() {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
+  }
+
+  return null;
+}
+
 /**
  * Example 1: Basic GET endpoint with authentication
  */
 export const GET = withAuth(
   async (request: NextRequest, user: TokenPayload) => {
+    const disabledResponse = ensureExampleRouteEnabled();
+    if (disabledResponse) return disabledResponse;
+
     logger.apiRequest('GET', '/api/example', { userId: user.userId });
 
     // Your logic here
@@ -45,6 +57,9 @@ export const GET = withAuth(
  * Example 2: POST endpoint with rate limiting + error handling
  */
 export const POST = asyncHandler(async (request: NextRequest) => {
+  const disabledResponse = ensureExampleRouteEnabled();
+  if (disabledResponse) return disabledResponse;
+
   const startTime = Date.now();
 
   // Apply rate limiting
@@ -85,6 +100,9 @@ export const POST = asyncHandler(async (request: NextRequest) => {
  * Example 3: Manual error handling (without asyncHandler)
  */
 export async function PUT(request: NextRequest) {
+  const disabledResponse = ensureExampleRouteEnabled();
+  if (disabledResponse) return disabledResponse;
+
   try {
     const { handleError } = await import('@/middleware/errorHandler');
     
@@ -110,6 +128,9 @@ export async function PUT(request: NextRequest) {
  * Example 4: Rate limiting on sensitive endpoint
  */
 export async function DELETE(request: NextRequest) {
+  const disabledResponse = ensureExampleRouteEnabled();
+  if (disabledResponse) return disabledResponse;
+
   // Very strict rate limiting for delete operations
   const rateLimitResponse = await rateLimit(rateLimitPresets.veryStrict)(request);
   if (rateLimitResponse) return rateLimitResponse;

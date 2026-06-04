@@ -1,7 +1,10 @@
 'use client';
 
-import { useEffect, useState, FormEvent } from 'react';
+import { useCallback, useEffect, useState, FormEvent } from 'react';
 import { Plus, Trash2, X, AlertCircle, CheckCircle, ArrowLeft, BookOpen, Users, Download, Upload } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { getCurrentUser } from '@/lib/auth/client';
+import { devError } from '@/lib/dev-log';
 
 interface Class {
   id: string;
@@ -42,6 +45,18 @@ interface Teacher {
   id: string;
   name: string;
   email: string;
+  role?: string;
+}
+
+interface ClassApiItem extends Class {
+  level?: { name?: string };
+}
+
+interface ImportResultState {
+  message?: string;
+  imported?: number;
+  skipped?: number;
+  errors?: string[];
 }
 
 interface Subject {
@@ -75,7 +90,7 @@ export default function WaliKelasClassManagementPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedClassName, setSelectedClassName] = useState<string>('');
-  const [selectedClassActive, setSelectedClassActive] = useState<boolean>(true);
+  const [, setSelectedClassActive] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('subjects');
   const [showSubjectForm, setShowSubjectForm] = useState(false);
   const [showTeacherForm, setShowTeacherForm] = useState(false);
@@ -88,37 +103,26 @@ export default function WaliKelasClassManagementPage() {
   const [subjectSearchTeacherText, setSubjectSearchTeacherText] = useState('');
   const [showSubjectDropdown, setShowSubjectDropdown] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [importResult, setImportResult] = useState<any>(null);
+  const [importResult, setImportResult] = useState<ImportResultState | null>(null);
   const [showImportResult, setShowImportResult] = useState(false);
   const itemsPerPage = 10;
 
   useEffect(() => {
-    const user = localStorage.getItem('user');
-    if (user) {
-      const parsedUser = JSON.parse(user);
-      fetchClasses(parsedUser.id);
+    const parsedUser = getCurrentUser();
+    if (parsedUser) {
+      void fetchClasses(parsedUser.id);
     }
   }, []);
-
-  useEffect(() => {
-    if (selectedClassId) {
-      fetchClassSubjects();
-      fetchClassTeachers();
-    }
-  }, [selectedClassId]);
 
   async function fetchClasses(waliKelasId: string) {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('accessToken');
-      const headers = { Authorization: `Bearer ${token}` };
-
-      const response = await fetch(`/api/admin/classes?limit=100&waliKelasId=${waliKelasId}&includeInactive=true`, { headers });
+      const response = await apiFetch(`/api/admin/classes?limit=100&waliKelasId=${waliKelasId}&includeInactive=true`);
       const data = await response.json();
 
       if (response.ok) {
         // Transform classes to extract nested object values
-        const transformedClasses = (data.data || []).map((c: any) => ({
+        const transformedClasses = ((data.data || []) as ClassApiItem[]).map((c) => ({
           ...c,
           levelName: c.level?.name || '-',
         }));
@@ -127,72 +131,71 @@ export default function WaliKelasClassManagementPage() {
         setErrorMessage('Gagal memuat daftar kelas');
       }
     } catch (error) {
-      console.error('Error fetching classes:', error);
+      devError('Error fetching classes:', error);
       setErrorMessage('Gagal memuat daftar kelas');
     } finally {
       setIsLoading(false);
     }
   }
 
-  async function fetchClassSubjects() {
+  const fetchClassSubjects = useCallback(async () => {
     if (!selectedClassId) return;
     try {
-      const token = localStorage.getItem('accessToken');
-      const headers = { Authorization: `Bearer ${token}` };
-      const response = await fetch(`/api/admin/classes/${selectedClassId}/subjects`, { headers });
+      const response = await apiFetch(`/api/admin/classes/${selectedClassId}/subjects`);
       const data = await response.json();
       if (response.ok) {
         setClassSubjects(data.data || []);
       }
     } catch (error) {
-      console.error('Error fetching subjects:', error);
+      devError('Error fetching subjects:', error);
     }
-  }
+  }, [selectedClassId]);
 
-  async function fetchClassTeachers() {
+  const fetchClassTeachers = useCallback(async () => {
     if (!selectedClassId) return;
     try {
-      const token = localStorage.getItem('accessToken');
-      const headers = { Authorization: `Bearer ${token}` };
-      const response = await fetch(`/api/admin/classes/${selectedClassId}/teachers`, { headers });
+      const response = await apiFetch(`/api/admin/classes/${selectedClassId}/teachers`);
       const data = await response.json();
       if (response.ok) {
         setClassTeachers(data.data || []);
       }
     } catch (error) {
-      console.error('Error fetching teachers:', error);
+      devError('Error fetching teachers:', error);
     }
-  }
+  }, [selectedClassId]);
+
+  useEffect(() => {
+    if (selectedClassId) {
+      void fetchClassSubjects();
+      void fetchClassTeachers();
+    }
+  }, [selectedClassId, fetchClassSubjects, fetchClassTeachers]);
 
   async function fetchAllSubjects() {
     try {
-      const token = localStorage.getItem('accessToken');
-      const headers = { Authorization: `Bearer ${token}` };
-      const response = await fetch(`/api/admin/subjects?limit=100`, { headers });
+      const response = await apiFetch(`/api/admin/subjects?limit=100`);
       const data = await response.json();
       if (response.ok) {
         setAllSubjects(data.data || []);
       }
     } catch (error) {
-      console.error('Error fetching subjects:', error);
+      devError('Error fetching subjects:', error);
     }
   }
 
   async function fetchAllTeachers() {
     try {
-      const token = localStorage.getItem('accessToken');
-      const headers = { Authorization: `Bearer ${token}` };
-      const response = await fetch(`/api/admin/users?limit=100`, { headers });
+      const response = await apiFetch(`/api/admin/users?limit=100`);
       const data = await response.json();
       if (response.ok) {
         // Filter out admin users only, show all other users
         const filteredTeachers = (data.data || []).filter(
-          (user: any) => user.role && user.role !== 'ADMIN'
+          (user: Teacher) => user.role && user.role !== 'ADMIN'
         );
         setTeachers(filteredTeachers);
       }
     } catch (error) {
-      console.error('Error fetching teachers:', error);
+      devError('Error fetching teachers:', error);
     }
   }
 
@@ -204,15 +207,11 @@ export default function WaliKelasClassManagementPage() {
     }
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      };
-
-      const response = await fetch(`/api/admin/classes/${selectedClassId}/subjects`, {
+      const response = await apiFetch(`/api/admin/classes/${selectedClassId}/subjects`, {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(subjectFormData),
       });
 
@@ -222,13 +221,13 @@ export default function WaliKelasClassManagementPage() {
         setSubjectFormData({ subjectId: '' });
         setSubjectSearchText('');
         setShowSubjectDropdown(false);
-        fetchClassSubjects();
+        void fetchClassSubjects();
       } else {
         const error = await response.json();
         setErrorMessage(error.error || 'Terjadi kesalahan');
       }
     } catch (error) {
-      console.error('Error:', error);
+      devError('Error:', error);
       setErrorMessage('Terjadi kesalahan');
     }
   }
@@ -241,15 +240,11 @@ export default function WaliKelasClassManagementPage() {
     }
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      };
-
-      const response = await fetch(`/api/admin/classes/${selectedClassId}/teachers`, {
+      const response = await apiFetch(`/api/admin/classes/${selectedClassId}/teachers`, {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(teacherFormData),
       });
 
@@ -259,13 +254,13 @@ export default function WaliKelasClassManagementPage() {
         setTeacherFormData({ teacherId: '', subjectId: '' });
         setTeacherSearchText('');
         setSubjectSearchTeacherText('');
-        fetchClassTeachers();
+        void fetchClassTeachers();
       } else {
         const error = await response.json();
         setErrorMessage(error.error || 'Terjadi kesalahan');
       }
     } catch (error) {
-      console.error('Error:', error);
+      devError('Error:', error);
       setErrorMessage('Terjadi kesalahan');
     }
   }
@@ -273,18 +268,16 @@ export default function WaliKelasClassManagementPage() {
   async function handleDeleteSubject(subjectId: string) {
     if (!confirm('Hapus mata pelajaran?')) return;
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/classes/${selectedClassId}/subjects/${subjectId}`, {
+      const response = await apiFetch(`/api/admin/classes/${selectedClassId}/subjects/${subjectId}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` },
       });
       if (response.ok) {
         setSuccessMessage('Mata pelajaran berhasil dihapus');
-        fetchClassSubjects();
+        void fetchClassSubjects();
       } else {
         setErrorMessage('Gagal menghapus');
       }
-    } catch (error) {
+    } catch {
       setErrorMessage('Terjadi kesalahan');
     }
   }
@@ -292,32 +285,27 @@ export default function WaliKelasClassManagementPage() {
   async function handleDeleteTeacher(teacherId: string) {
     if (!confirm('Hapus guru?')) return;
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/classes/${selectedClassId}/teachers/${teacherId}`, {
+      const response = await apiFetch(`/api/admin/classes/${selectedClassId}/teachers/${teacherId}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` },
       });
       if (response.ok) {
         setSuccessMessage('Guru berhasil dihapus');
-        fetchClassTeachers();
+        void fetchClassTeachers();
       } else {
         setErrorMessage('Gagal menghapus');
       }
-    } catch (error) {
+    } catch {
       setErrorMessage('Terjadi kesalahan');
     }
   }
 
   async function handleExport(type: 'subjects' | 'teachers') {
     try {
-      const token = localStorage.getItem('accessToken');
       const endpoint = type === 'subjects'
         ? `/api/admin/classes/${selectedClassId}/subjects/export`
         : `/api/admin/classes/${selectedClassId}/teachers/export`;
 
-      const response = await fetch(endpoint, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
+      const response = await apiFetch(endpoint);
 
       if (!response.ok) {
         setErrorMessage('Gagal mengekspor data');
@@ -335,21 +323,18 @@ export default function WaliKelasClassManagementPage() {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (error) {
-      console.error('Export error:', error);
+      devError('Export error:', error);
       setErrorMessage('Terjadi kesalahan saat mengekspor');
     }
   }
 
   async function handleDownloadTemplate(type: 'subjects' | 'teachers') {
     try {
-      const token = localStorage.getItem('accessToken');
       const endpoint = type === 'subjects'
         ? `/api/admin/classes/${selectedClassId}/subjects/template`
         : `/api/admin/classes/${selectedClassId}/teachers/template`;
 
-      const response = await fetch(endpoint, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
+      const response = await apiFetch(endpoint);
 
       if (!response.ok) {
         setErrorMessage('Gagal mengunduh template');
@@ -367,7 +352,7 @@ export default function WaliKelasClassManagementPage() {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (error) {
-      console.error('Download template error:', error);
+      devError('Download template error:', error);
       setErrorMessage('Terjadi kesalahan saat mengunduh template');
     }
   }
@@ -375,7 +360,6 @@ export default function WaliKelasClassManagementPage() {
   async function handleImport(type: 'subjects' | 'teachers', file: File) {
     try {
       setIsImporting(true);
-      const token = localStorage.getItem('accessToken');
       const endpoint = type === 'subjects'
         ? `/api/admin/classes/${selectedClassId}/subjects/import`
         : `/api/admin/classes/${selectedClassId}/teachers/import`;
@@ -383,9 +367,8 @@ export default function WaliKelasClassManagementPage() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch(endpoint, {
+      const response = await apiFetch(endpoint, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
         body: formData,
       });
 
@@ -395,16 +378,16 @@ export default function WaliKelasClassManagementPage() {
         setImportResult(data.data);
         setShowImportResult(true);
         if (type === 'subjects') {
-          fetchClassSubjects();
+          void fetchClassSubjects();
         } else {
-          fetchClassTeachers();
+          void fetchClassTeachers();
         }
         setSuccessMessage(`${data.data.imported} data berhasil diimpor`);
       } else {
         setErrorMessage(data.error || 'Gagal mengimpor data');
       }
     } catch (error) {
-      console.error('Import error:', error);
+      devError('Import error:', error);
       setErrorMessage('Terjadi kesalahan saat mengimpor');
     } finally {
       setIsImporting(false);

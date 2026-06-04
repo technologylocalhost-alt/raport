@@ -1,8 +1,10 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { AuthenticatedUser } from '@/lib/auth/access';
+import { serverError } from '@/lib/server-log';
 
 const SANTRI_STRING_FIELDS = [
   'tahunDaftar', 'noPendaftaranPSB', 'studentNo', 'tingkatSebelumnya', 'gender',
@@ -37,13 +39,13 @@ const SANTRI_STRING_FIELDS = [
   'kegiatanBesarDisukai', 'kegiatanBesarTidakDisukai', 'rencanaMA', 'rencanaKuliah', 'rencanaKarier',
   'tempatKerjaDiinginkan', 'profesiCitaCita', 'skillDipelajari', 'target10Tahun',
   'diInputOleh', 'catatanSekpim',
-];
+] as const;
 
-const SANTRI_INT_FIELDS = ['anakKe', 'dariAnak'];
-const SANTRI_DATE_FIELDS = ['birthDate', 'tanggalInput'];
+const SANTRI_INT_FIELDS = ['anakKe', 'dariAnak'] as const;
+const SANTRI_DATE_FIELDS = ['birthDate', 'tanggalInput'] as const;
 
-function buildSantriData(body: any) {
-  const data: any = {};
+function buildSantriData(body: Record<string, unknown>) {
+  const data: Record<string, unknown> = {};
   for (const field of SANTRI_STRING_FIELDS) {
     if (body[field] !== undefined) {
       data[field] = body[field] || null;
@@ -51,12 +53,12 @@ function buildSantriData(body: any) {
   }
   for (const field of SANTRI_INT_FIELDS) {
     if (body[field] !== undefined) {
-      data[field] = body[field] ? parseInt(body[field]) : null;
+      data[field] = body[field] ? parseInt(String(body[field]), 10) : null;
     }
   }
   for (const field of SANTRI_DATE_FIELDS) {
     if (body[field] !== undefined) {
-      data[field] = body[field] ? new Date(body[field]) : null;
+      data[field] = body[field] ? new Date(String(body[field])) : null;
     }
   }
   if (data.name === null) delete data.name;
@@ -65,27 +67,8 @@ function buildSantriData(body: any) {
   return data;
 }
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) {
-    return user;
-  }
-  return null;
+async function requireSantriAccess(req: NextRequest) {
+  return requireAdminOrPrincipal(req);
 }
 
 /**
@@ -97,8 +80,8 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const user = await verifyAdmin(request);
-    if (!user) {
+    const admin = await requireSantriAccess(request);
+    if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
 
@@ -110,8 +93,7 @@ export async function GET(
       return errorResponse('Data santri tidak ditemukan', 404);
     }
 
-    // Fetch riwayat kelas from Student → Class → waliKelas, schoolYear, semester
-    let classHistory: any[] = [];
+    let classHistory: Array<{ className: string; levelName: string; waliKelasName: string; schoolYear: string; semester: string }> = [];
     if (santri.studentNo) {
       const students = await prisma.student.findMany({
         where: { studentNo: santri.studentNo },
@@ -128,7 +110,7 @@ export async function GET(
         orderBy: { class: { schoolYear: { year: 'asc' } } },
       });
 
-      classHistory = students.map(s => ({
+      classHistory = students.map((s) => ({
         className: s.class.name,
         levelName: s.class.level.name,
         waliKelasName: s.class.waliKelas?.name || '-',
@@ -139,7 +121,7 @@ export async function GET(
 
     return successResponse({ ...santri, classHistory });
   } catch (error) {
-    console.error('Error fetching santri:', error);
+    serverError('Error fetching santri:', error);
     return errorResponse('Gagal memuat data santri', 500);
   }
 }
@@ -151,12 +133,12 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  let admin: any;
+  let admin: AuthenticatedUser | null = null;
   let id = '';
   try {
     const result = await params;
     id = result.id;
-    admin = await verifyAdmin(request);
+    admin = await requireSantriAccess(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -169,12 +151,11 @@ export async function PUT(
       return errorResponse('Data santri tidak ditemukan', 404);
     }
 
-    const body = await request.json();
+    const body = (await request.json()) as Record<string, unknown>;
 
-    // Check duplicate studentNo if changed
     if (body.studentNo && body.studentNo !== santri.studentNo) {
       const existing = await prisma.santri.findUnique({
-        where: { studentNo: body.studentNo },
+        where: { studentNo: String(body.studentNo) },
       });
       if (existing) {
         return errorResponse('No Stambuk sudah terdaftar', 409);
@@ -202,7 +183,7 @@ export async function PUT(
 
     return successResponse(updated);
   } catch (error) {
-    console.error('Error updating santri:', error);
+    serverError('Error updating santri:', error);
     if (admin) {
       await logActivity({
         userId: admin.id,
@@ -227,12 +208,12 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  let admin: any;
+  let admin: AuthenticatedUser | null = null;
   let id = '';
   try {
     const result = await params;
     id = result.id;
-    admin = await verifyAdmin(request);
+    admin = await requireSantriAccess(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -264,7 +245,7 @@ export async function DELETE(
 
     return successResponse(null, 'Data santri berhasil dihapus');
   } catch (error) {
-    console.error('Error deleting santri:', error);
+    serverError('Error deleting santri:', error);
     if (admin) {
       await logActivity({
         userId: admin.id,

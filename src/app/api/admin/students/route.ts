@@ -1,30 +1,13 @@
+import { Prisma } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) {
-    return user;
-  }
-  return null;
+async function requireStudentManagement(req: NextRequest) {
+  return requireMenuAccess(req, '/admin/students', ['ADMIN', 'PRINCIPAL']);
 }
 
 /**
@@ -33,7 +16,7 @@ async function verifyAdmin(req: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await verifyAdmin(request);
+    const user = await requireStudentManagement(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
@@ -48,7 +31,7 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.StudentWhereInput = {};
 
     if (search) {
       where.OR = [
@@ -62,17 +45,18 @@ export async function GET(request: NextRequest) {
       where.classId = classId;
     }
 
+    const classFilter: Prisma.ClassWhereInput = {};
+
     if (semesterId) {
-      where.class = {
-        semesterId: semesterId,
-      };
+      classFilter.semesterId = semesterId;
     }
 
     if (schoolYearId) {
-      where.class = {
-        ...where.class,
-        schoolYearId: schoolYearId,
-      };
+      classFilter.schoolYearId = schoolYearId;
+    }
+
+    if (Object.keys(classFilter).length > 0) {
+      where.class = classFilter;
     }
 
     const [students, total] = await Promise.all([
@@ -114,7 +98,7 @@ export async function GET(request: NextRequest) {
 
     return paginatedResponse(formattedData, total, page, limit);
   } catch (error) {
-    console.error('Error fetching students:', error);
+    serverError('Error fetching students:', error);
     return errorResponse('Failed to fetch students', 500);
   }
 }
@@ -124,10 +108,10 @@ export async function GET(request: NextRequest) {
  * Create a new student
  */
 export async function POST(request: NextRequest) {
-  let studentData: any = {};
+  let studentData: { studentNo?: string } = {};
   
   try {
-    const user = await verifyAdmin(request);
+    const user = await requireStudentManagement(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
@@ -201,17 +185,17 @@ export async function POST(request: NextRequest) {
       classId: student.classId,
     });
   } catch (error) {
-    console.error('Error creating student:', error);
+    serverError('Error creating student:', error);
     
     // Log failed student creation
-    const user = await verifyAdmin(request);
+    const user = await requireStudentManagement(request);
     if (user) {
       await logActivity({
         userId: user.id,
         action: 'CREATE',
         resourceType: 'Student',
         description: `Failed to create student`,
-        newValue: { studentNo: studentData?.studentNo || 'unknown' },
+        newValue: { studentNo: studentData.studentNo || 'unknown' },
         ipAddress: getClientIp(request),
         userAgent: getUserAgent(request),
         status: 'FAILED',

@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft, Printer, Search, Download, Eye, FileText } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface Class {
   id: string;
@@ -15,16 +17,31 @@ interface Student {
   name: string;
   studentNo: string;
   noUrut?: number;
-  raportNo?: string;
+  raportNo?: string | null;
 }
 
 interface ClassWithStudents extends Class {
   students: Student[];
 }
 
+interface NilaiApproveItem {
+  assessmentType?: string;
+  studentId: string;
+}
+
+interface ClassApiItem extends Class {
+  students?: Student[];
+}
+
+interface StudentApiItem {
+  id: string;
+  name: string;
+  studentNo: string;
+  raportNo?: string | null;
+}
+
 function RaportArabPageContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [classes, setClasses] = useState<ClassWithStudents[]>([]);
   const [approvedStudents, setApprovedStudents] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
@@ -42,69 +59,44 @@ function RaportArabPageContent() {
     { value: 'FINAL_EXAM_2', label: 'Ujian Akhir Gel 2' },
   ];
 
-  // Fetch approved students when assessment type is selected
   useEffect(() => {
-    if (selectedClass && selectedAssessmentType) {
-      fetchApprovedStudents(selectedClass, selectedAssessmentType);
-    } else {
-      setApprovedStudents(new Set());
-    }
-  }, [selectedClass, selectedAssessmentType]);
-
-  const fetchApprovedStudents = async (classId: string, assessmentType: string) => {
-    try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) return;
-
-      const response = await fetch(
-        `/api/wali-kelas/nilai-approve?classId=${classId}&limit=1000`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        const nilaiApproves = data.data?.data || [];
-        
-        // Filter by assessment type and get unique student IDs
-        const studentIds: Set<string> = new Set(
-          nilaiApproves
-            .filter((n: any) => n.assessmentType === assessmentType)
-            .map((n: any) => n.studentId)
-        );
-        
-        setApprovedStudents(studentIds);
-        console.log(`[RaportArab] Found ${studentIds.size} approved students for ${assessmentType}`);
-      }
-    } catch (err) {
-      console.error('Error fetching approved students:', err);
-    }
-  };
-
-  useEffect(() => {
-    fetchClasses();
-  }, []);
-
-  const fetchClasses = async () => {
-    try {
-      setError('');
-      setIsLoading(true);
-      const token = localStorage.getItem('accessToken');
-
-      if (!token || token.trim() === '') {
-        setError('Sesi Anda telah berakhir. Silakan login kembali');
-        setTimeout(() => router.push('/login'), 1500);
+    const loadApprovedStudents = async () => {
+      if (!selectedClass || !selectedAssessmentType) {
+        setApprovedStudents(new Set());
         return;
       }
 
-      const response = await fetch('/api/admin/classes?limit=100', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      try {
+        const response = await apiFetch(
+          `/api/wali-kelas/nilai-approve?classId=${selectedClass}&limit=1000`
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          const nilaiApproves = (data.data?.data || []) as NilaiApproveItem[];
+          const studentIds = new Set(
+            nilaiApproves
+              .filter((n) => n.assessmentType === selectedAssessmentType)
+              .map((n) => n.studentId)
+          );
+
+          setApprovedStudents(studentIds);
+        }
+      } catch (error) {
+        devError('Error fetching approved students:', error);
+      }
+    };
+
+    void loadApprovedStudents();
+  }, [selectedAssessmentType, selectedClass]);
+
+  useEffect(() => {
+    const fetchClasses = async () => {
+    try {
+      setError('');
+      setIsLoading(true);
+
+      const response = await apiFetch('/api/admin/classes?limit=100');
 
       if (response.status === 401) {
         setError('Sesi Anda telah berakhir. Silakan login kembali');
@@ -120,22 +112,17 @@ function RaportArabPageContent() {
       if (data.success && Array.isArray(data.data)) {
         // Fetch students for each class
         const classesWithStudents = await Promise.all(
-          data.data.map(async (cls: any) => {
+          (data.data as ClassApiItem[]).map(async (cls) => {
             try {
-              const studentsResponse = await fetch(
-                `/api/admin/classes/${cls.id}/students?limit=100`,
-                {
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                  },
-                }
+              const studentsResponse = await apiFetch(
+                `/api/admin/classes/${cls.id}/students?limit=100`
               );
 
               let students: Student[] = [];
               if (studentsResponse.ok) {
                 const studentsData = await studentsResponse.json();
                 if (studentsData.success && Array.isArray(studentsData.data)) {
-                  students = studentsData.data.map((s: any) => ({
+                  students = (studentsData.data as StudentApiItem[]).map((s) => ({ 
                     id: s.id,
                     name: s.name,
                     studentNo: s.studentNo,
@@ -148,8 +135,7 @@ function RaportArabPageContent() {
                 ...cls,
                 students,
               };
-            } catch (err) {
-              console.warn(`Failed to fetch students for class ${cls.id}`);
+            } catch {
               return {
                 ...cls,
                 students: [],
@@ -160,13 +146,16 @@ function RaportArabPageContent() {
 
         setClasses(classesWithStudents);
       }
-    } catch (err) {
-      console.error('Error fetching classes:', err);
+    } catch (error) {
+      devError('Error fetching classes:', error);
       setError('Terjadi kesalahan saat memuat data kelas');
     } finally {
       setIsLoading(false);
     }
   };
+
+    void fetchClasses();
+  }, [router]);
 
   const handleViewRaport = (classId: string, studentId: string) => {
     const params = new URLSearchParams({

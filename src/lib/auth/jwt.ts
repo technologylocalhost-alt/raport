@@ -1,5 +1,6 @@
-import jwt, { SignOptions } from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
 import { TokenPayload } from '@/types';
+import { serverError } from '@/lib/server-log';
 
 interface TokenResponse {
   accessToken: string;
@@ -13,29 +14,22 @@ if (!process.env.JWT_REFRESH_SECRET) {
   throw new Error('JWT_REFRESH_SECRET environment variable is not set');
 }
 
-const JWT_ACCESS_SECRET: string = process.env.JWT_ACCESS_SECRET;
-const JWT_REFRESH_SECRET: string = process.env.JWT_REFRESH_SECRET;
+const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET as jwt.Secret;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET as jwt.Secret;
 
-// Debug logs
-console.log('[JWT Config]', {
-  access_secret_length: JWT_ACCESS_SECRET.length,
-  access_secret_start: JWT_ACCESS_SECRET.substring(0, 10),
-  refresh_secret_length: JWT_REFRESH_SECRET.length,
-  refresh_secret_start: JWT_REFRESH_SECRET.substring(0, 10),
-});
-const JWT_ACCESS_EXPIRY = (process.env.JWT_ACCESS_EXPIRY || '10h') as string;
-const JWT_REFRESH_EXPIRY = (process.env.JWT_REFRESH_EXPIRY || '7d') as string;
+const JWT_ACCESS_EXPIRY = (process.env.JWT_ACCESS_EXPIRY || '10h') as jwt.SignOptions['expiresIn'];
+const JWT_REFRESH_EXPIRY = (process.env.JWT_REFRESH_EXPIRY || '7d') as jwt.SignOptions['expiresIn'];
 
 /**
  * Generate both access and refresh tokens
  */
 export function generateTokens(payload: TokenPayload): TokenResponse {
-  const accessToken = jwt.sign(payload, JWT_ACCESS_SECRET as any, {
-    expiresIn: JWT_ACCESS_EXPIRY as any,
+  const accessToken = jwt.sign(payload, JWT_ACCESS_SECRET, {
+    expiresIn: JWT_ACCESS_EXPIRY,
   });
 
-  const refreshToken = jwt.sign(payload, JWT_REFRESH_SECRET as any, {
-    expiresIn: JWT_REFRESH_EXPIRY as any,
+  const refreshToken = jwt.sign(payload, JWT_REFRESH_SECRET, {
+    expiresIn: JWT_REFRESH_EXPIRY,
   });
 
   return { accessToken, refreshToken };
@@ -46,18 +40,10 @@ export function generateTokens(payload: TokenPayload): TokenResponse {
  */
 export function verifyAccessToken(token: string): TokenPayload | null {
   try {
-    console.log('[Verify AccessToken]', {
-      token_length: token.length,
-      token_start: token.substring(0, 20),
-      secret_length: JWT_ACCESS_SECRET.length,
-      secret_start: JWT_ACCESS_SECRET.substring(0, 10),
-    });
-    
-    const decoded = jwt.verify(token, JWT_ACCESS_SECRET as any) as TokenPayload;
-    console.log('[Token Verified OK]', { userId: decoded.userId, role: decoded.role });
+    const decoded = jwt.verify(token, JWT_ACCESS_SECRET) as TokenPayload;
     return decoded;
   } catch (error) {
-    console.error('[Token Verify Failed]', error instanceof Error ? error.message : String(error));
+    serverError('[Token Verify Failed]', error instanceof Error ? error.message : String(error));
     return null;
   }
 }
@@ -68,9 +54,9 @@ export function verifyAccessToken(token: string): TokenPayload | null {
  */
 export function verifyToken(token: string): TokenPayload {
   try {
-    const decoded = jwt.verify(token, JWT_ACCESS_SECRET as any) as TokenPayload;
+    const decoded = jwt.verify(token, JWT_ACCESS_SECRET) as TokenPayload;
     return decoded;
-  } catch (error) {
+  } catch {
     throw new Error('Invalid or expired token');
   }
 }
@@ -80,7 +66,7 @@ export function verifyToken(token: string): TokenPayload {
  */
 export function verifyRefreshToken(token: string): TokenPayload | null {
   try {
-    return jwt.verify(token, JWT_REFRESH_SECRET as any) as TokenPayload;
+    return jwt.verify(token, JWT_REFRESH_SECRET) as TokenPayload;
   } catch {
     return null;
   }

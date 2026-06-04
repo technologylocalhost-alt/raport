@@ -7,20 +7,20 @@ import {
   Menu,
   X,
   LogOut,
-  Building2,
-  GraduationCap,
-  BookOpen,
-  Users,
-  BarChart3,
-  Home,
-  Layers,
-  Clock,
   User,
   ChevronDown,
-  TrendingUp,
-  Brain,
-  ClipboardList,
 } from 'lucide-react';
+import {
+  filterMenuSectionsByAllowedPaths,
+  findMenuTitleByPath,
+  getMenuDisplayParts,
+  isPathAllowed,
+  resolveMenuHref,
+} from '@/lib/menu-config';
+import { toCanonicalPath } from '@/lib/menu-alias';
+import { getCurrentUser } from '@/lib/auth/client';
+import { fetchAllowedMenuPaths } from '@/lib/rbac-client';
+import { devError } from '@/lib/dev-log';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -31,9 +31,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const [isMobile, setIsMobile] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [extraAccessOpen, setExtraAccessOpen] = useState(true);
   const [userName, setUserName] = useState('Admin');
+  const [userRole, setUserRole] = useState<string>('ADMIN');
+  const [allowedPaths, setAllowedPaths] = useState<string[] | null>(null);
+  const [isRoleAuthorized, setIsRoleAuthorized] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const canonicalPathname = toCanonicalPath(pathname, userRole);
 
   // Detect screen size
   useEffect(() => {
@@ -46,18 +51,51 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Get user name from localStorage
+  // Auth guard + user info
   useEffect(() => {
-    const user = localStorage.getItem('user');
-    if (user) {
+    const parsedUser = getCurrentUser();
+    if (!parsedUser) {
+      router.replace('/login');
+      return;
+    }
+
+    try {
+
+      const timer = window.setTimeout(() => {
+        setUserName(parsedUser.name || 'User');
+        setUserRole(parsedUser.role || 'ADMIN');
+        setIsRoleAuthorized(true);
+      }, 0);
+
+      return () => window.clearTimeout(timer);
+    } catch (e) {
+      devError('Error parsing user:', e);
+      router.replace('/login');
+    }
+  }, [router]);
+
+  // Fetch allowed menu paths for RBAC
+  useEffect(() => {
+    if (!isRoleAuthorized) return;
+
+    async function fetchAllowedMenus() {
       try {
-        const parsedUser = JSON.parse(user);
-        setUserName(parsedUser.name || 'Admin');
-      } catch (e) {
-        console.error('Error parsing user:', e);
+        const { allowedPaths, hasRestrictions } = await fetchAllowedMenuPaths('admin');
+        setAllowedPaths(hasRestrictions ? allowedPaths : null);
+      } catch {
+        // Fail closed on RBAC API error
+        setAllowedPaths([]);
       }
     }
-  }, []);
+    fetchAllowedMenus();
+  }, [isRoleAuthorized]);
+
+  useEffect(() => {
+    if (!isRoleAuthorized || allowedPaths === undefined) return;
+    if (allowedPaths !== null && !isPathAllowed(pathname, allowedPaths, userRole)) {
+      router.replace(resolveMenuHref(allowedPaths[0] || '/login', userRole));
+    }
+  }, [allowedPaths, isRoleAuthorized, pathname, router, userRole]);
 
   // Full-width pages (no sidebar/header) for print/preview pages
   const isFullWidthPage = pathname.includes('/reports/detail') ||
@@ -67,63 +105,26 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                           pathname.includes('/raport-arab/bulk-download') ||
                           pathname.includes('/raport-mental/laporan');
 
-  const menuItems = [
-    {
-      title: 'Dashboard',
-      icon: Home,
-      href: '/admin/dashboard',
-    },
-    {
-      title: 'Master Data',
-      items: [
-        { title: 'Data Sekolah', icon: Building2, href: '/admin/schools' },
-        { title: 'Struktur Akademik', icon: Clock, href: '/admin/academic-structure' },
-        { title: 'Jenjang Pendidikan', icon: GraduationCap, href: '/admin/levels' },
-        { title: 'Mata Pelajaran', icon: BookOpen, href: '/admin/subjects' },
-        { title: 'Kelas', icon: Layers, href: '/admin/classes' },
-        { title: 'Master Data Santri', icon: Users, href: '/admin/santri' },
-      ],
-    },
-    {
-      title: 'Penilaian',
-      items: [
-        { title: 'Per Mata Pelajaran', icon: BookOpen, href: '/admin/penilaian' },
-        { title: 'Penilaian', icon: Users, href: '/admin/raports' },
-        { title: 'Siswa', icon: BarChart3, href: '/admin/students' },
-        { title: 'Raport', icon: BookOpen, href: '/admin/raport-sampul' },
-        { title: 'Naik Kelas', icon: TrendingUp, href: '/admin/naik-kelas' },
-      ],
-    },
-    {
-      title: 'Raport Mental',
-      items: [
-        { title: 'Master Data (Seksi & Aspek)', icon: Brain, href: '/admin/raport-mental' },
-        { title: 'Penilaian Santri', icon: ClipboardList, href: '/admin/raport-mental/penilaian' },
-      ],
-    },
-    {
-      title: 'Manajemen',
-      items: [
-        { title: 'Pengguna', icon: Users, href: '/admin/users' },
-        { title: 'Analytics', icon: BarChart3, href: '/admin/analytics' },
-        { title: 'Activity Logs', icon: Clock, href: '/admin/activity-logs' },
-      ],
-    },
-  ];
+  const filteredMenuItems = filterMenuSectionsByAllowedPaths(allowedPaths, userRole);
 
   function handleLogout() {
-    console.log('[Logout] Button clicked!');
     
     if (isLoggingOut) {
-      console.log('[Logout] Already logging out, returning');
       return;
     }
     
     setIsLoggingOut(true);
-    console.log('[Logout] Navigating to logout page');
     
     // Navigate to logout page which will handle the logout process
     window.location.href = '/logout';
+  }
+
+  if (!isRoleAuthorized) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+        <div className="text-gray-600 text-sm">Memverifikasi akses...</div>
+      </div>
+    );
   }
 
   return (
@@ -166,43 +167,73 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
         {/* Menu Items */}
         <nav className="flex-1 overflow-y-auto py-2 sm:py-3 px-2 space-y-1 sm:space-y-2 min-h-0">
-          {menuItems.map((section, idx) => (
+          {filteredMenuItems.map((section, idx) => {
+            const isExtraAccessSection = section.title === 'Akses Tambahan';
+            const isSectionOpen = !isExtraAccessSection || extraAccessOpen;
+
+            return (
             <div key={idx}>
               {/* Main Item atau Section Title */}
               {section.items ? (
                 <>
-                  <h3 className="px-2 sm:px-3 py-1 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    {section.title}
-                  </h3>
-                  <div className="space-y-0.5">
-                    {section.items.map((item, itemIdx) => {
-                      const Icon = item.icon;
-                      const isActive = pathname === item.href;
-                      return (
-                        <Link
-                          key={itemIdx}
-                          href={item.href}
-                          onClick={() => setSidebarOpen(false)}
-                          className={`flex items-center gap-2 p-2 rounded-lg transition-all text-sm ${
-                            isActive
-                              ? 'bg-blue-600 text-white shadow-lg'
-                              : 'text-slate-300 hover:bg-slate-700'
-                          }`}
-                          title={item.title}
-                        >
-                          <Icon size={18} className="flex-shrink-0" />
-                          <span>{item.title}</span>
-                        </Link>
-                      );
-                    })}
-                  </div>
+                  {isExtraAccessSection ? (
+                    <button
+                      type="button"
+                      onClick={() => setExtraAccessOpen((prev) => !prev)}
+                      className="w-full px-2 sm:px-3 py-1 flex items-center justify-between text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-200 transition-colors"
+                    >
+                      <span>{section.title}</span>
+                      <ChevronDown size={14} className={`transition-transform ${isSectionOpen ? 'rotate-0' : '-rotate-90'}`} />
+                    </button>
+                  ) : (
+                    <h3 className="px-2 sm:px-3 py-1 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      {section.title}
+                    </h3>
+                  )}
+                  {isSectionOpen && (
+                    <div className="space-y-0.5">
+                      {section.items.map((item, itemIdx) => {
+                        const Icon = item.icon;
+                        const href = resolveMenuHref(item.href, userRole);
+                        const isActive = canonicalPathname === item.href;
+                        const { label, badge } = getMenuDisplayParts(item.title);
+                        return (
+                          <Link
+                            key={itemIdx}
+                            href={href}
+                            onClick={() => setSidebarOpen(false)}
+                            className={`flex items-center gap-2 p-2 rounded-lg transition-all text-sm ${
+                              isActive
+                                ? 'bg-blue-600 text-white shadow-lg'
+                                : 'text-slate-300 hover:bg-slate-700'
+                            }`}
+                            title={item.title}
+                          >
+                            <Icon size={18} className="flex-shrink-0" />
+                            <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
+                              <span className="truncate">{label}</span>
+                              {badge && (
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full border whitespace-nowrap ${
+                                  isActive
+                                    ? 'border-white/30 bg-white/15 text-white'
+                                    : 'border-slate-600 bg-slate-800 text-slate-300'
+                                }`}>
+                                  {badge}
+                                </span>
+                              )}
+                            </div>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
                 </>
               ) : (
                 <Link
-                  href={section.href!}
+                  href={resolveMenuHref(section.href!, userRole)}
                   onClick={() => setSidebarOpen(false)}
                   className={`flex items-center gap-2 p-2 rounded-lg transition-all text-sm ${
-                    pathname === section.href
+                    canonicalPathname === section.href
                       ? 'bg-blue-600 text-white shadow-lg'
                       : 'text-slate-300 hover:bg-slate-700'
                   }`}
@@ -213,7 +244,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 </Link>
               )}
             </div>
-          ))}
+            );
+          })}
         </nav>
       </aside>
       )}
@@ -232,9 +264,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 <Menu size={20} />
               </button>
               <h2 className="text-base sm:text-xl font-semibold text-gray-800 truncate">
-                {menuItems
-                  .flatMap((section) => section.items || [section])
-                  .find((item) => item.href === pathname)?.title || 'Dashboard'}
+                {findMenuTitleByPath(pathname, userRole)}
               </h2>
             </div>
             

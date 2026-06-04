@@ -1,33 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/db';
+import { requireWaliKelasOnly } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
 export async function GET(request: NextRequest) {
   try {
-    const token = request.headers.get('Authorization')?.replace('Bearer ', '');
+    const user = await requireWaliKelasOnly(request);
 
-    if (!token) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    const decoded = verifyAccessToken(token);
-    if (!decoded || !decoded.userId) {
-      return NextResponse.json(
-        { success: false, message: 'Invalid token' },
-        { status: 401 }
-      );
-    }
-
-    // Verify user has WALI_KELAS role
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-      select: { role: true },
-    });
-
-    if (!user || user.role !== 'WALI_KELAS') {
+    if (!user) {
       return NextResponse.json(
         { success: false, message: 'Forbidden: Only WALI_KELAS can access this' },
         { status: 403 }
@@ -86,7 +66,7 @@ export async function GET(request: NextRequest) {
       total: transformedCompetencies.length,
     });
   } catch (error) {
-    console.error('Error fetching wali-kelas competencies:', error);
+    serverError('Error fetching wali-kelas competencies:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to fetch competencies' },
       { status: 500 }

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, Users, X, Filter } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface School {
   id: string;
@@ -53,8 +54,12 @@ interface PaginatedResponse {
   };
 }
 
+interface ClassListResponse {
+  success: boolean;
+  data?: Array<{ id: string; name: string; levelId?: string }>;
+}
+
 export default function StudentsPage() {
-  const router = useRouter();
   const [students, setStudents] = useState<Student[]>([]);
   const [schools, setSchools] = useState<School[]>([]);
   const [levels, setLevels] = useState<Level[]>([]);
@@ -94,73 +99,32 @@ export default function StudentsPage() {
 
   const limit = 10;
 
-  useEffect(() => {
-    fetchClasses();
-  }, []);
-
-  useEffect(() => {
-    // Reset ke halaman 1 ketika filterSchool, filterSchoolYear, filterClass atau search berubah
-    setPage(1);
-  }, [filterSchool, filterSchoolYear, filterClass, search]);
-
-  useEffect(() => {
-    // Fetch students ketika page, search, atau filterClass berubah
-    if (filterClass) {
-      fetchStudents(page);
-    } else {
-      setStudents([]);
-      setTotal(0);
-    }
-  }, [page, filterClass]);
-
-  const getSchoolIdForClass = (classId: string): string | undefined => {
-    const classObj = classes.find(c => c.id === classId);
-    if (!classObj?.levelId) return undefined;
-    const level = levels.find(l => l.id === classObj.levelId);
-    return level?.schoolId;
-  };
-
-  async function fetchClasses() {
+  const fetchClasses = useCallback(async () => {
     try {
-      const token = localStorage.getItem('accessToken');
-      
-      // Fetch school years
-      const yearsResponse = await fetch('/api/admin/school-years?limit=100', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const yearsResponse = await apiFetch('/api/admin/school-years?limit=100');
       const yearsData = await yearsResponse.json();
       setSchoolYears(yearsData.data || []);
 
-      // Fetch schools
-      const schoolsResponse = await fetch('/api/admin/schools?limit=1000', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const schoolsResponse = await apiFetch('/api/admin/schools?limit=1000');
       const schoolsData = await schoolsResponse.json();
       setSchools(schoolsData.data || []);
 
-      // Fetch levels
-      const levelsResponse = await fetch('/api/admin/levels?limit=1000', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const levelsResponse = await apiFetch('/api/admin/levels?limit=1000');
       const levelsData = await levelsResponse.json();
       setLevels(levelsData.data || []);
       
-      const response = await fetch(`/api/admin/classes?limit=1000${filterSchoolYear ? `&schoolYearId=${filterSchoolYear}` : ''}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch(`/api/admin/classes?limit=1000${filterSchoolYear ? `&schoolYearId=${filterSchoolYear}` : ''}`);
 
-      const data: any = await response.json();
+      const data: ClassListResponse = await response.json();
       if (data.success && data.data) {
-        setClasses(data.data.map((c: any) => ({ id: c.id, name: c.name, levelId: c.levelId })));
+        setClasses(data.data.map((c) => ({ id: c.id, name: c.name, levelId: c.levelId })));
       }
     } catch (error) {
-      console.error('Failed to fetch classes:', error);
+      devError('Failed to fetch classes:', error);
     }
-  }
+  }, [filterSchoolYear]);
 
-  async function fetchStudents(pageNum: number = page) {
+  const fetchStudents = useCallback(async (pageNum: number = page) => {
     try {
       setIsLoading(true);
       const queryParams = new URLSearchParams({
@@ -170,22 +134,42 @@ export default function StudentsPage() {
         ...(filterClass && { classId: filterClass }),
       });
 
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/students?${queryParams}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch(`/api/admin/students?${queryParams}`);
 
       const data: PaginatedResponse = await response.json();
       setStudents(data.data || []);
       setTotal(data.pagination?.total || 0);
     } catch (error) {
-      console.error('Failed to fetch students:', error);
+      devError('Failed to fetch students:', error);
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [filterClass, page, search]);
+
+  useEffect(() => {
+    void fetchClasses();
+  }, [fetchClasses]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filterSchool, filterSchoolYear, filterClass, search]);
+
+  useEffect(() => {
+    if (filterClass) {
+      void fetchStudents(page);
+    } else {
+      setStudents([]);
+      setTotal(0);
+    }
+  }, [fetchStudents, filterClass, page]);
+
+  const getSchoolIdForClass = (classId: string): string | undefined => {
+    const classObj = classes.find(c => c.id === classId);
+    if (!classObj?.levelId) return undefined;
+    const level = levels.find(l => l.id === classObj.levelId);
+    return level?.schoolId;
+  };
+
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(e.target.value);
@@ -237,8 +221,6 @@ export default function StudentsPage() {
     e.preventDefault();
 
     try {
-      const token = localStorage.getItem('accessToken');
-
       // Prepare data with nourut as number or null
       const submitData = {
         ...formData,
@@ -247,11 +229,10 @@ export default function StudentsPage() {
 
       if (editingId) {
         // Update student
-        const response = await fetch(`/api/admin/students/${editingId}`, {
+        const response = await apiFetch(`/api/admin/students/${editingId}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(submitData),
         });
@@ -262,11 +243,10 @@ export default function StudentsPage() {
         }
       } else {
         // Create new student
-        const response = await fetch('/api/admin/students', {
+        const response = await apiFetch('/api/admin/students', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(submitData),
         });
@@ -278,9 +258,9 @@ export default function StudentsPage() {
       }
 
       setShowForm(false);
-      fetchStudents(page);
+      void fetchStudents(page);
     } catch (error) {
-      console.error('Error submitting form:', error);
+      devError('Error submitting form:', error);
       alert('Terjadi kesalahan');
     }
   };
@@ -289,12 +269,8 @@ export default function StudentsPage() {
     if (!confirm('Yakin ingin menghapus siswa ini?')) return;
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/students/${id}`, {
+      const response = await apiFetch(`/api/admin/students/${id}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       if (!response.ok) {
@@ -302,9 +278,9 @@ export default function StudentsPage() {
         return;
       }
 
-      fetchStudents(page);
+      void fetchStudents(page);
     } catch (error) {
-      console.error('Error deleting student:', error);
+      devError('Error deleting student:', error);
       alert('Terjadi kesalahan');
     }
   };

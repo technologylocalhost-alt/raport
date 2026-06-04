@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/db';
+import { requireTeacherOnly } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
 export async function GET(request: NextRequest) {
   try {
-    const token = request.headers.get('Authorization')?.replace('Bearer ', '');
-
-    if (!token) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    const decoded = verifyAccessToken(token);
-    if (!decoded || !decoded.userId) {
+    const teacher = await requireTeacherOnly(request);
+    if (!teacher) {
       return NextResponse.json(
         { success: false, message: 'Invalid token' },
         { status: 401 }
@@ -29,7 +21,7 @@ export async function GET(request: NextRequest) {
       const competencies = await prisma.competency.findMany({
         where: {
           subjectId: subjectId,
-          teacherId: decoded.userId,
+          teacherId: teacher.id,
         },
         select: {
           id: true,
@@ -70,7 +62,7 @@ export async function GET(request: NextRequest) {
     // Get all subjects taught by the teacher
     const teacherSubjects = await prisma.classTeacher.findMany({
       where: {
-        teacherId: decoded.userId,
+        teacherId: teacher.id,
       },
       select: {
         subjectId: true,
@@ -86,7 +78,7 @@ export async function GET(request: NextRequest) {
         subjectId: {
           in: subjectIds,
         },
-        teacherId: decoded.userId,
+        teacherId: teacher.id,
       },
       select: {
         id: true,
@@ -123,7 +115,7 @@ export async function GET(request: NextRequest) {
       total: transformedCompetencies.length,
     });
   } catch (error) {
-    console.error('Error fetching teacher competencies:', error);
+    serverError('Error fetching teacher competencies:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to fetch competencies' },
       { status: 500 }

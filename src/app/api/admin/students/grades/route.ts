@@ -1,17 +1,11 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
-import { extractAccessToken } from '@/lib/auth/token-extractor';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const token = extractAccessToken(req);
-  if (!token) return null;
-  const payload = verifyAccessToken(token);
-  if (!payload) return null;
-  const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) return user;
-  return null;
+async function requireStudentGradesAccess(req: NextRequest) {
+  return requireMenuAccess(req, '/admin/students', ['ADMIN', 'PRINCIPAL']);
 }
 
 /**
@@ -21,7 +15,7 @@ async function verifyAdmin(req: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await verifyAdmin(request);
+    const user = await requireStudentGradesAccess(request);
     if (!user) return errorResponse('Unauthorized', 401);
 
     const searchParams = request.nextUrl.searchParams;
@@ -64,7 +58,7 @@ export async function GET(request: NextRequest) {
       'Success'
     );
   } catch (error) {
-    console.error('Get student grades error:', error);
+    serverError('Get student grades error:', error);
     return errorResponse('Failed to fetch grades', 500);
   }
 }

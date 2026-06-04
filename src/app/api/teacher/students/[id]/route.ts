@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
+import { serverError } from '@/lib/server-log';
 
 const updateStudentSchema = z.object({
   studentNo: z.string().optional(),
@@ -49,7 +50,7 @@ export async function GET(
 
     return successResponse(student);
   } catch (error) {
-    console.error('Get student error:', error);
+    serverError('Get student error:', error);
     return errorResponse('Failed to fetch student', 500);
   }
 }
@@ -96,7 +97,7 @@ export async function PUT(
     if (error instanceof z.ZodError) {
       return errorResponse('Validation error', 400, error.issues);
     }
-    console.error('Update student error:', error);
+    serverError('Update student error:', error);
     return errorResponse('Failed to update student', 500);
   }
 }
@@ -126,7 +127,7 @@ export async function DELETE(
 
     return successResponse({ message: 'Student deleted successfully' });
   } catch (error) {
-    console.error('Delete student error:', error);
+    serverError('Delete student error:', error);
     return errorResponse('Failed to delete student', 500);
   }
 }

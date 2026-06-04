@@ -1,25 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/db';
+import { requireTeacherOrWaliKelas } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ classId: string }> }
 ) {
   try {
-    // Validation: Check token
-    const token = request.headers.get('Authorization')?.replace('Bearer ', '');
-
-    if (!token) {
-      return NextResponse.json(
-        { success: false, message: 'Token tidak ditemukan' },
-        { status: 401 }
-      );
-    }
-
-    // Validation: Verify token
-    const decoded = verifyAccessToken(token);
-    if (!decoded || !decoded.userId) {
+    const user = await requireTeacherOrWaliKelas(request);
+    if (!user) {
       return NextResponse.json(
         { success: false, message: 'Token tidak valid atau expired' },
         { status: 401 }
@@ -36,17 +26,6 @@ export async function GET(
       );
     }
 
-    // Verify user is a teacher
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-    });
-
-    if (!user || (user.role !== 'TEACHER' && user.role !== 'WALI_KELAS')) {
-      return NextResponse.json(
-        { success: false, message: 'Anda tidak memiliki akses' },
-        { status: 403 }
-      );
-    }
 
     // Validation: Verify teacher has access to this class
     let isAuthorized = false;
@@ -136,7 +115,7 @@ export async function GET(
       data: transformedStudents,
     });
   } catch (error) {
-    console.error('Error fetching class students:', error);
+    serverError('Error fetching class students:', error);
     // Don't expose internal error details
     return NextResponse.json(
       { success: false, message: 'Gagal memuat data siswa. Silakan coba lagi' },

@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 import {
   Search, Save, CheckCircle, ChevronRight,
   AlertCircle, RefreshCw, Brain, Building2, Filter,
@@ -38,9 +40,6 @@ const BADGE: Record<string, string> = {
   'C-': 'bg-orange-100 text-orange-700', 'D': 'bg-red-100 text-red-700',
   'E': 'bg-rose-100 text-rose-800',
 };
-
-function getToken() { return typeof window !== 'undefined' ? localStorage.getItem('accessToken') : ''; }
-function authH(): HeadersInit { return { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` }; }
 
 function getFieldDataType(aspek: Aspek): 'NONE' | 'TEXT' | 'PRESTASI' | 'HUKUMAN' {
   return aspek.fieldDataType || (aspek.punyaFieldData ? 'TEXT' : 'NONE');
@@ -287,6 +286,12 @@ function SimpleNilaiInput({ opts, nilai, onChange }: { opts: string[]; nilai: st
 // ─── Main Page ──────────────────────────────────────────────────────────────────
 export default function PenilaianRaportMentalPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const mentalBasePath = pathname.startsWith('/teacher')
+    ? '/teacher/raport-mental'
+    : pathname.startsWith('/wali-kelas')
+      ? '/wali-kelas/raport-mental'
+      : '/admin/raport-mental';
   const [step, setStep] = useState<Step>('filter');
 
   // ── Filter state ──
@@ -334,8 +339,8 @@ export default function PenilaianRaportMentalPage() {
   useEffect(() => {
     setLoadingFilter(true);
     Promise.all([
-      fetch('/api/admin/schools?limit=50', { headers: authH() }).then(r => r.json()),
-      fetch('/api/admin/raport-mental/seksi', { headers: authH() }).then(r => r.json()),
+      apiFetch('/api/admin/schools?limit=50').then(r => r.json()),
+      apiFetch('/api/admin/raport-mental/seksi').then(r => r.json()),
     ]).then(([sData, skData]) => {
       if (sData.success) {
         const schoolList: School[] = Array.isArray(sData.data) ? sData.data : (sData.data?.data ?? []);
@@ -378,7 +383,7 @@ export default function PenilaianRaportMentalPage() {
         const params = new URLSearchParams({ limit: '100' });
         if (selectedSchoolId) params.set('schoolId', selectedSchoolId);
 
-        const res = await fetch(`/api/admin/school-years?${params}`, { headers: authH() });
+        const res = await apiFetch(`/api/admin/school-years?${params}`);
         const data = await res.json();
 
         if (!data.success) {
@@ -422,13 +427,13 @@ export default function PenilaianRaportMentalPage() {
         semesterId: selectedSemesterId,
         limit: '100',
       });
-      const res = await fetch(`/api/admin/classes?${params}`, { headers: authH() });
+      const res = await apiFetch(`/api/admin/classes?${params}`);
       const d = await res.json();
       if (d.success) {
         const classes: Kelas[] = Array.isArray(d.data) ? d.data : (d.data?.data ?? []);
         setKelasList(classes);
       }
-    } catch (e) { console.error(e); }
+    } catch (e) { devError('Raport mental error:', e); }
     finally { setLoadingKelas(false); }
   }, [selectedSchoolId, selectedSchoolYearId, selectedSemesterId]);
 
@@ -450,12 +455,12 @@ export default function PenilaianRaportMentalPage() {
     setLoadingSantri(true);
     setSantriList([]);
     try {
-      const res = await fetch(`/api/admin/classes/${kelasId}/students?limit=200`, { headers: authH() });
+      const res = await apiFetch(`/api/admin/classes/${kelasId}/students?limit=200`);
       const d = await res.json();
       if (d.success) {
         setSantriList(Array.isArray(d.data) ? d.data : (d.data?.data ?? []));
       }
-    } catch (e) { console.error(e); }
+    } catch (e) { devError('Raport mental error:', e); }
     finally { setLoadingSantri(false); }
   }, []);
 
@@ -465,9 +470,8 @@ export default function PenilaianRaportMentalPage() {
     setLoadingNilai(true);
     setNilaiMap({});
     try {
-      const res = await fetch(
-        `/api/admin/raport-mental/nilai?studentNo=${santri.studentNo}&schoolYearId=${selectedSchoolYearId}&semesterId=${selectedSemesterId}`,
-        { headers: authH() }
+      const res = await apiFetch(
+        `/api/admin/raport-mental/nilai?studentNo=${santri.studentNo}&schoolYearId=${selectedSchoolYearId}&semesterId=${selectedSemesterId}`
       );
       const d = await res.json();
       if (d.success) {
@@ -477,7 +481,7 @@ export default function PenilaianRaportMentalPage() {
         }
         setNilaiMap(map);
       }
-    } catch (e) { console.error(e); }
+    } catch (e) { devError('Raport mental error:', e); }
     finally { setLoadingNilai(false); }
   }, [selectedSchoolYearId, selectedSemesterId]);
 
@@ -510,7 +514,7 @@ export default function PenilaianRaportMentalPage() {
       semesterLabel: semesters.find(s => s.id === selectedSemesterId)?.semesterLabel || `Semester ${semesters.find(s => s.id === selectedSemesterId)?.number || ''}`,
     });
 
-    router.push(`/admin/raport-mental/laporan?${params.toString()}`);
+    router.push(`${mentalBasePath}/laporan?${params.toString()}`);
   };
 
   const goToStep = (s: Step) => {
@@ -614,8 +618,9 @@ export default function PenilaianRaportMentalPage() {
         }
       }
 
-      const res = await fetch('/api/admin/raport-mental/nilai', {
-        method: 'POST', headers: authH(),
+      const res = await apiFetch('/api/admin/raport-mental/nilai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ studentNo: selectedSantri.studentNo, schoolYearId: selectedSchoolYearId, semesterId: selectedSemesterId, items }),
       });
       const d = await res.json();

@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, AlertCircle } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
+import { clearAuthData, getCurrentUser } from '@/lib/auth/client';
 
 interface Student {
   id: string;
@@ -18,59 +21,27 @@ export default function WaliKelasReportsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
-  useEffect(() => {
-    fetchStudents();
-  }, []);
-
-  async function fetchStudents() {
+  const fetchStudents = useCallback(async () => {
     try {
       setIsLoading(true);
       setErrorMessage('');
       
-      // Validation: Check token
-      const token = localStorage.getItem('accessToken');
-      if (!token || token.trim() === '') {
+      const user = getCurrentUser();
+      const userId = user?.id;
+      if (!userId || userId.trim() === '') {
+        clearAuthData();
         setErrorMessage('Sesi Anda telah berakhir. Silakan login kembali');
         setTimeout(() => router.push('/login'), 1500);
         setIsLoading(false);
         return;
       }
 
-      // Validation: Check user data
-      const userStr = localStorage.getItem('user');
-      if (!userStr) {
-        setErrorMessage('Data user tidak ditemukan. Silakan login kembali');
-        setTimeout(() => router.push('/login'), 1500);
-        setIsLoading(false);
-        return;
-      }
-
-      // Validation: Parse user data safely
-      let userId: string;
-      try {
-        const user = JSON.parse(userStr);
-        userId = user?.id;
-        if (!userId || userId.trim() === '') {
-          setErrorMessage('ID user tidak valid. Silakan login kembali');
-          setTimeout(() => router.push('/login'), 1500);
-          setIsLoading(false);
-          return;
-        }
-      } catch (parseError) {
-        console.error('Error parsing user data:', parseError);
-        setErrorMessage('Data user tidak valid. Silakan login kembali');
-        setTimeout(() => router.push('/login'), 1500);
-        setIsLoading(false);
-        return;
-      }
-
-      const headers = { Authorization: `Bearer ${token}` };
-
       // Get all classes for this wali kelas
-      const classesResponse = await fetch(`/api/admin/classes?limit=100&waliKelasId=${userId}`, { headers });
+      const classesResponse = await apiFetch(`/api/admin/classes?limit=100&waliKelasId=${userId}`);
       
       // Validation: Check response status
       if (classesResponse.status === 401) {
+        clearAuthData();
         setErrorMessage('Sesi Anda telah berakhir. Silakan login kembali');
         setTimeout(() => router.push('/login'), 1500);
         setIsLoading(false);
@@ -113,14 +84,14 @@ export default function WaliKelasReportsPage() {
       for (const cls of classes) {
         // Validation: Check class object
         if (!cls.id || cls.id.trim() === '') {
-          console.warn('Invalid class ID encountered, skipping...');
           continue;
         }
 
-        const studentsResponse = await fetch(`/api/admin/classes/${cls.id}/students?limit=1000`, { headers });
+        const studentsResponse = await apiFetch(`/api/admin/classes/${cls.id}/students?limit=1000`);
         
         // Validation: Check response status
         if (studentsResponse.status === 401) {
+          clearAuthData();
           setErrorMessage('Sesi Anda telah berakhir. Silakan login kembali');
           setTimeout(() => router.push('/login'), 1500);
           setIsLoading(false);
@@ -128,12 +99,10 @@ export default function WaliKelasReportsPage() {
         }
 
         if (studentsResponse.status === 403) {
-          console.warn(`Tidak memiliki akses ke kelas ${cls.name}`);
           continue;
         }
 
         if (!studentsResponse.ok) {
-          console.warn(`Gagal memuat siswa untuk kelas ${cls.name}`);
           continue;
         }
 
@@ -141,7 +110,7 @@ export default function WaliKelasReportsPage() {
         
         // Validation: Check response format
         if (studentsData.success && Array.isArray(studentsData.data)) {
-          const classStudents = (studentsData.data || []).map((student: any) => ({
+          const classStudents = (studentsData.data || []).map((student: { id: string; name: string; nisn?: string; studentNo?: string }) => ({
             id: student.id,
             name: student.name,
             studentNo: student.nisn || student.studentNo || '-',
@@ -150,20 +119,23 @@ export default function WaliKelasReportsPage() {
           }));
           allStudents.push(...classStudents);
         } else {
-          console.warn(`Format data siswa tidak valid untuk kelas ${cls.name}`);
         }
       }
 
       setStudents(allStudents);
       setIsLoading(false);
     } catch (error) {
-      console.error('Error fetching students:', error);
+      devError('Error fetching students:', error);
       setErrorMessage('Terjadi kesalahan saat memuat data siswa. Periksa koneksi Anda dan coba lagi');
       setIsLoading(false);
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [router]);
+
+  useEffect(() => {
+    void fetchStudents();
+  }, [fetchStudents]);
 
   return (
     <div className="space-y-6">
@@ -214,7 +186,7 @@ export default function WaliKelasReportsPage() {
                 </tr>
               </thead>
               <tbody>
-                {students.map((student, idx) => (
+                {students.map((student) => (
                   <tr key={student.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4">
                       <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">

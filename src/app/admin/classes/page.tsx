@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, Users, X, AlertCircle, CheckCircle, TrendingUp } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, X, AlertCircle, CheckCircle, TrendingUp } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface Level {
   id: string;
@@ -66,16 +67,7 @@ interface ClassData {
   };
 }
 
-interface PaginatedResponse {
-  success: boolean;
-  data: ClassData[];
-  page: number;
-  limit: number;
-  total: number;
-}
-
 export default function ClassesPage() {
-  const router = useRouter();
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [levels, setLevels] = useState<Level[]>([]);
   const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
@@ -103,32 +95,14 @@ export default function ClassesPage() {
 
   const limit = 10;
 
-  useEffect(() => {
-    fetchInitialData();
-  }, []);
-
-  useEffect(() => {
-    fetchClasses();
-  }, [page, search, filterSchoolYearId]);
-
-  // Fetch semester when schoolYear changes
-  useEffect(() => {
-    if (formData.schoolYearId) {
-      fetchSemesters(formData.schoolYearId);
-    }
-  }, [formData.schoolYearId]);
-
-  async function fetchInitialData() {
+  const fetchInitialData = useCallback(async () => {
     try {
-      const token = localStorage.getItem('accessToken');
-      const headers = { Authorization: `Bearer ${token}` };
-
       const [levelsRes, yearsRes, teachersRes, waliKelasRes, subjectsRes] = await Promise.all([
-        fetch('/api/admin/levels?limit=100', { headers }),
-        fetch('/api/admin/school-years?limit=100', { headers }),
-        fetch('/api/admin/users?limit=100&role=TEACHER', { headers }),
-        fetch('/api/admin/users?limit=100&role=WALI_KELAS', { headers }),
-        fetch('/api/admin/subjects?limit=100', { headers }),
+        apiFetch('/api/admin/levels?limit=100'),
+        apiFetch('/api/admin/school-years?limit=100'),
+        apiFetch('/api/admin/users?limit=100&role=TEACHER'),
+        apiFetch('/api/admin/users?limit=100&role=WALI_KELAS'),
+        apiFetch('/api/admin/subjects?limit=100'),
       ]);
 
       const levelsData = await levelsRes.json();
@@ -146,12 +120,12 @@ export default function ClassesPage() {
 
       setIsLoading(false);
     } catch (error) {
-      console.error('Failed to fetch initial data:', error);
+      devError('Failed to fetch initial data:', error);
       setIsLoading(false);
     }
-  }
+  }, []);
 
-  async function fetchClasses() {
+  const fetchClasses = useCallback(async () => {
     try {
       const queryParams = new URLSearchParams({
         page: page.toString(),
@@ -160,36 +134,52 @@ export default function ClassesPage() {
         ...(filterSchoolYearId && { schoolYearId: filterSchoolYearId }),
       });
 
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/classes?${queryParams}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch(`/api/admin/classes?${queryParams}`);
 
-      const data: any = await response.json();
+      const data: { data?: ClassData[]; pagination?: { total?: number } } = await response.json();
       setClasses(data.data || []);
       setTotal(data.pagination?.total || 0);
     } catch (error) {
-      console.error('Failed to fetch classes:', error);
+      devError('Failed to fetch classes:', error);
     }
-  }
+  }, [filterSchoolYearId, limit, page, search]);
 
-  async function fetchSemesters(schoolYearId: string) {
+  const fetchSemesters = useCallback(async (schoolYearId: string) => {
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/school-years/${schoolYearId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch(`/api/admin/school-years/${schoolYearId}`);
 
       const data = await response.json();
       setSemesters(data.data?.semesters || []);
     } catch (error) {
-      console.error('Failed to fetch semesters:', error);
+      devError('Failed to fetch semesters:', error);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void fetchInitialData();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [fetchInitialData]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void fetchClasses();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [fetchClasses]);
+
+  useEffect(() => {
+    if (!formData.schoolYearId) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void fetchSemesters(formData.schoolYearId);
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [fetchSemesters, formData.schoolYearId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -202,12 +192,6 @@ export default function ClassesPage() {
     }
 
     try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) {
-        setErrorMessage('Token tidak ditemukan. Silakan login terlebih dahulu.');
-        return;
-      }
-
       const url = editingId ? `/api/admin/classes/${editingId}` : '/api/admin/classes';
 
       const payload = {
@@ -216,11 +200,10 @@ export default function ClassesPage() {
         ...(selectedTeachers.length > 0 && { teachers: selectedTeachers }),
       };
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: editingId ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });
@@ -242,7 +225,7 @@ export default function ClassesPage() {
           });
           setSelectedTeachers([]);
           setSuccessMessage('');
-          fetchClasses();
+          void fetchClasses();
         }, 1500);
       } else {
         let errorMsg = 'Gagal menyimpan data';
@@ -252,7 +235,7 @@ export default function ClassesPage() {
         setErrorMessage(errorMsg);
       }
     } catch (error) {
-      console.error('Failed to save class:', error);
+      devError('Failed to save class:', error);
       setErrorMessage('Gagal menyimpan data. Silakan coba lagi.');
     }
   }
@@ -264,26 +247,22 @@ export default function ClassesPage() {
     setSuccessMessage('');
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/classes/${id}`, {
+      const response = await apiFetch(`/api/admin/classes/${id}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       if (response.ok) {
         setSuccessMessage('✅ Kelas berhasil dihapus!');
         setTimeout(() => {
           setSuccessMessage('');
-          fetchClasses();
+          void fetchClasses();
         }, 1500);
       } else {
         const result = await response.json();
         setErrorMessage(result.error || 'Gagal menghapus kelas');
       }
     } catch (error) {
-      console.error('Failed to delete class:', error);
+      devError('Failed to delete class:', error);
       setErrorMessage('Gagal menghapus kelas');
     }
   }

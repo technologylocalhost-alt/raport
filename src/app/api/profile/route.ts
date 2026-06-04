@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { getAuthenticatedUser } from '@/lib/auth/access';
 import { hashPassword } from '@/lib/auth/password';
 import { z } from 'zod';
 import bcryptjs from 'bcryptjs';
+import { serverError } from '@/lib/server-log';
 
 // Schema for updating profile
 const updateProfileSchema = z.object({
@@ -14,20 +15,14 @@ const updateProfileSchema = z.object({
 });
 
 async function getUser(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
+  const authUser = await getAuthenticatedUser(req);
 
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
+  if (!authUser) {
     return null;
   }
 
   const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
+    where: { id: authUser.id },
     select: {
       id: true,
       email: true,
@@ -73,7 +68,7 @@ export async function GET(request: NextRequest) {
       data: user,
     });
   } catch (error) {
-    console.error('[Profile] Get error:', error);
+    serverError('[Profile] Get error:', error);
     return NextResponse.json(
       { error: 'Failed to get profile' },
       { status: 500 }
@@ -109,7 +104,7 @@ export async function PUT(request: NextRequest) {
     const { name, email, currentPassword, newPassword } = validation.data;
 
     // Prepare update data
-    const updateData: any = {};
+    const updateData: Record<string, string> = {};
 
     if (name) {
       updateData.name = name;
@@ -198,7 +193,7 @@ export async function PUT(request: NextRequest) {
       data: updatedUser,
     });
   } catch (error) {
-    console.error('[Profile] Update error:', error);
+    serverError('[Profile] Update error:', error);
     return NextResponse.json(
       { error: 'Failed to update profile' },
       { status: 500 }

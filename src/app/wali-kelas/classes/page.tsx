@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Users, BookOpen, Luggage, Eye, MoreVertical } from 'lucide-react';
+import { Users, BookOpen, Luggage, Eye } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { getCurrentUser } from '@/lib/auth/client';
+import { devError } from '@/lib/dev-log';
 
 interface Class {
   id: string;
@@ -11,12 +14,15 @@ interface Class {
   levelName?: string;
   levelCode?: string;
   semesterId: string;
-  semesterNumber?: number;
+  semesterNumber?: number | string;
   capacity: number;
   schoolYearId: string;
   schoolYear?: string;
   waliKelasId: string;
   isActive?: boolean;
+  level?: { name?: string; code?: string };
+  semester?: { number?: number };
+  schoolYearData?: { year?: string };
   _count?: {
     students: number;
   };
@@ -43,38 +49,34 @@ export default function WaliKelasClassesPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      const parsedUser = JSON.parse(storedUser);
-      fetchClasses(parsedUser.id);
+    const parsedUser = getCurrentUser() as { id: string } | null;
+    if (parsedUser) {
+      void fetchClasses(parsedUser.id);
     }
   }, []);
 
   async function fetchClasses(waliKelasId: string) {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('accessToken');
-      const headers = { Authorization: `Bearer ${token}` };
 
-      const response = await fetch(
-        `/api/admin/classes?limit=100&waliKelasId=${waliKelasId}&includeInactive=true`,
-        { headers }
+      const response = await apiFetch(
+        `/api/admin/classes?limit=100&waliKelasId=${waliKelasId}&includeInactive=true`
       );
 
       const data = await response.json();
 
       if (response.ok) {
-        const transformedClasses = (data.data || []).map((c: any) => ({
+        const transformedClasses = (data.data || []).map((c: Class) => ({
           ...c,
           levelName: c.level?.name || '-',
           levelCode: c.level?.code || '-',
           semesterNumber: c.semester?.number || '-',
-          schoolYear: c.schoolYear?.year || '-',
+          schoolYear: c.schoolYearData?.year || c.schoolYear || '-',
         }));
         setClasses(transformedClasses);
       }
     } catch (error) {
-      console.error('Error fetching classes:', error);
+      devError('Error fetching classes:', error);
     } finally {
       setIsLoading(false);
     }

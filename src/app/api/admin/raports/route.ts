@@ -1,30 +1,12 @@
+import { AssessmentType, Prisma } from '@prisma/client';
 import { NextRequest } from 'next/server';
-import { successResponse, paginatedResponse, errorResponse } from '@/lib/api-response';
+import { paginatedResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
+import { serverError } from '@/lib/server-log';
 
-async function getUser(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  // Only ADMIN and PRINCIPAL can view all raports
-  if (user?.role === 'ADMIN' || user?.role === 'PRINCIPAL') {
-    return user;
-  }
-  return null;
+async function requireRaportListAccess(req: NextRequest) {
+  return requireAdminOrPrincipal(req);
 }
 
 /**
@@ -33,7 +15,7 @@ async function getUser(req: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await getUser(request);
+    const user = await requireRaportListAccess(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
@@ -51,7 +33,7 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit;
 
     // Build where clause with filters
-    const where: any = {};
+    const where: Prisma.NilaiApproveWhereInput = {};
 
     if (search) {
       where.OR = [
@@ -91,15 +73,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Filter by class ID (priority) or class name
+    const studentFilter: Prisma.StudentWhereInput = {};
+
     if (filterClassId) {
-      where.student = {
-        ...where.student,
-        classId: filterClassId,
-      };
+      studentFilter.classId = filterClassId;
     } else if (filterClassName) {
-      where.student = {
-        ...where.student,
-        class: {
+      studentFilter.class = {
+        is: {
           name: {
             contains: filterClassName,
             mode: 'insensitive',
@@ -110,26 +90,31 @@ export async function GET(request: NextRequest) {
 
     if (filterSubject) {
       where.subject = {
-        ...where.subject,
-        name: {
-          contains: filterSubject,
-          mode: 'insensitive',
+        is: {
+          name: {
+            contains: filterSubject,
+            mode: 'insensitive',
+          },
         },
       };
     }
 
     if (filterStudent) {
-      where.student = {
-        ...where.student,
-        name: {
-          contains: filterStudent,
-          mode: 'insensitive',
-        },
+      studentFilter.name = {
+        contains: filterStudent,
+        mode: 'insensitive',
       };
     }
 
-    if (filterAssessmentType) {
-      where.assessmentType = filterAssessmentType;
+    if (Object.keys(studentFilter).length > 0) {
+      where.student = studentFilter;
+    }
+
+    if (
+      filterAssessmentType &&
+      Object.values(AssessmentType).includes(filterAssessmentType as AssessmentType)
+    ) {
+      where.assessmentType = filterAssessmentType as AssessmentType;
     }
 
     // Fetch total count
@@ -180,7 +165,7 @@ export async function GET(request: NextRequest) {
 
     return paginatedResponse(formattedData, total, page, limit);
   } catch (error) {
-    console.error('Error fetching raports:', error);
+    serverError('Error fetching raports:', error);
     return errorResponse('Failed to fetch raports', 500);
   }
 }

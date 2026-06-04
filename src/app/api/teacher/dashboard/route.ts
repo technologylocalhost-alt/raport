@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
-
-interface DashboardResponse {
-  totalClasses: number;
-  totalStudents: number;
-  pendingGrades: number;
-  attendanceToday: number;
-  recentActivities: Activity[];
-}
+import { requireTeacherOnly } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
 interface Activity {
   id: string;
@@ -19,27 +12,8 @@ interface Activity {
   activityType: 'success' | 'info' | 'warning';
 }
 
-async function getTeacher(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const teacher = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (teacher && teacher.role === 'TEACHER') {
-    return teacher;
-  }
-  return null;
+async function requireTeacherAccess(req: NextRequest) {
+  return requireTeacherOnly(req);
 }
 
 async function getRecentActivities(teacherId: string, classIds: string[]): Promise<Activity[]> {
@@ -166,7 +140,7 @@ async function getRecentActivities(teacherId: string, classIds: string[]): Promi
 
 export async function GET(req: NextRequest) {
   try {
-    const teacher = await getTeacher(req);
+    const teacher = await requireTeacherAccess(req);
     if (!teacher) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -253,7 +227,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Error fetching dashboard stats:', error);
+    serverError('Error fetching dashboard stats:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

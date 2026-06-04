@@ -1,18 +1,12 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
-import { extractAccessToken } from '@/lib/auth/token-extractor';
-import { parseClassName, calculateNextClass, findTargetClass, getPossibleTargetClasses } from '@/lib/class-promotion';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
+import { parseClassName, calculateNextClass } from '@/lib/class-promotion';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const token = extractAccessToken(req);
-  if (!token) return null;
-  const payload = verifyAccessToken(token);
-  if (!payload) return null;
-  const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) return user;
-  return null;
+async function requirePromotionEligibilityAccess(req: NextRequest) {
+  return requireMenuAccess(req, '/admin/naik-kelas', ['ADMIN', 'PRINCIPAL']);
 }
 
 /**
@@ -25,7 +19,7 @@ export async function GET(
 ) {
   try {
     const { id: classId } = await params;
-    const admin = await verifyAdmin(request);
+    const admin = await requirePromotionEligibilityAccess(request);
     if (!admin) return errorResponse('Unauthorized', 401);
 
     // Ambil data kelas + level + siswa
@@ -122,7 +116,7 @@ export async function GET(
     });
 
     // Calculate target class suggestions berdasarkan levelCount logic
-    let targetClassSuggestions: Array<{
+    const targetClassSuggestions: Array<{
       id: string;
       name: string;
       levelId: string;
@@ -212,21 +206,11 @@ export async function GET(
             select: { id: true, name: true, code: true, order: true, levelCount: true },
           });
 
-          const nextClassInfo = calculateNextClass(
-            parsed,
-            {
-              code: classData.level.code,
-              levelCount: classData.level.levelCount || 0,
-              order: classData.level.order,
-            },
-            nextLevel
-              ? {
-                  code: nextLevel.code,
-                  levelCount: nextLevel.levelCount || 0,
-                  order: nextLevel.order,
-                }
-              : null
-          );
+          const nextClassInfo = calculateNextClass(parsed, {
+            code: classData.level.code,
+            levelCount: classData.level.levelCount || 0,
+            order: classData.level.order,
+          });
 
           if (nextClassInfo && nextSemesterId) {
             // Strategy 1: Try to find class in SAME level first (naik tingkat dalam level)
@@ -311,7 +295,7 @@ export async function GET(
       targetClassSuggestions,
     });
   } catch (error) {
-    console.error('Promotion eligibility error:', error);
+    serverError('Promotion eligibility error:', error);
     return errorResponse('Failed to check promotion eligibility', 500);
   }
 }

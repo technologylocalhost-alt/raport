@@ -1,17 +1,11 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireRaportMentalAccess } from '@/lib/auth/access';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  if (!payload) return null;
-  const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) return user;
-  return null;
+async function requireRaportMental(req: NextRequest) {
+  return requireRaportMentalAccess(req, '/admin/raport-mental');
 }
 
 /**
@@ -23,7 +17,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const user = await verifyAdmin(request);
+    const user = await requireRaportMental(request);
     if (!user) return errorResponse('Unauthorized', 401);
 
     const aspek = await prisma.raportMentalAspek.findUnique({
@@ -33,7 +27,7 @@ export async function GET(
     if (!aspek) return errorResponse('Aspek tidak ditemukan', 404);
     return successResponse(aspek);
   } catch (error) {
-    console.error('Error fetching aspek:', error);
+    serverError('Error fetching aspek:', error);
     return errorResponse('Gagal memuat data aspek', 500);
   }
 }
@@ -47,7 +41,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const user = await verifyAdmin(request);
+    const user = await requireRaportMental(request);
     if (!user) return errorResponse('Unauthorized', 401);
 
     const body = await request.json();
@@ -72,7 +66,7 @@ export async function PUT(
 
     return successResponse(updated, 'Aspek berhasil diperbarui');
   } catch (error) {
-    console.error('Error updating aspek:', error);
+    serverError('Error updating aspek:', error);
     return errorResponse('Gagal memperbarui aspek', 500);
   }
 }
@@ -86,7 +80,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const user = await verifyAdmin(request);
+    const user = await requireRaportMental(request);
     if (!user) return errorResponse('Unauthorized', 401);
 
     const existing = await prisma.raportMentalAspek.findUnique({ where: { id } });
@@ -95,7 +89,7 @@ export async function DELETE(
     await prisma.raportMentalAspek.delete({ where: { id } });
     return successResponse(null, 'Aspek berhasil dihapus');
   } catch (error) {
-    console.error('Error deleting aspek:', error);
+    serverError('Error deleting aspek:', error);
     return errorResponse('Gagal menghapus aspek', 500);
   }
 }

@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Building2, Users, BarChart3, BookOpen, Calendar, GraduationCap, ArrowRight, FileText, School, BookMarked, TrendingUp } from 'lucide-react';
+import { Building2, Users, Calendar, GraduationCap, School, BookMarked } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { getCurrentUser } from '@/lib/auth/client';
+import { devError } from '@/lib/dev-log';
 
 interface User {
   id: string;
@@ -29,6 +31,14 @@ interface Stats {
   totalClasses: number;
 }
 
+interface ActiveSemester {
+  id: string;
+  number: number;
+  semesterLabel?: string;
+  semesterLabelArabic?: string;
+  isActive: boolean;
+}
+
 interface ActiveSchoolYear {
   id: string;
   year: string;
@@ -36,13 +46,8 @@ interface ActiveSchoolYear {
   tahunAkademikArabic?: string;
   startDate: string;
   endDate: string;
-  semesters?: Array<{
-    id: string;
-    number: number;
-    semesterLabel?: string;
-    semesterLabelArabic?: string;
-    isActive: boolean;
-  }>;
+  isActive?: boolean;
+  semesters?: ActiveSemester[];
 }
 
 export default function AdminDashboard() {
@@ -62,16 +67,14 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
 
   useEffect(() => {
-    // Check after component mounts and localStorage is accessible
     const checkAuth = () => {
-      const storedUser = localStorage.getItem('user');
-      if (!storedUser) {
+      const userData = getCurrentUser();
+      if (!userData) {
         router.push('/login');
         return;
       }
 
       try {
-        const userData = JSON.parse(storedUser);
         if (userData.role !== 'ADMIN' && userData.role !== 'PRINCIPAL') {
           router.push('/teacher/dashboard');
           return;
@@ -80,39 +83,25 @@ export default function AdminDashboard() {
         setUser(userData);
         setIsLoading(false);
       } catch (error) {
-        console.error('Error parsing user data:', error);
+        devError('Error parsing user data:', error);
         router.push('/login');
       }
     };
 
-    // Small delay to ensure localStorage is ready
     const timer = setTimeout(checkAuth, 0);
     return () => clearTimeout(timer);
-  }, []);
+  }, [router]);
 
-  useEffect(() => {
-    if (user) {
-      fetchStatistics();
-      fetchStats();
-    }
-  }, [user]);
-
-  async function fetchStats() {
+  const fetchStats = useCallback(async () => {
     try {
-      const token = localStorage.getItem('accessToken');
-      
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-      };
-
       const params = new URLSearchParams();
       params.append('limit', '1000');
 
       const [usersRes, studentsRes, subjectsRes, classesRes] = await Promise.all([
-        fetch(`/api/admin/users?${params}`, { headers }),
-        fetch(`/api/admin/students?${params}`, { headers }).catch(() => null),
-        fetch(`/api/admin/subjects?${params}`, { headers }),
-        fetch(`/api/admin/classes?${params}`, { headers }),
+        apiFetch(`/api/admin/users?${params}`),
+        apiFetch(`/api/admin/students?${params}`).catch(() => null),
+        apiFetch(`/api/admin/subjects?${params}`),
+        apiFetch(`/api/admin/classes?${params}`),
       ]);
 
       const usersData = await usersRes.json();
@@ -127,22 +116,18 @@ export default function AdminDashboard() {
         totalClasses: classesData.total || classesData.pagination?.total || 0,
       });
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      devError('Error fetching stats:', error);
     }
-  }
+  }, []);
 
-  async function fetchStatistics() {
+  const fetchStatistics = useCallback(async () => {
     try {
-      const token = localStorage.getItem('accessToken');
-      
       // First, get active school year
-      const schoolYearsRes = await fetch('/api/admin/school-years?limit=1000', { 
-        headers: { 'Authorization': `Bearer ${token}` } 
-      });
+      const schoolYearsRes = await apiFetch('/api/admin/school-years?limit=1000');
       const schoolYearsData = await schoolYearsRes.json();
       
       // Find the active school year
-      const activeSchoolYearData = schoolYearsData.data?.find((sy: any) => sy.isActive);
+      const activeSchoolYearData = (schoolYearsData.data as ActiveSchoolYear[] | undefined)?.find((sy) => sy.isActive);
       const activeSchoolYearId = activeSchoolYearData?.id;
 
       // Set active school year
@@ -153,7 +138,7 @@ export default function AdminDashboard() {
       // Get the active semester from active school year
       let activeSemesterId = null;
       if (activeSchoolYearData?.semesters && activeSchoolYearData.semesters.length > 0) {
-        const activeSem = activeSchoolYearData.semesters.find((sem: any) => sem.isActive);
+        const activeSem = activeSchoolYearData.semesters.find((sem) => sem.isActive);
         activeSemesterId = activeSem?.id;
       }
 
@@ -163,16 +148,16 @@ export default function AdminDashboard() {
 
       // For classes, we rely on the API's default active filtering
       const [schoolsRes, levelsRes, classesRes, teachersRes] = await Promise.all([
-        fetch('/api/admin/schools?limit=1000', { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch('/api/admin/levels?limit=1000', { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch('/api/admin/classes?limit=1000', { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch('/api/admin/users?limit=1000&role=TEACHER', { headers: { 'Authorization': `Bearer ${token}` } }),
+        apiFetch('/api/admin/schools?limit=1000'),
+        apiFetch('/api/admin/levels?limit=1000'),
+        apiFetch('/api/admin/classes?limit=1000'),
+        apiFetch('/api/admin/users?limit=1000&role=TEACHER'),
       ]);
 
       // For students and subjects, filter by active school year/semester
       const [studentsRes, subjectsRes] = await Promise.all([
-        fetch(`/api/admin/students${schoolYearParam}&limit=1000`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`/api/admin/subjects${semesterParam}&limit=1000`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        apiFetch(`/api/admin/students${schoolYearParam}&limit=1000`),
+        apiFetch(`/api/admin/subjects${semesterParam}&limit=1000`),
       ]);
 
       const [schools, levels, classes, teachers, students, subjects] = await Promise.all([
@@ -194,28 +179,22 @@ export default function AdminDashboard() {
         teachers: teachers.pagination?.total || teachers.data?.length || 0,
       });
     } catch (error) {
-      console.error('Error fetching statistics:', error);
+      devError('Error fetching statistics:', error);
     }
-  }
+  }, []);
 
-  async function handleLogout() {
-    try {
-      const token = localStorage.getItem('accessToken');
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-    } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
-      // Always clear storage and redirect, even if API call fails
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('user');
-      router.push('/login');
+  useEffect(() => {
+    if (!user) {
+      return;
     }
-  }
+
+    const timer = setTimeout(() => {
+      void fetchStatistics();
+      void fetchStats();
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [fetchStatistics, fetchStats, user]);
 
   if (isLoading) {
     return (

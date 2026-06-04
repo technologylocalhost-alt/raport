@@ -89,7 +89,7 @@ export function withAuth(
     roles?: UserRole[];
   }
 ) {
-  return async (request: NextRequest, context?: any): Promise<NextResponse> => {
+  return async (request: NextRequest): Promise<NextResponse> => {
     try {
       // Authenticate request
       const user = await authenticateRequest(request);

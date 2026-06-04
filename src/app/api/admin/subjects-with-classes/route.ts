@@ -1,29 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) {
-    return user;
-  }
-  return null;
+async function requireSubjectsWithClassesAccess(req: NextRequest) {
+  return requireMenuAccess(req, '/admin/penilaian', ['ADMIN', 'PRINCIPAL']);
 }
 
 /**
@@ -32,7 +14,7 @@ async function verifyAdmin(req: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await verifyAdmin(request);
+    const user = await requireSubjectsWithClassesAccess(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
@@ -63,15 +45,16 @@ export async function GET(request: NextRequest) {
     });
 
     // Group by subject and aggregate classes
-    const subjectsMap = new Map<string, any>();
+    const subjectsMap = new Map<string, { id: string; code: string; name: string; nameArabic: string | null; description: string | null; creditHours: number | null; levelId: string | null; classes: { id: string; name: string; schoolYearId: string; }[] }>();
 
     classes.forEach((cls) => {
       cls.subjects.forEach((cs) => {
         const key = cs.subject.id;
         if (subjectsMap.has(key)) {
           const existing = subjectsMap.get(key);
+          if (!existing) return;
           // Add class if not already present
-          if (!existing.classes.find((c: any) => c.id === cls.id)) {
+          if (!existing.classes.find((c) => c.id === cls.id)) {
             existing.classes.push({
               id: cls.id,
               name: cls.name,
@@ -107,7 +90,7 @@ export async function GET(request: NextRequest) {
       total: uniqueSubjects.length,
     });
   } catch (error) {
-    console.error('Get admin subjects with classes error:', error);
+    serverError('Get admin subjects with classes error:', error);
     return errorResponse('Failed to fetch subjects', 500);
   }
 }

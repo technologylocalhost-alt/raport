@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, Target, Plus, X, AlertCircle, CheckCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface Competency {
   id: string;
@@ -16,6 +18,12 @@ interface Competency {
 }
 
 interface Subject {
+  id: string;
+  name: string;
+  code?: string;
+}
+
+interface SubjectApiItem {
   id: string;
   name: string;
   code?: string;
@@ -50,24 +58,18 @@ export default function WaliKelasCompetenciesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    fetchCompetencies();
-    fetchSubjects();
+    void fetchCompetencies();
+    void fetchSubjects();
   }, []);
 
   async function fetchSubjects() {
     try {
-      const token = localStorage.getItem('accessToken');
-      
-      const response = await fetch('/api/teacher/subjects', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch('/api/teacher/subjects');
 
       const data = await response.json();
       if (data.success && data.data) {
         setSubjects(
-          data.data.map((subject: any) => ({
+          (data.data as SubjectApiItem[]).map((subject) => ({
             id: subject.id,
             name: subject.name,
             code: subject.code,
@@ -75,7 +77,7 @@ export default function WaliKelasCompetenciesPage() {
         );
       }
     } catch (error) {
-      console.error('Failed to fetch subjects:', error);
+      devError('Failed to fetch subjects:', error);
     }
   }
 
@@ -83,13 +85,8 @@ export default function WaliKelasCompetenciesPage() {
     try {
       setIsLoading(true);
       setError('');
-      const token = localStorage.getItem('accessToken');
 
-      const response = await fetch('/api/teacher/competencies', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch('/api/teacher/competencies');
 
       const data: ApiResponse = await response.json();
 
@@ -99,7 +96,7 @@ export default function WaliKelasCompetenciesPage() {
         setError(data.message || 'Gagal memuat data kompetensi');
       }
     } catch (error) {
-      console.error('Failed to fetch competencies:', error);
+      devError('Failed to fetch competencies:', error);
       setError('Terjadi kesalahan saat memuat data kompetensi');
     } finally {
       setIsLoading(false);
@@ -111,30 +108,6 @@ export default function WaliKelasCompetenciesPage() {
     comp.subjectName.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleOpenModal = (competency?: Competency) => {
-    setFormError('');
-    setFormSuccess('');
-    if (competency) {
-      setEditingId(competency.id);
-      setFormData({
-        name: competency.name,
-        code: competency.code || '',
-        subjectId: competency.subjectId || '',
-        type: competency.type || '',
-        description: competency.description || '',
-      });
-    } else {
-      setEditingId(null);
-      setFormData({
-        name: '',
-        code: '',
-        subjectId: '',
-        type: '',
-        description: '',
-      });
-    }
-    setShowModal(true);
-  };
 
   const handleCloseModal = () => {
     setShowModal(false);
@@ -156,18 +129,16 @@ export default function WaliKelasCompetenciesPage() {
 
     try {
       setIsSubmitting(true);
-      const token = localStorage.getItem('accessToken');
       
       const url = editingId 
         ? `/api/teacher/competencies/${editingId}` 
         : '/api/teacher/competencies/create';
       const method = editingId ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           name: formData.name,
@@ -183,13 +154,13 @@ export default function WaliKelasCompetenciesPage() {
         setFormSuccess(editingId ? 'Kompetensi berhasil diperbarui' : 'Kompetensi berhasil ditambahkan');
         setTimeout(() => {
           handleCloseModal();
-          fetchCompetencies();
+          void fetchCompetencies();
         }, 1500);
       } else {
         setFormError(data.message || 'Gagal menyimpan kompetensi');
       }
     } catch (error) {
-      console.error('Error saving competency:', error);
+      devError('Error saving competency:', error);
       setFormError('Terjadi kesalahan saat menyimpan kompetensi');
     } finally {
       setIsSubmitting(false);
@@ -200,24 +171,19 @@ export default function WaliKelasCompetenciesPage() {
     if (!confirm('Yakin ingin menghapus kompetensi ini?')) return;
 
     try {
-      const token = localStorage.getItem('accessToken');
-
-      const response = await fetch(`/api/teacher/competencies/${id}`, {
+      const response = await apiFetch(`/api/teacher/competencies/${id}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       const data = await response.json();
 
       if (response.ok && data.success) {
-        fetchCompetencies();
+        void fetchCompetencies();
       } else {
         setError(data.message || 'Gagal menghapus kompetensi');
       }
     } catch (error) {
-      console.error('Error deleting competency:', error);
+      devError('Error deleting competency:', error);
       setError('Terjadi kesalahan saat menghapus kompetensi');
     }
   };

@@ -1,7 +1,9 @@
+import { Prisma, UserRole, ActivityAction, ActivityStatus } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { withAuth } from '@/lib/auth/middleware';
-import { UserRole, ActivityAction, ActivityStatus } from '@prisma/client';
+import { getAuthenticatedUser } from '@/lib/auth/access';
+import { serverError } from '@/lib/server-log';
 
 /**
  * GET /api/admin/activity-logs
@@ -36,40 +38,39 @@ export const GET = withAuth(async (request: NextRequest, user) => {
     const skip = (page - 1) * limit;
 
     // Build filter object
-    const where: any = {};
+    const where: Prisma.ActivityLogWhereInput = {};
 
     // User filter
-    if (searchParams.has('userId')) {
-      where.userId = searchParams.get('userId');
+    const userId = searchParams.get('userId');
+    if (userId) {
+      where.userId = userId;
     }
 
     // Action filter
-    if (searchParams.has('action')) {
-      const action = searchParams.get('action');
-      if (Object.values(ActivityAction).includes(action as any)) {
-        where.action = action;
-      }
+    const action = searchParams.get('action');
+    if (action && Object.values(ActivityAction).includes(action as ActivityAction)) {
+      where.action = action as ActivityAction;
     }
 
     // Resource type filter
-    if (searchParams.has('resourceType')) {
+    const resourceType = searchParams.get('resourceType');
+    if (resourceType) {
       where.resourceType = {
-        contains: searchParams.get('resourceType'),
+        contains: resourceType,
         mode: 'insensitive',
       };
     }
 
     // Resource ID filter
-    if (searchParams.has('resourceId')) {
-      where.resourceId = searchParams.get('resourceId');
+    const resourceId = searchParams.get('resourceId');
+    if (resourceId) {
+      where.resourceId = resourceId;
     }
 
     // Status filter
-    if (searchParams.has('status')) {
-      const status = searchParams.get('status');
-      if (Object.values(ActivityStatus).includes(status as any)) {
-        where.status = status;
-      }
+    const status = searchParams.get('status');
+    if (status && Object.values(ActivityStatus).includes(status as ActivityStatus)) {
+      where.status = status as ActivityStatus;
     }
 
     // Date range filter
@@ -120,7 +121,7 @@ export const GET = withAuth(async (request: NextRequest, user) => {
       },
     });
   } catch (error) {
-    console.error('Error fetching activity logs:', error);
+    serverError('Error fetching activity logs:', error);
     return NextResponse.json(
       { error: 'Failed to fetch activity logs' },
       { status: 500 }
@@ -134,9 +135,8 @@ export const GET = withAuth(async (request: NextRequest, user) => {
  */
 export async function getSummary(request: NextRequest) {
   try {
-    // Verify auth
-    const token = request.headers.get('authorization')?.replace('Bearer ', '');
-    if (!token) {
+    const user = await getAuthenticatedUser(request);
+    if (!user || user.role !== UserRole.ADMIN) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -174,14 +174,14 @@ export async function getSummary(request: NextRequest) {
       success: true,
       data: {
         totalLogs,
-        byAction: Object.fromEntries(byAction.map(a => [a.action, a._count])),
-        byStatus: Object.fromEntries(byStatus.map(s => [s.status, s._count])),
+        byAction: Object.fromEntries(byAction.map((a) => [a.action, a._count])),
+        byStatus: Object.fromEntries(byStatus.map((s) => [s.status, s._count])),
         today,
         thisWeek,
       },
     });
   } catch (error) {
-    console.error('Error fetching activity summary:', error);
+    serverError('Error fetching activity summary:', error);
     return NextResponse.json(
       { error: 'Failed to fetch activity summary' },
       { status: 500 }
