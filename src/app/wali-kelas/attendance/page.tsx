@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect, useState, FormEvent, Suspense } from 'react';
+import { useCallback, useEffect, useState, FormEvent, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, X, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { getCurrentUser } from '@/lib/auth/client';
+import { devError } from '@/lib/dev-log';
 
 interface AttendanceRecord {
   id: string;
@@ -36,6 +39,17 @@ interface FormData {
   notes: string;
 }
 
+interface StudentOption {
+  id: string;
+  name: string;
+  studentNo?: string;
+}
+
+interface ClassApiItem extends Class {
+  level?: { name?: string };
+  schoolYearData?: { year?: string };
+}
+
 export default function WaliKelasAttendancePage() {
   return (
     <Suspense fallback={<div>Loading...</div>}>
@@ -49,7 +63,7 @@ function AttendancePageContent() {
   const router = useRouter();
   const [classes, setClasses] = useState<Class[]>([]);
   const [attendances, setAttendances] = useState<AttendanceRecord[]>([]);
-  const [students, setStudents] = useState<any[]>([]);
+  const [students, setStudents] = useState<StudentOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -71,55 +85,43 @@ function AttendancePageContent() {
   const itemsPerPage = 10;
 
   useEffect(() => {
-    const user = localStorage.getItem('user');
-    if (user) {
-      const parsedUser = JSON.parse(user);
-      
-      // Check if classId is in URL params
+    const parsedUser = getCurrentUser();
+    if (parsedUser) {
       const classIdParam = searchParams.get('classId');
       if (classIdParam) {
         setSelectedClassId(classIdParam);
-        fetchClassNameAndStudents(classIdParam);
+        void fetchClassNameAndStudents(classIdParam);
       } else {
-        fetchClasses(parsedUser.id);
+        void fetchClasses(parsedUser.id);
       }
     }
   }, [searchParams]);
 
   useEffect(() => {
     if (selectedClassId) {
-      fetchClassNameAndStudents(selectedClassId);
+      void fetchClassNameAndStudents(selectedClassId);
     }
   }, [selectedClassId]);
-
-  useEffect(() => {
-    if (selectedClassId) {
-      fetchAttendances();
-    }
-  }, [selectedClassId, currentPage, searchTerm]);
 
   async function fetchClasses(waliKelasId: string) {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('accessToken');
-      const headers = { Authorization: `Bearer ${token}` };
-
-      const response = await fetch(`/api/admin/classes?limit=100&waliKelasId=${waliKelasId}`, { headers });
+      const response = await apiFetch(`/api/admin/classes?limit=100&waliKelasId=${waliKelasId}`);
       const data = await response.json();
 
       if (response.ok) {
         // Transform classes to extract nested object values
-        const transformedClasses = (data.data || []).map((c: any) => ({
+        const transformedClasses = ((data.data || []) as ClassApiItem[]).map((c) => ({
           ...c,
           levelName: c.level?.name || '-',
-          schoolYear: c.schoolYear?.year || '-',
+          schoolYear: c.schoolYearData?.year || c.schoolYear || '-',
         }));
         setClasses(transformedClasses);
       } else {
         setErrorMessage('Gagal memuat daftar kelas');
       }
     } catch (error) {
-      console.error('Error fetching classes:', error);
+      devError('Error fetching classes:', error);
       setErrorMessage('Gagal memuat daftar kelas');
     } finally {
       setIsLoading(false);
@@ -128,11 +130,8 @@ function AttendancePageContent() {
 
   async function fetchClassNameAndStudents(classId: string) {
     try {
-      const token = localStorage.getItem('accessToken');
-      const headers = { Authorization: `Bearer ${token}` };
-
       // Fetch class details
-      const classResponse = await fetch(`/api/admin/classes/${classId}`, { headers });
+      const classResponse = await apiFetch(`/api/admin/classes/${classId}`);
       const classData = await classResponse.json();
 
       if (classResponse.ok && classData.data) {
@@ -140,10 +139,8 @@ function AttendancePageContent() {
       }
 
       // Fetch students for this class
-      const studentsResponse = await fetch(`/api/admin/classes/${classId}/students?limit=100`, { headers });
+      const studentsResponse = await apiFetch(`/api/admin/classes/${classId}/students?limit=100`);
       const studentsData = await studentsResponse.json();
-
-      console.log('Students response:', studentsResponse.status, studentsData);
 
       if (studentsResponse.ok) {
         setStudents(studentsData.data || []);
@@ -153,24 +150,21 @@ function AttendancePageContent() {
       
       setIsLoading(false);
     } catch (error) {
-      console.error('Error fetching class and students:', error);
+      devError('Error fetching class and students:', error);
       setErrorMessage('Gagal memuat data');
       setIsLoading(false);
     }
   }
 
-  async function fetchAttendances() {
+  const fetchAttendances = useCallback(async () => {
     if (!selectedClassId) return;
 
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('accessToken');
-      const headers = { Authorization: `Bearer ${token}` };
-
       const skip = (currentPage - 1) * itemsPerPage;
       const url = `/api/teacher/attendance?limit=${itemsPerPage}&skip=${skip}&classId=${selectedClassId}${searchTerm ? `&search=${searchTerm}` : ''}`;
 
-      const response = await fetch(url, { headers });
+      const response = await apiFetch(url);
       const data = await response.json();
 
       if (response.ok) {
@@ -179,12 +173,18 @@ function AttendancePageContent() {
         setTotalPages(Math.ceil(total / itemsPerPage));
       }
     } catch (error) {
-      console.error('Error fetching attendances:', error);
+      devError('Error fetching attendances:', error);
       setErrorMessage('Gagal memuat data absensi');
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [currentPage, itemsPerPage, searchTerm, selectedClassId]);
+
+  useEffect(() => {
+    if (selectedClassId) {
+      void fetchAttendances();
+    }
+  }, [selectedClassId, fetchAttendances]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -195,18 +195,14 @@ function AttendancePageContent() {
     }
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      };
-
       const url = editingId ? `/api/teacher/attendance/${editingId}` : '/api/teacher/attendance';
       const method = editingId ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method,
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(formData),
       });
 
@@ -221,13 +217,13 @@ function AttendancePageContent() {
           notes: '',
         });
         setCurrentPage(1);
-        fetchAttendances();
+        void fetchAttendances();
       } else {
         const error = await response.json();
         setErrorMessage(error.error || 'Terjadi kesalahan');
       }
     } catch (error) {
-      console.error('Error submitting form:', error);
+      devError('Error submitting form:', error);
       setErrorMessage('Terjadi kesalahan saat menyimpan data');
     }
   }
@@ -237,7 +233,7 @@ function AttendancePageContent() {
     setFormData({
       studentId: record.studentId,
       date: record.date.split('T')[0],
-      status: record.status as any,
+      status: record.status,
       notes: record.notes || '',
     });
     setShowForm(true);
@@ -248,20 +244,18 @@ function AttendancePageContent() {
     if (!confirm('Apakah Anda yakin ingin menghapus data absensi ini?')) return;
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/teacher/attendance/${id}`, {
+      const response = await apiFetch(`/api/teacher/attendance/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` },
       });
 
       if (response.ok) {
         setSuccessMessage('Absensi berhasil dihapus');
-        fetchAttendances();
+        void fetchAttendances();
       } else {
         setErrorMessage('Gagal menghapus absensi');
       }
     } catch (error) {
-      console.error('Error deleting:', error);
+      devError('Error deleting:', error);
       setErrorMessage('Terjadi kesalahan');
     }
   }
@@ -440,7 +434,7 @@ function AttendancePageContent() {
                 </label>
                 <select
                   value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value as FormData['status'] })}
                   className="w-full px-4 py-3 bg-white border-2 border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
                   required
                 >

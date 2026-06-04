@@ -3,20 +3,20 @@
  * Central location untuk semua type definitions
  */
 
-import { UserRole, CompetencyType, ScoringType, AssessmentType, AttendanceStatus, ActivityAction, ActivityStatus } from '@prisma/client';
+import { UserRole, CompetencyType, ScoringType, AssessmentType, AttendanceStatus, ActivityAction, ActivityStatus, Bagian } from '@prisma/client';
 
 // ============================================================================
 // API Response Types
 // ============================================================================
 
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
   message?: string;
 }
 
-export interface PaginatedResponse<T = any> {
+export interface PaginatedResponse<T = unknown> {
   success: boolean;
   data: T[];
   pagination: {
@@ -30,7 +30,7 @@ export interface PaginatedResponse<T = any> {
 export interface ErrorResponse {
   success: false;
   error: string;
-  details?: any;
+  details?: unknown;
   statusCode: number;
 }
 
@@ -56,6 +56,7 @@ export interface TokenPayload {
   email: string;
   role: UserRole;
   schoolId?: string;
+  bagian?: string[];
   exp?: number;
   iat?: number;
 }
@@ -67,6 +68,7 @@ export interface AuthUser {
   role: UserRole;
   schoolId: string;
   isActive: boolean;
+  bagian?: string[];
 }
 
 export interface AuthResponse {
@@ -86,6 +88,7 @@ export interface UserData {
   role: UserRole;
   schoolId: string;
   isActive: boolean;
+  bagian?: string[];
   createdAt: Date | string;
   updatedAt: Date | string;
 }
@@ -96,6 +99,7 @@ export interface CreateUserInput {
   name: string;
   role: UserRole;
   schoolId: string;
+  bagian?: string[];
 }
 
 export interface UpdateUserInput {
@@ -103,6 +107,7 @@ export interface UpdateUserInput {
   name?: string;
   role?: UserRole;
   isActive?: boolean;
+  bagian?: string[];
 }
 
 // ============================================================================
@@ -330,8 +335,8 @@ export interface LogActivityInput {
   resourceId?: string;
   resourceName?: string;
   description?: string;
-  oldValue?: any;
-  newValue?: any;
+  oldValue?: unknown;
+  newValue?: unknown;
   ipAddress?: string;
   userAgent?: string;
   status?: ActivityStatus;
@@ -350,5 +355,19 @@ export interface ActivityLogFilter {
   limit?: number;
 }
 
+// ============================================================================
+// Menu Permission / RBAC Types
+// ============================================================================
+
+export interface MenuPermissionData {
+  id: string;
+  menuPath: string;
+  menuTitle: string;
+  menuGroup: string;
+  roles: string;
+  bagian: string | null;
+  isActive: boolean;
+}
+
 // Export Prisma enums for convenience
-export { UserRole, CompetencyType, ScoringType, AssessmentType, AttendanceStatus, ActivityAction, ActivityStatus };
+export { UserRole, CompetencyType, ScoringType, AssessmentType, AttendanceStatus, ActivityAction, ActivityStatus, Bagian };

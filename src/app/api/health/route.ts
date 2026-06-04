@@ -3,29 +3,12 @@
  * Untuk monitoring dan load balancer health checks
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-interface HealthCheckResponse {
-  status: 'healthy' | 'unhealthy';
-  timestamp: string;
-  uptime: number;
-  version: string;
-  checks: {
-    database: {
-      status: 'up' | 'down';
-      responseTime?: number;
-      error?: string;
-    };
-    memory: {
-      used: number;
-      total: number;
-      percentage: number;
-    };
-  };
-}
+const isProduction = process.env.NODE_ENV === 'production';
 
 /**
  * Check database connection
@@ -50,7 +33,7 @@ async function checkDatabase(): Promise<{
   } catch (error) {
     return {
       status: 'down',
-      error: error instanceof Error ? error.message : 'Unknown database error',
+      error: isProduction ? undefined : error instanceof Error ? error.message : 'Unknown database error',
     };
   }
 }
@@ -73,34 +56,36 @@ function getMemoryUsage() {
 /**
  * GET /api/health - Basic health check
  */
-export async function GET(request: NextRequest): Promise<NextResponse<HealthCheckResponse>> {
+export async function GET(): Promise<NextResponse> {
   const timestamp = new Date().toISOString();
-  const uptime = process.uptime();
-  const version = process.env.npm_package_version || '1.0.0';
 
-  // Check database
   const databaseCheck = await checkDatabase();
-
-  // Check memory
-  const memoryCheck = getMemoryUsage();
-
-  // Determine overall health status
   const isHealthy = databaseCheck.status === 'up';
-
-  const response: HealthCheckResponse = {
-    status: isHealthy ? 'healthy' : 'unhealthy',
-    timestamp,
-    uptime: Math.round(uptime),
-    version,
-    checks: {
-      database: databaseCheck,
-      memory: memoryCheck,
-    },
-  };
-
   const statusCode = isHealthy ? 200 : 503;
 
-  return NextResponse.json(response, { status: statusCode });
+  if (isProduction) {
+    return NextResponse.json(
+      {
+        status: isHealthy ? 'healthy' : 'unhealthy',
+        timestamp,
+      },
+      { status: statusCode }
+    );
+  }
+
+  return NextResponse.json(
+    {
+      status: isHealthy ? 'healthy' : 'unhealthy',
+      timestamp,
+      uptime: Math.round(process.uptime()),
+      version: process.env.npm_package_version || '1.0.0',
+      checks: {
+        database: databaseCheck,
+        memory: getMemoryUsage(),
+      },
+    },
+    { status: statusCode }
+  );
 }
 
 /**
@@ -111,7 +96,7 @@ export async function HEAD(): Promise<NextResponse> {
   try {
     await prisma.$queryRaw`SELECT 1`;
     return new NextResponse(null, { status: 200 });
-  } catch (error) {
+  } catch {
     return new NextResponse(null, { status: 503 });
   }
 }

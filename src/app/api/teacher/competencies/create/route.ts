@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/db';
+import { requireTeacherOnly } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
 export async function POST(request: NextRequest) {
   try {
-    const token = request.headers.get('Authorization')?.replace('Bearer ', '');
-
-    if (!token) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    const decoded = verifyAccessToken(token);
-    if (!decoded || !decoded.userId) {
+    const teacher = await requireTeacherOnly(request);
+    if (!teacher) {
       return NextResponse.json(
         { success: false, message: 'Invalid token' },
         { status: 401 }
@@ -34,7 +26,7 @@ export async function POST(request: NextRequest) {
     // Verify that the subject belongs to the teacher
     const teacherSubject = await prisma.classTeacher.findFirst({
       where: {
-        teacherId: decoded.userId,
+        teacherId: teacher.id,
         subjectId: subjectId,
       },
     });
@@ -52,7 +44,7 @@ export async function POST(request: NextRequest) {
         name,
         code: code || '',
         subjectId,
-        teacherId: decoded.userId,
+        teacherId: teacher.id,
         type,
       },
       include: {
@@ -77,7 +69,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Error creating competency:', error);
+    serverError('Error creating competency:', error);
     return NextResponse.json(
       { success: false, message: 'Gagal menambahkan kompetensi' },
       { status: 500 }

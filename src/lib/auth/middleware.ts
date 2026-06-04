@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAccessToken } from './jwt';
 import { extractAccessToken } from './token-extractor';
 import { TokenPayload } from '@/types';
+import { serverError } from '@/lib/server-log';
 
 /**
  * Verify request has valid access token
@@ -11,7 +12,6 @@ export function verifyRequest(request: NextRequest): TokenPayload | null {
   const token = extractAccessToken(request);
   
   if (!token) {
-    console.warn('[Auth] No token found in request');
     return null;
   }
 
@@ -42,7 +42,7 @@ export function withAuth<T>(
 
       return await handler(request, user);
     } catch (error) {
-      console.error('[Auth Middleware Error]', error);
+      serverError('[Auth Middleware Error]', error);
       return NextResponse.json(
         { error: 'Authentication error' },
         { status: 401 }

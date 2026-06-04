@@ -3,6 +3,8 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Download, Eye } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface Student {
   id: string;
@@ -16,6 +18,16 @@ interface Class {
   name: string;
   code: string;
   students: Student[];
+}
+
+interface ClassApiItem extends Omit<Class, 'students'> {
+  students?: Student[];
+}
+
+interface StudentApiItem {
+  id: string;
+  name: string;
+  studentNo: string;
 }
 
 function BulkReviewPageContent() {
@@ -39,25 +51,11 @@ function BulkReviewPageContent() {
   };
 
   useEffect(() => {
-    fetchAllData();
-  }, []);
-
-  const fetchAllData = async () => {
+    const fetchAllData = async () => {
     try {
       setError('');
-      const token = localStorage.getItem('accessToken');
 
-      if (!token || token.trim() === '') {
-        setError('Sesi Anda telah berakhir. Silakan login kembali');
-        setTimeout(() => router.push('/login'), 1500);
-        return;
-      }
-
-      const response = await fetch('/api/admin/classes?limit=100', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch('/api/admin/classes?limit=100');
 
       if (response.status === 401) {
         setError('Sesi Anda telah berakhir. Silakan login kembali');
@@ -72,22 +70,17 @@ function BulkReviewPageContent() {
       const data = await response.json();
       if (data.success && Array.isArray(data.data)) {
         const classesWithStudents = await Promise.all(
-          data.data.map(async (cls: any) => {
+          (data.data as ClassApiItem[]).map(async (cls) => {
             try {
-              const studentsResponse = await fetch(
-                `/api/admin/classes/${cls.id}/students?limit=100`,
-                {
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                  },
-                }
+              const studentsResponse = await apiFetch(
+                `/api/admin/classes/${cls.id}/students?limit=100`
               );
 
               let students: Student[] = [];
               if (studentsResponse.ok) {
                 const studentsData = await studentsResponse.json();
                 if (studentsData.success && Array.isArray(studentsData.data)) {
-                  students = studentsData.data.map((s: any) => ({
+                  students = (studentsData.data as StudentApiItem[]).map((s) => ({
                     id: s.id,
                     name: s.name,
                     studentNo: s.studentNo,
@@ -100,8 +93,7 @@ function BulkReviewPageContent() {
                 ...cls,
                 students,
               };
-            } catch (err) {
-              console.warn(`Failed to fetch students for class ${cls.id}`);
+            } catch {
               return {
                 ...cls,
                 students: [],
@@ -114,7 +106,7 @@ function BulkReviewPageContent() {
 
         // Flatten all students with class info
         const students = classesWithStudents.flatMap((cls) =>
-          cls.students.map((student: any) => ({
+          cls.students.map((student: Student) => ({
             ...student,
             classId: cls.id,
             className: cls.name,
@@ -124,12 +116,15 @@ function BulkReviewPageContent() {
       }
 
       setIsLoading(false);
-    } catch (err) {
-      console.error('Error fetching classes:', err);
+    } catch (error) {
+      devError('Error fetching classes:', error);
       setError('Terjadi kesalahan saat memuat data kelas');
       setIsLoading(false);
     }
   };
+
+    void fetchAllData();
+  }, [router]);
 
   const handleViewRaport = (classId: string, studentId: string) => {
     const params = new URLSearchParams({

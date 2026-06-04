@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect, useState, FormEvent, Suspense, useRef } from 'react';
+import { useCallback, useEffect, useState, FormEvent, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, X, AlertCircle, CheckCircle, ArrowLeft, Upload, Download } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { getCurrentUser } from '@/lib/auth/client';
+import { devError } from '@/lib/dev-log';
 
 interface Class {
   id: string;
@@ -43,6 +46,30 @@ interface FormData {
   parentPhoneNo: string;
 }
 
+interface ImportErrorItem {
+  row: number;
+  message: string;
+}
+
+interface ImportResultData {
+  success: number;
+  failed: number;
+  duplicates: number;
+  errors: ImportErrorItem[];
+}
+
+interface ImportResultState {
+  success: boolean;
+  message?: string;
+  error?: string;
+  details?: string;
+  data?: ImportResultData;
+}
+
+interface ClassApiItem extends Class {
+  level?: { name?: string } | null;
+}
+
 export default function WaliKelasStudentsPage() {
   return (
     <Suspense fallback={<div>Loading...</div>}>
@@ -65,13 +92,11 @@ function StudentsPageContent() {
   const [totalPages, setTotalPages] = useState(1);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  const [userSchoolId, setUserSchoolId] = useState<string>('');
-  const [userId, setUserId] = useState<string>('');
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedClassName, setSelectedClassName] = useState<string>('');
   const [showImportModal, setShowImportModal] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [importResult, setImportResult] = useState<any>(null);
+  const [importResult, setImportResult] = useState<ImportResultState | null>(null);
 
   const [formData, setFormData] = useState<FormData>({
     studentNo: '',
@@ -88,36 +113,22 @@ function StudentsPageContent() {
   const itemsPerPage = 20;
 
   useEffect(() => {
-    const user = localStorage.getItem('user');
-    if (user) {
-      const parsedUser = JSON.parse(user);
-      setUserSchoolId(parsedUser.schoolId);
-      setUserId(parsedUser.id);
-      
-      // Check if classId is in URL params
+    const parsedUser = getCurrentUser() as { id: string; schoolId?: string } | null;
+    if (parsedUser) {
       const classIdParam = searchParams.get('classId');
       if (classIdParam) {
         setSelectedClassId(classIdParam);
-        fetchClassNameAndStudents(classIdParam);
+        void fetchClassNameAndStudents(classIdParam);
       } else {
-        fetchClasses(parsedUser.id);
+        void fetchClasses(parsedUser.id);
       }
     }
   }, [searchParams]);
 
-  useEffect(() => {
-    if (selectedClassId) {
-      fetchStudents();
-    }
-  }, [selectedClassId, currentPage, searchTerm]);
-
   async function fetchClassNameAndStudents(classId: string) {
     try {
-      const token = localStorage.getItem('accessToken');
-      const headers = { Authorization: `Bearer ${token}` };
-
       // Fetch class details to get the name
-      const classResponse = await fetch(`/api/admin/classes/${classId}`, { headers });
+      const classResponse = await apiFetch(`/api/admin/classes/${classId}`);
       const classData = await classResponse.json();
 
       if (classResponse.ok && classData.data) {
@@ -126,7 +137,7 @@ function StudentsPageContent() {
       
       setIsLoading(false);
     } catch (error) {
-      console.error('Error fetching class name:', error);
+      devError('Error fetching class name:', error);
       setErrorMessage('Gagal memuat data');
       setIsLoading(false);
     }
@@ -135,15 +146,12 @@ function StudentsPageContent() {
   async function fetchClasses(waliKelasId: string) {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('accessToken');
-      const headers = { Authorization: `Bearer ${token}` };
-
-      const response = await fetch(`/api/admin/classes?limit=100&waliKelasId=${waliKelasId}`, { headers });
+      const response = await apiFetch(`/api/admin/classes?limit=100&waliKelasId=${waliKelasId}`);
       const data = await response.json();
 
       if (response.ok) {
         // Transform classes to extract nested object values
-        const transformedClasses = (data.data || []).map((c: any) => ({
+        const transformedClasses = ((data.data || []) as ClassApiItem[]).map((c) => ({
           ...c,
           levelName: c.level?.name || '-',
         }));
@@ -152,24 +160,21 @@ function StudentsPageContent() {
         setErrorMessage('Gagal memuat daftar kelas');
       }
     } catch (error) {
-      console.error('Error fetching classes:', error);
+      devError('Error fetching classes:', error);
       setErrorMessage('Gagal memuat daftar kelas');
     } finally {
       setIsLoading(false);
     }
   }
 
-  async function fetchStudents() {
+  const fetchStudents = useCallback(async () => {
     if (!selectedClassId) return;
 
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('accessToken');
-      const headers = { Authorization: `Bearer ${token}` };
-
       const url = `/api/admin/classes/${selectedClassId}/students?limit=${itemsPerPage}&page=${currentPage}${searchTerm ? `&search=${searchTerm}` : ''}`;
 
-      const response = await fetch(url, { headers });
+      const response = await apiFetch(url);
       const data = await response.json();
 
       if (response.ok) {
@@ -178,12 +183,18 @@ function StudentsPageContent() {
         setTotalPages(Math.ceil(total / itemsPerPage));
       }
     } catch (error) {
-      console.error('Error fetching students:', error);
+      devError('Error fetching students:', error);
       setErrorMessage('Gagal memuat data siswa');
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [selectedClassId, currentPage, searchTerm]);
+
+  useEffect(() => {
+    if (selectedClassId) {
+      void fetchStudents();
+    }
+  }, [selectedClassId, fetchStudents]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -194,12 +205,6 @@ function StudentsPageContent() {
     }
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      };
-
       let url: string;
       let method: string;
 
@@ -213,9 +218,11 @@ function StudentsPageContent() {
         method = 'POST';
       }
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method,
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(formData),
       });
 
@@ -235,13 +242,13 @@ function StudentsPageContent() {
           parentPhoneNo: '',
         });
         setCurrentPage(1);
-        fetchStudents();
+        void fetchStudents();
       } else {
         const error = await response.json();
         setErrorMessage(error.error || 'Terjadi kesalahan');
       }
     } catch (error) {
-      console.error('Error submitting form:', error);
+      devError('Error submitting form:', error);
       setErrorMessage('Terjadi kesalahan saat menyimpan data');
     }
   }
@@ -267,20 +274,18 @@ function StudentsPageContent() {
     if (!confirm('Apakah Anda yakin ingin menghapus siswa ini?')) return;
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/students/${id}`, {
+      const response = await apiFetch(`/api/admin/students/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` },
       });
 
       if (response.ok) {
         setSuccessMessage('Siswa berhasil dihapus');
-        fetchStudents();
+        void fetchStudents();
       } else {
         setErrorMessage('Gagal menghapus siswa');
       }
     } catch (error) {
-      console.error('Error deleting:', error);
+      devError('Error deleting:', error);
       setErrorMessage('Terjadi kesalahan');
     }
   }
@@ -289,12 +294,10 @@ function StudentsPageContent() {
     try {
       if (!selectedClassId) return;
 
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(
+      const response = await apiFetch(
         `/api/wali-kelas/students/export?classId=${selectedClassId}`,
         {
           method: 'GET',
-          headers: { Authorization: `Bearer ${token}` },
         }
       );
 
@@ -330,7 +333,7 @@ function StudentsPageContent() {
 
       alert('✅ File berhasil diunduh!');
     } catch (error) {
-      console.error('Export error:', error);
+      devError('Export error:', error);
       alert('❌ Gagal mengekspor file');
     }
   }
@@ -350,20 +353,13 @@ function StudentsPageContent() {
     }
 
     try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) {
-        alert('Token tidak ditemukan. Silakan login kembali.');
-        return;
-      }
-
       setIsImporting(true);
       const formData = new FormData();
       formData.append('file', file);
       formData.append('classId', selectedClassId);
 
-      const response = await fetch('/api/wali-kelas/students/import', {
+      const response = await apiFetch('/api/wali-kelas/students/import', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
 
@@ -400,10 +396,10 @@ function StudentsPageContent() {
       }
 
       setTimeout(() => {
-        fetchStudents();
+        void fetchStudents();
       }, 2000);
     } catch (error) {
-      console.error('Import error:', error);
+      devError('Import error:', error);
       setImportResult({
         success: false,
         error: 'Terjadi kesalahan saat mengimpor',
@@ -779,7 +775,7 @@ function StudentsPageContent() {
                 </td>
               </tr>
             ) : (
-              displayedStudents.map((student, index) => (
+              displayedStudents.map((student) => (
                 <tr key={student.id} className="border-b hover:bg-gray-50">
                   <td className="px-6 py-4 text-sm font-medium text-gray-900 text-center font-bold text-blue-600">{student.nourut || '-'}</td>
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">{student.studentNo}</td>
@@ -1001,12 +997,8 @@ function StudentsPageContent() {
                       type="button"
                       onClick={async () => {
                         try {
-                          const token = localStorage.getItem('accessToken');
-                          const response = await fetch('/api/wali-kelas/students/template', {
+                          const response = await apiFetch('/api/wali-kelas/students/template', {
                             method: 'GET',
-                            headers: {
-                              Authorization: `Bearer ${token}`,
-                            },
                           });
 
                           if (!response.ok) {
@@ -1033,7 +1025,7 @@ function StudentsPageContent() {
                           document.body.removeChild(link);
                           window.URL.revokeObjectURL(url);
                         } catch (error) {
-                          console.error('Template download error:', error);
+                          devError('Template download error:', error);
                           alert('❌ Gagal mengunduh template');
                         }
                       }}
@@ -1107,7 +1099,7 @@ function StudentsPageContent() {
                         <div className="mt-3 max-h-48 overflow-y-auto">
                           <p className="text-xs font-semibold text-gray-700 mb-1">Error Details:</p>
                           <ul className="space-y-1 text-xs text-red-600">
-                            {importResult.data.errors.slice(0, 10).map((err: any, idx: number) => (
+                            {importResult.data.errors.slice(0, 10).map((err: ImportErrorItem, idx: number) => (
                               <li key={idx}>
                                 Row {err.row}: {err.message}
                               </li>

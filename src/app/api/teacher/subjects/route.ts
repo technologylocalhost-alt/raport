@@ -1,44 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireTeacherOrWaliKelas } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
 export async function GET(request: NextRequest) {
   try {
-    // Verify token
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    const token = authHeader.slice(7);
-    const payload = verifyAccessToken(token);
-
-    if (!payload) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid token' },
-        { status: 401 }
-      );
-    }
-
-    const teacher = await prisma.user.findUnique({
-      where: { id: payload.userId },
-    });
+    const teacher = await requireTeacherOrWaliKelas(request);
 
     if (!teacher) {
       return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
-    // Allow both TEACHER and WALI_KELAS roles
-    if (teacher.role !== 'TEACHER' && teacher.role !== 'WALI_KELAS') {
-      return NextResponse.json(
-        { success: false, error: 'Not authorized' },
-        { status: 403 }
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
       );
     }
 
@@ -74,14 +46,15 @@ export async function GET(request: NextRequest) {
     });
 
     // Group by subject and aggregate classes
-    const subjectsMap = new Map<string, any>();
+    const subjectsMap = new Map<string, { id: string; code: string; name: string; nameArabic: string | null; description: string | null; creditHours: number | null; classes: { id: string; name: string; level: { id: string; name: string } | null }[] }>();
     
     classTeachers.forEach((ct) => {
       const key = ct.subject.id;
       if (subjectsMap.has(key)) {
         const existing = subjectsMap.get(key);
+        if (!existing) return;
         // Add class if not already present
-        if (!existing.classes.find((c: any) => c.id === ct.class.id)) {
+        if (!existing.classes.find((c) => c.id === ct.class.id)) {
           existing.classes.push({
             id: ct.class.id,
             name: ct.class.name,
@@ -115,7 +88,7 @@ export async function GET(request: NextRequest) {
       total: uniqueSubjects.length,
     });
   } catch (error) {
-    console.error('Get teacher subjects error:', error);
+    serverError('Get teacher subjects error:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to fetch subjects' },
       { status: 500 }

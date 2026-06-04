@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Plus, Search, ChevronLeft, ChevronRight, CheckCircle, Download } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface AttendanceRecord {
   id: string;
@@ -48,28 +50,47 @@ export default function AttendancePage() {
   const limit = 10;
   const totalPages = Math.ceil(total / limit);
 
-  useEffect(() => {
-    fetchAttendance();
-    fetchSubjects();
-  }, [page, search, filterDate]);
-
-  async function fetchSubjects() {
+  const fetchSubjects = useCallback(async () => {
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch('/api/teacher/subjects', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch('/api/teacher/subjects');
 
       const data = await response.json();
       if (data.success && data.data) {
         setSubjects(data.data);
       }
     } catch (error) {
-      console.error('Error fetching subjects:', error);
+      devError('Error fetching subjects:', error);
     }
-  }
+  }, []);
+
+  const fetchAttendance = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: '10',
+        ...(search && { search }),
+        ...(filterDate && { date: filterDate }),
+      });
+
+      const response = await apiFetch(`/api/teacher/attendance?${params}`);
+
+      const data = await response.json();
+      if (data.success) {
+        setAttendance(data.data);
+        setTotal(data.total);
+      }
+    } catch (error) {
+      devError('Error fetching attendance:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [filterDate, page, search]);
+
+  useEffect(() => {
+    void fetchAttendance();
+    void fetchSubjects();
+  }, [fetchAttendance, fetchSubjects]);
 
   async function fetchStudentsBySubject(subjectId: string) {
     if (!subjectId) {
@@ -79,12 +100,7 @@ export default function AttendancePage() {
 
     try {
       setLoadingStudents(true);
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/teacher/subjects/${subjectId}/students`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch(`/api/teacher/subjects/${subjectId}/students`);
 
       const data = await response.json();
       if (data.success && data.data) {
@@ -93,51 +109,20 @@ export default function AttendancePage() {
         setStudents([]);
       }
     } catch (error) {
-      console.error('Error fetching students:', error);
+      devError('Error fetching students:', error);
       setStudents([]);
     } finally {
       setLoadingStudents(false);
     }
   }
 
-  async function fetchAttendance() {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('accessToken');
-      const params = new URLSearchParams({
-        page: page.toString(),
-        limit: '10',
-        ...(search && { search }),
-        ...(filterDate && { date: filterDate }),
-      });
-
-      const response = await fetch(`/api/teacher/attendance?${params}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        setAttendance(data.data);
-        setTotal(data.total);
-      }
-    } catch (error) {
-      console.error('Error fetching attendance:', error);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch('/api/teacher/attendance', {
+      const response = await apiFetch('/api/teacher/attendance', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           subjectId: formData.subjectId,
@@ -152,30 +137,28 @@ export default function AttendancePage() {
         setShowForm(false);
         setFormData({ subjectId: '', studentId: '', status: 'HADIR', notes: '' });
         setStudents([]);
-        fetchAttendance();
+        void fetchAttendance();
       }
     } catch (error) {
-      console.error('Error saving attendance:', error);
+      devError('Error saving attendance:', error);
     }
   };
 
   const handleStatusChange = async (id: string, newStatus: 'HADIR' | 'ALFA' | 'SAKIT' | 'IZIN') => {
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/teacher/attendance/${id}`, {
+      const response = await apiFetch(`/api/teacher/attendance/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ status: newStatus }),
       });
 
       if (response.ok) {
-        fetchAttendance();
+        void fetchAttendance();
       }
     } catch (error) {
-      console.error('Error updating attendance:', error);
+      devError('Error updating attendance:', error);
     }
   };
 
@@ -184,13 +167,6 @@ export default function AttendancePage() {
     ALFA: 'bg-red-100 text-red-700 border-red-300',
     SAKIT: 'bg-yellow-100 text-yellow-700 border-yellow-300',
     IZIN: 'bg-blue-100 text-blue-700 border-blue-300',
-  };
-
-  const statusLabels = {
-    HADIR: '✓ Hadir',
-    ALFA: '❌ Alfa',
-    SAKIT: '🤒 Sakit',
-    IZIN: '📝 Izin',
   };
 
   return (

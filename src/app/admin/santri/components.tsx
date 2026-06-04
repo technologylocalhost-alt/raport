@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Save, Trash2, X } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 // === FORM FIELD COMPONENTS ===
 
@@ -58,6 +60,14 @@ interface KamarItem {
   smt2: string;
 }
 
+interface ClassHistoryItem {
+  schoolYear?: string;
+  semester?: string;
+  levelName?: string;
+  className?: string;
+  waliKelasName?: string;
+}
+
 export function KamarHistoryInput({ value, onChange }: { 
   value: string; 
   onChange: (name: string, val: string) => void;
@@ -69,12 +79,13 @@ export function KamarHistoryInput({ value, onChange }: {
     try {
       const parsed = value ? JSON.parse(value) : [];
       if (JSON.stringify(parsed) !== JSON.stringify(items)) {
-        setItems(parsed);
+        const timer = setTimeout(() => setItems(parsed as KamarItem[]), 0);
+        return () => clearTimeout(timer);
       }
     } catch (e) {
-      console.error('Error parsing kamar history JSON:', e);
+      devError('Error parsing kamar history JSON:', e);
     }
-  }, [value]);
+  }, [items, value]);
 
   const updateItems = (newItems: KamarItem[]) => {
     setItems(newItems);
@@ -213,7 +224,7 @@ const PENDIDIKAN_OPTIONS = [
 
 // === TAB CONTENT RENDERER ===
 
-export function renderTabContent(activeTab: string, formData: Record<string, string>, onChange: (name: string, val: string) => void, classHistory?: any[]) {
+export function renderTabContent(activeTab: string, formData: Record<string, string>, onChange: (name: string, val: string) => void, classHistory?: ClassHistoryItem[]) {
   const F = formData;
   const C = onChange;
 
@@ -385,7 +396,7 @@ export function renderTabContent(activeTab: string, formData: Record<string, str
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {classHistory.map((ch: any, idx: number) => (
+                  {classHistory.map((ch: ClassHistoryItem, idx: number) => (
                     <tr key={idx} className="hover:bg-gray-50">
                       <td className="px-4 py-2.5 text-gray-700">{idx + 1}</td>
                       <td className="px-4 py-2.5 text-gray-900 font-medium">{ch.schoolYear}</td>
@@ -524,7 +535,7 @@ export function renderTabContent(activeTab: string, formData: Record<string, str
 export function SantriFormPage({ id }: { id?: string }) {
   const router = useRouter();
   const [formData, setFormData] = useState<Record<string, string>>({ ...EMPTY_FORM });
-  const [classHistory, setClassHistory] = useState<any[]>([]);
+  const [classHistory, setClassHistory] = useState<ClassHistoryItem[]>([]);
   const [activeTab, setActiveTab] = useState('identitas');
   const [isLoading, setIsLoading] = useState(!!id);
   const [isSaving, setIsSaving] = useState(false);
@@ -532,10 +543,9 @@ export function SantriFormPage({ id }: { id?: string }) {
   const isEdit = !!id;
 
   // Load data if editing
-  useState(() => {
+  useEffect(() => {
     if (!id) return;
-    const token = localStorage.getItem('accessToken');
-    fetch(`/api/admin/santri/${id}`, { headers: { Authorization: `Bearer ${token}` } })
+    void apiFetch(`/api/admin/santri/${id}`)
       .then(res => res.json())
       .then(result => {
         if (!result.success) { alert('Gagal memuat data'); router.push('/admin/santri'); return; }
@@ -555,7 +565,7 @@ export function SantriFormPage({ id }: { id?: string }) {
       })
       .catch(() => { alert('Gagal memuat data'); router.push('/admin/santri'); })
       .finally(() => setIsLoading(false));
-  });
+  }, [id, router]);
 
   const handleFieldChange = (name: string, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -570,11 +580,11 @@ export function SantriFormPage({ id }: { id?: string }) {
     }
     try {
       setIsSaving(true);
-      const token = localStorage.getItem('accessToken');
       const url = isEdit ? `/api/admin/santri/${id}` : '/api/admin/santri';
       const method = isEdit ? 'PUT' : 'POST';
-      const response = await fetch(url, {
-        method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      const response = await apiFetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
       if (!response.ok) {
@@ -591,7 +601,7 @@ export function SantriFormPage({ id }: { id?: string }) {
       }
       // Jika mode edit, tetap di halaman tanpa push/replace.
     } catch (error) {
-      console.error('Error saving:', error);
+      devError('Error saving:', error);
       alert('Terjadi kesalahan');
     } finally {
       setIsSaving(false);

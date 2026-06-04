@@ -1,29 +1,23 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { getAuthenticatedUser } from '@/lib/auth/access';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
+async function requireStudentReadWrite(req: NextRequest) {
+  const user = await getAuthenticatedUser(req);
+  if (!user) return null;
+
+  if (user.role === 'ADMIN' || user.role === 'PRINCIPAL') {
+    return requireMenuAccess(req, '/admin/students', ['ADMIN', 'PRINCIPAL']);
   }
 
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
+  if (user.role === 'WALI_KELAS') {
+    return requireMenuAccess(req, '/wali-kelas/classes', ['WALI_KELAS']);
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL' || user.role === 'WALI_KELAS')) {
-    return user;
-  }
   return null;
 }
 
@@ -37,7 +31,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const admin = await verifyAdmin(request);
+    const admin = await requireStudentReadWrite(request);
 
     if (!admin) {
       return errorResponse('Unauthorized', 401);
@@ -73,7 +67,7 @@ export async function GET(
       className: student.class?.name || '-',
     });
   } catch (error) {
-    console.error('Error fetching student:', error);
+    serverError('Error fetching student:', error);
     return errorResponse('Gagal memuat data siswa', 500);
   }
 }
@@ -86,12 +80,12 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  let admin: any;
+  let admin;
   let id = '';
   try {
     const result = await params;
     id = result.id;
-    admin = await verifyAdmin(request);
+    admin = await requireStudentReadWrite(request);
 
     if (!admin) {
       return errorResponse('Unauthorized', 401);
@@ -156,7 +150,7 @@ export async function PUT(
       classId: updatedStudent.classId,
     });
   } catch (error) {
-    console.error('Error updating student:', error);
+    serverError('Error updating student:', error);
     if (admin) {
       await logActivity({
         userId: admin.id,
@@ -182,12 +176,12 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  let admin: any;
+  let admin;
   let id = '';
   try {
     const result = await params;
     id = result.id;
-    admin = await verifyAdmin(request);
+    admin = await requireStudentReadWrite(request);
 
     if (!admin) {
       return errorResponse('Unauthorized', 401);
@@ -201,7 +195,6 @@ export async function DELETE(
       return errorResponse('Siswa tidak ditemukan', 404);
     }
 
-    const deletedStudent = student;
     await prisma.student.delete({
       where: { id },
     });
@@ -221,7 +214,7 @@ export async function DELETE(
 
     return successResponse(null, 'Siswa berhasil dihapus');
   } catch (error) {
-    console.error('Error deleting student:', error);
+    serverError('Error deleting student:', error);
     if (admin) {
       await logActivity({
         userId: admin.id,

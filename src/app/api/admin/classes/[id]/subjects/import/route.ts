@@ -1,13 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { ensureClassOwnedByWaliKelasOrAllowed, requireClassSubjectAccess } from '@/lib/auth/class-access';
+import { AuthenticatedUser } from '@/lib/auth/access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import * as XLSX from 'xlsx';
+import { serverError } from '@/lib/server-log';
 
 // Helper function to parse CSV row properly (handle quoted fields)
 function parseCSVRow(row: string): string[] {
-  const result = [];
+  const result: string[] = [];
   let current = '';
   let insideQuotes = false;
 
@@ -42,39 +44,17 @@ function normalizeColumnName(name: string): string {
 // Helper function to parse Excel file and return array of rows
 async function parseExcelFile(
   file: File
-): Promise<{ data: Record<string, any>[], headers: string[] }> {
+): Promise<{ data: Record<string, unknown>[], headers: string[] }> {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer);
   const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-  const data = XLSX.utils.sheet_to_json(worksheet) as Record<string, any>[];
+  const data = XLSX.utils.sheet_to_json(worksheet) as Record<string, unknown>[];
 
   const headers = Object.keys(data[0] || {}).map(h => normalizeColumnName(h));
 
   return { data, headers };
 }
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL' || user.role === 'WALI_KELAS')) {
-    return user;
-  }
-  return null;
-}
 
 /**
  * POST /api/admin/classes/[id]/subjects/import
@@ -84,28 +64,18 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  let user: any;
+  let user: AuthenticatedUser | null = null;
   try {
-    user = await verifyAdmin(request);
+    user = await requireClassSubjectAccess(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
 
     const { id } = await params;
+    const access = await ensureClassOwnedByWaliKelasOrAllowed(user, id);
 
-    // Verify the class exists
-    const classData = await prisma.class.findUnique({
-      where: { id },
-      select: { id: true, waliKelasId: true },
-    });
-
-    if (!classData) {
-      return errorResponse('Class not found', 404);
-    }
-
-    // If user is WALI_KELAS, verify they own this class
-    if (user.role === 'WALI_KELAS' && classData.waliKelasId !== user.id) {
-      return errorResponse('Unauthorized', 403);
+    if (!access.ok) {
+      return errorResponse(access.reason === 'NOT_FOUND' ? 'Class not found' : 'Unauthorized', access.reason === 'NOT_FOUND' ? 404 : 403);
     }
 
     const formData = await request.formData();
@@ -118,8 +88,7 @@ export async function POST(
     const fileName = file.name.toLowerCase();
     const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
 
-    let rows: any[] = [];
-    let headerMap: Record<string, number> = {};
+    let rows: Record<string, unknown>[] = [];
 
     if (isExcel) {
       // Parse Excel file
@@ -133,12 +102,7 @@ export async function POST(
         return errorResponse('Excel must contain "Kode" and "Nama" columns', 400);
       }
 
-      // Create map from original headers to data keys
-      const originalHeaders = Object.keys(data[0] || {});
-      headerMap = {
-        kode: codeHeaderIdx,
-        nama: nameHeaderIdx,
-      };
+      // Headers validated above
     } else {
       // Parse CSV file
       const text = await file.text();
@@ -166,7 +130,7 @@ export async function POST(
         });
       }
 
-      headerMap = { kode: 0, nama: 1 };
+      // CSV headers validated above
     }
 
     if (rows.length === 0) {
@@ -183,10 +147,10 @@ export async function POST(
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const code = isExcel
-        ? row[Object.keys(row)[Object.keys(row).findIndex(k => normalizeColumnName(k) === 'kode')]]
+        ? row[Object.keys(row)[Object.keys(row).findIndex((k) => normalizeColumnName(k) === 'kode')]]
         : row.kode;
       const name = isExcel
-        ? row[Object.keys(row)[Object.keys(row).findIndex(k => normalizeColumnName(k) === 'nama')]]
+        ? row[Object.keys(row)[Object.keys(row).findIndex((k) => normalizeColumnName(k) === 'nama')]]
         : row.nama;
 
       if (!code || !name) {
@@ -231,8 +195,8 @@ export async function POST(
         });
 
         results.imported++;
-      } catch (error: any) {
-        results.errors.push(`Row ${i + 2}: ${error.message}`);
+      } catch (error: unknown) {
+        results.errors.push(`Row ${i + 2}: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
 
@@ -250,8 +214,8 @@ export async function POST(
     });
 
     return successResponse(results, 'Subjects imported successfully');
-  } catch (error: any) {
-    console.error('Import subjects error:', error);
+  } catch (error: unknown) {
+    serverError('Import subjects error:', error);
     if (user) {
       await logActivity({
         userId: user.id,
@@ -259,7 +223,7 @@ export async function POST(
         resourceType: 'ClassSubject',
         resourceId: '',
         description: 'Failed to import subjects',
-        errorMessage: error?.message || 'Unknown error',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
         ipAddress: getClientIp(request),
         userAgent: getUserAgent(request),
         status: 'FAILED',

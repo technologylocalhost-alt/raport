@@ -4,7 +4,10 @@ import { generateTokens } from '@/lib/auth/jwt';
 import { parseExpiryString, getTokenExpiryDate } from '@/lib/auth/utils';
 import { prisma } from '@/lib/db';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { clearAuthCookies, setAccessTokenCookie, setNoStoreHeaders, setRefreshTokenCookie } from '@/lib/auth/cookies';
+import { rateLimit, rateLimitPresets } from '@/middleware/rateLimit';
 import { z } from 'zod';
+import { serverError } from '@/lib/server-log';
 
 // Validation schema
 const loginSchema = z.object({
@@ -12,10 +15,20 @@ const loginSchema = z.object({
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
-type LoginInput = z.infer<typeof loginSchema>;
+interface PrismaKnownError extends Error {
+  code?: string;
+  meta?: unknown;
+}
+
+interface RefreshTokenCreateError {
+  code?: string;
+}
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await rateLimit(rateLimitPresets.strict)(request);
+    if (rateLimitResponse) return rateLimitResponse;
+
     const body = await request.json();
 
     // Validate input
@@ -25,6 +38,9 @@ export async function POST(request: NextRequest) {
     // Find user by email
     const user = await prisma.user.findUnique({
       where: { email },
+      include: {
+        bagianList: { select: { bagian: true } },
+      },
     });
 
     if (!user || !user.isActive) {
@@ -40,10 +56,13 @@ export async function POST(request: NextRequest) {
         errorMessage: 'User not found or inactive',
       });
 
-      return NextResponse.json(
+      const response = NextResponse.json(
         { error: 'Invalid credentials' },
         { status: 401 }
       );
+      setNoStoreHeaders(response);
+      clearAuthCookies(response);
+      return response;
     }
 
     // Verify password
@@ -64,17 +83,24 @@ export async function POST(request: NextRequest) {
         errorMessage: 'Invalid password',
       });
 
-      return NextResponse.json(
+      const response = NextResponse.json(
         { error: 'Invalid credentials' },
         { status: 401 }
       );
+      setNoStoreHeaders(response);
+      clearAuthCookies(response);
+      return response;
     }
+
+    // Extract bagian list
+    const userBagian = user.bagianList.map((b) => b.bagian);
 
     // Generate tokens
     const { accessToken, refreshToken: initialRefreshToken } = generateTokens({
       userId: user.id,
       email: user.email,
       role: user.role,
+      bagian: userBagian,
     });
 
     // Save refresh token to database
@@ -103,14 +129,15 @@ export async function POST(request: NextRequest) {
           },
         });
         break; // Success, exit loop
-      } catch (err: any) {
-        // If unique constraint error, regenerate token and retry
-        if (err?.code === 'P2002' && retryCount < maxRetries - 1) {
+      } catch (err) {
+        const createError = err as RefreshTokenCreateError;
+        if (createError?.code === 'P2002' && retryCount < maxRetries - 1) {
           retryCount++;
           const newTokens = generateTokens({
             userId: user.id,
             email: user.email,
             role: user.role,
+            bagian: userBagian,
           });
           refreshToken = newTokens.refreshToken;
           continue;
@@ -129,31 +156,15 @@ export async function POST(request: NextRequest) {
         name: user.name,
         role: user.role,
         schoolId: user.schoolId,
+        bagian: userBagian,
       },
     });
 
-    // Set access token as HttpOnly cookie
-    response.cookies.set('accessToken', accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_APP_URL?.startsWith('https'),
-      sameSite: 'lax',
-      maxAge: 36000, // 10 hours
-      path: '/',
-    });
-
-    // Set refresh token as HttpOnly secure cookie
-    response.cookies.set('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_APP_URL?.startsWith('https'),
-      sameSite: 'lax',
-      maxAge: refreshTokenExpiry / 1000, // Convert to seconds
-      path: '/',
-    });
-
-    // Add cache control headers to prevent caching issues
-    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    response.headers.set('Pragma', 'no-cache');
-    response.headers.set('Expires', '0');
+    // Keep returning accessToken for now because the current frontend still depends on localStorage.
+    // Cookies are the canonical server-side session transport.
+    setAccessTokenCookie(response, accessToken, 36000);
+    setRefreshTokenCookie(response, refreshToken, refreshTokenExpiry / 1000);
+    setNoStoreHeaders(response);
 
     // Log successful login
     await logActivity({
@@ -171,32 +182,40 @@ export async function POST(request: NextRequest) {
     return response;
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         { error: 'Validation error', details: error.issues },
         { status: 400 }
       );
+      setNoStoreHeaders(response);
+      return response;
     }
 
     // Handle specific Prisma errors
     if (error instanceof Error && error.name === 'PrismaClientKnownRequestError') {
-      const prismaError = error as any;
+      const prismaError = error as PrismaKnownError;
       if (prismaError.code === 'P2002') {
-        console.error('Unique constraint error during refresh token creation:', {
+        serverError('Unique constraint error during refresh token creation:', {
           code: prismaError.code,
           meta: prismaError.meta,
         });
         // Return 500 as this is a server-side issue that should be investigated
-        return NextResponse.json(
+        const response = NextResponse.json(
           { error: 'Authentication service temporarily unavailable' },
           { status: 500 }
         );
+        setNoStoreHeaders(response);
+        clearAuthCookies(response);
+        return response;
       }
     }
 
-    console.error('Login error:', error);
-    return NextResponse.json(
+    serverError('Login error:', error);
+    const response = NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
     );
+    setNoStoreHeaders(response);
+    clearAuthCookies(response);
+    return response;
   }
 }

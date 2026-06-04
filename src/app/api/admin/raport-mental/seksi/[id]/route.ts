@@ -1,17 +1,11 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireRaportMentalAccess } from '@/lib/auth/access';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  if (!payload) return null;
-  const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) return user;
-  return null;
+async function requireRaportMental(req: NextRequest) {
+  return requireRaportMentalAccess(req, '/admin/raport-mental');
 }
 
 /**
@@ -23,7 +17,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const user = await verifyAdmin(request);
+    const user = await requireRaportMental(request);
     if (!user) return errorResponse('Unauthorized', 401);
 
     const seksi = await prisma.raportMentalSeksi.findUnique({
@@ -36,7 +30,7 @@ export async function GET(
     if (!seksi) return errorResponse('Seksi tidak ditemukan', 404);
     return successResponse(seksi);
   } catch (error) {
-    console.error('Error fetching seksi:', error);
+    serverError('Error fetching seksi:', error);
     return errorResponse('Gagal memuat data seksi', 500);
   }
 }
@@ -50,7 +44,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const user = await verifyAdmin(request);
+    const user = await requireRaportMental(request);
     if (!user) return errorResponse('Unauthorized', 401);
 
     const body = await request.json();
@@ -80,7 +74,7 @@ export async function PUT(
 
     return successResponse(updated, 'Seksi berhasil diperbarui');
   } catch (error) {
-    console.error('Error updating seksi:', error);
+    serverError('Error updating seksi:', error);
     return errorResponse('Gagal memperbarui seksi', 500);
   }
 }
@@ -94,7 +88,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const user = await verifyAdmin(request);
+    const user = await requireRaportMental(request);
     if (!user) return errorResponse('Unauthorized', 401);
 
     const existing = await prisma.raportMentalSeksi.findUnique({ where: { id } });
@@ -103,7 +97,7 @@ export async function DELETE(
     await prisma.raportMentalSeksi.delete({ where: { id } });
     return successResponse(null, 'Seksi berhasil dihapus');
   } catch (error) {
-    console.error('Error deleting seksi:', error);
+    serverError('Error deleting seksi:', error);
     return errorResponse('Gagal menghapus seksi', 500);
   }
 }

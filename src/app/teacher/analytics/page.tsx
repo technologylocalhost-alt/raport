@@ -1,11 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
+import {
   BarChart3, BookOpen, CheckCircle, Filter, Users, TrendingUp,
   AlertCircle, Loader
 } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { getCurrentUser } from '@/lib/auth/client';
+import { devError } from '@/lib/dev-log';
 
 interface TeacherStats {
   totalClasses: number;
@@ -37,37 +40,18 @@ export default function TeacherAnalyticsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedClass, setSelectedClass] = useState('');
 
-  useEffect(() => {
-    const user = localStorage.getItem('user');
-    if (!user) {
-      router.push('/login');
-      return;
-    }
-
-    const userData = JSON.parse(user);
-    if (userData.role !== 'TEACHER') {
-      router.push('/admin/dashboard');
-      return;
-    }
-
-    fetchData();
-  }, [router, selectedClass]);
-
-  async function fetchData() {
+  const fetchData = useCallback(async () => {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('accessToken');
-      const headers = { 'Authorization': `Bearer ${token}` };
-
       // Fetch teacher stats
-      const statsRes = await fetch('/api/teacher/analytics', { headers });
+      const statsRes = await apiFetch('/api/teacher/analytics');
       if (statsRes.ok) {
         const statsData = await statsRes.json();
         setStats(statsData.data);
       }
 
       // Fetch teacher classes
-      const classesRes = await fetch('/api/teacher/classes', { headers });
+      const classesRes = await apiFetch('/api/teacher/classes');
       if (classesRes.ok) {
         const classesData = await classesRes.json();
         setClasses(classesData.data || []);
@@ -77,17 +61,31 @@ export default function TeacherAnalyticsPage() {
       const params = new URLSearchParams();
       if (selectedClass) params.append('classId', selectedClass);
       
-      const classAnalyticsRes = await fetch(`/api/teacher/analytics/classes?${params}`, { headers });
+      const classAnalyticsRes = await apiFetch(`/api/teacher/analytics/classes?${params}`);
       if (classAnalyticsRes.ok) {
         const classAnalyticsData = await classAnalyticsRes.json();
         setClassesData(classAnalyticsData.data || []);
       }
     } catch (error) {
-      console.error('Error fetching analytics data:', error);
+      devError('Error fetching analytics data:', error);
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [selectedClass]);
+
+  useEffect(() => {
+    const userData = getCurrentUser();
+    if (!userData) {
+      router.push('/login');
+      return;
+    }
+    if (userData.role !== 'TEACHER') {
+      router.push('/admin/dashboard');
+      return;
+    }
+
+    void fetchData();
+  }, [fetchData, router]);
 
   if (isLoading) {
     return (

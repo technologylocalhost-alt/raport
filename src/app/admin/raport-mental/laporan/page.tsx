@@ -3,6 +3,8 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Download, Printer } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { getCurrentUser } from '@/lib/auth/client';
 
 interface School {
   id: string;
@@ -245,21 +247,36 @@ function MentalReportContent() {
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-    if (!token) {
+    const parsedUser = getCurrentUser();
+
+    if (!parsedUser) {
       setError('Sesi login tidak ditemukan');
       setIsLoading(false);
       return;
     }
 
-    const headers = { Authorization: `Bearer ${token}` };
+    try {
+      const bagian = Array.isArray(parsedUser?.bagian) ? parsedUser.bagian : [];
+      const role = parsedUser?.role;
+
+      if (bagian.length === 0) {
+        if (role === 'TEACHER') router.replace('/teacher/dashboard');
+        else if (role === 'WALI_KELAS') router.replace('/wali-kelas/dashboard');
+        else if (role === 'ADMIN' || role === 'PRINCIPAL') router.replace('/admin/dashboard');
+        else router.replace('/login');
+        return;
+      }
+    } catch {
+      router.replace('/login');
+      return;
+    }
 
     const fetchData = async () => {
       try {
         const [schoolRes, seksiRes, nilaiRes] = await Promise.all([
-          fetch('/api/admin/schools?limit=100', { headers }),
-          fetch('/api/admin/raport-mental/seksi', { headers }),
-          fetch(`/api/admin/raport-mental/nilai?studentNo=${studentNo}&schoolYearId=${schoolYearId}&semesterId=${semesterId}`, { headers }),
+          apiFetch('/api/admin/schools?limit=100'),
+          apiFetch('/api/admin/raport-mental/seksi'),
+          apiFetch(`/api/admin/raport-mental/nilai?studentNo=${studentNo}&schoolYearId=${schoolYearId}&semesterId=${semesterId}`),
         ]);
 
         const [schoolJson, seksiJson, nilaiJson] = await Promise.all([
@@ -301,7 +318,7 @@ function MentalReportContent() {
     }
 
     fetchData();
-  }, [schoolId, schoolYearId, semesterId, studentNo]);
+  }, [router, schoolId, schoolYearId, semesterId, studentNo]);
 
   const nilaiMap = useMemo(
     () => new Map(nilaiList.map((item) => [item.aspek.id, item])),
@@ -341,11 +358,10 @@ function MentalReportContent() {
   </body>
 </html>`;
 
-      const response = await fetch('/api/admin/raport-mental/generate-pdf', {
+      const response = await apiFetch('/api/admin/raport-mental/generate-pdf', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('accessToken') || ''}`,
         },
         body: JSON.stringify({
           html,

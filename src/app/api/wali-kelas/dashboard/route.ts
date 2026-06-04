@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireWaliKelasOnly } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
 interface Activity {
   id: string;
@@ -11,23 +12,8 @@ interface Activity {
   activityType: 'success' | 'info' | 'warning';
 }
 
-interface SubjectTeacher {
-  subjectId: string;
-  subjectName: string;
-  teacherId: string;
-  teacherName: string;
-}
-
-async function getWaliKelas(token: string) {
-  const payload = verifyAccessToken(token);
-  if (!payload) throw new Error('Invalid token');
-  
-  const waliKelas = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-  
-  if (!waliKelas || waliKelas.role !== 'WALI_KELAS') throw new Error('Not a wali kelas');
-  return waliKelas;
+async function requireWaliKelasAccess(request: NextRequest) {
+  return requireWaliKelasOnly(request);
 }
 
 async function getRecentActivities(classId: string): Promise<Activity[]> {
@@ -160,18 +146,15 @@ async function getWaliKelasStats(waliKelasId: string) {
 
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
+    const waliKelas = await requireWaliKelasAccess(request);
+    if (!waliKelas) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const token = authHeader.substring(7);
-    const waliKelas = await getWaliKelas(token);
     const stats = await getWaliKelasStats(waliKelas.id);
 
     return NextResponse.json({ data: stats });
   } catch (error) {
-    console.error('Dashboard error:', error);
+    serverError('Dashboard error:', error);
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 }

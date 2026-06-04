@@ -9,8 +9,6 @@ import { ZodError } from 'zod';
 import {
   AppError,
   ValidationError,
-  UnauthorizedError,
-  ForbiddenError,
   NotFoundError,
   DatabaseError,
   isOperationalError,
@@ -125,7 +123,7 @@ export function handleError(error: unknown): NextResponse<ErrorResponse> {
  * Async error wrapper untuk API handlers
  * Catches errors dan process dengan handleError
  */
-export function asyncHandler<T extends any[]>(
+export function asyncHandler<T extends unknown[]>(
   handler: (...args: T) => Promise<NextResponse>
 ) {
   return async (...args: T): Promise<NextResponse> => {

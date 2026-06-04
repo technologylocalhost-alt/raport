@@ -1,11 +1,20 @@
 import { prisma } from './db';
 import { ActivityAction, ActivityStatus } from '@prisma/client';
 import { NextRequest } from 'next/server';
+import { serverError } from '@/lib/server-log';
 
 /**
  * Activity Logging Utility
  * Handles all activity logging for the application
  */
+
+type SerializableValue = unknown;
+
+interface SocketRequestLike {
+  socket?: {
+    remoteAddress?: string;
+  };
+}
 
 export interface LogActivityParams {
   userId: string;
@@ -14,8 +23,8 @@ export interface LogActivityParams {
   resourceId?: string;
   resourceName?: string;
   description?: string;
-  oldValue?: any;
-  newValue?: any;
+  oldValue?: SerializableValue;
+  newValue?: SerializableValue;
   ipAddress?: string;
   userAgent?: string;
   status?: ActivityStatus;
@@ -29,7 +38,6 @@ export async function logActivity(params: LogActivityParams) {
   try {
     // Only log if userId is provided
     if (!params.userId) {
-      console.warn('Activity logging skipped: userId not provided');
       return null;
     }
 
@@ -61,13 +69,9 @@ export async function logActivity(params: LogActivityParams) {
       },
     });
 
-    console.log(
-      `[ActivityLog] ${params.action} | ${params.resourceType} | User: ${params.userId}`
-    );
-
     return activity;
   } catch (error) {
-    console.error('Error logging activity:', error);
+    serverError('Error logging activity:', error);
     // Don't throw - activity logging should never break the main flow
     return null;
   }
@@ -90,7 +94,7 @@ export function getClientIp(request: NextRequest): string {
   // For Request objects (which NextRequest extends), try socket.remoteAddress
   // In most cases, this will fail in serverless environments, so we fallback to 'unknown'
   try {
-    const socket = (request as any).socket;
+    const socket = (request as NextRequest & SocketRequestLike).socket;
     if (socket?.remoteAddress) {
       return socket.remoteAddress;
     }
@@ -113,12 +117,12 @@ export function getUserAgent(request: NextRequest): string {
  */
 export async function logActivityError(
   params: LogActivityParams,
-  error: any
+  error: unknown
 ) {
   return logActivity({
     ...params,
     status: 'FAILED',
-    errorMessage: error?.message || 'Unknown error',
+    errorMessage: error instanceof Error ? error.message : 'Unknown error',
   });
 }
 
@@ -152,11 +156,14 @@ export async function logBulkActivity(
 /**
  * Helper to compare old and new values for update logs
  */
-export function getChangedFields(oldData: any, newData: any): {
+export function getChangedFields(
+  oldData: Record<string, unknown> | null | undefined,
+  newData: Record<string, unknown>
+): {
   changed: boolean;
-  changes: Record<string, { old: any; new: any }>;
+  changes: Record<string, { old: unknown; new: unknown }>;
 } {
-  const changes: Record<string, { old: any; new: any }> = {};
+  const changes: Record<string, { old: unknown; new: unknown }> = {};
 
   for (const key in newData) {
     const oldVal = oldData?.[key];

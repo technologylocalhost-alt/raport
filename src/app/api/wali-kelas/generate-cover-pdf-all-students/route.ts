@@ -4,6 +4,7 @@ import chromium from '@sparticuz/chromium';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { prisma } from '@/lib/db';
+import { serverError } from '@/lib/server-log';
 
 export async function POST(request: NextRequest) {
   let browser = null;
@@ -43,40 +44,35 @@ export async function POST(request: NextRequest) {
       const bingkaiPath = join(publicPath, 'bingkai.png');
       const bingkaiBuffer = readFileSync(bingkaiPath);
       bingkaiBase64 = bingkaiBuffer.toString('base64');
-    } catch (err) {
-      console.log('Bingkai not found');
+    } catch {
     }
 
     try {
       const kmiPath = join(publicPath, 'KMI.jpg');
       const kmiBuffer = readFileSync(kmiPath);
       kmiLogoBase64 = kmiBuffer.toString('base64');
-    } catch (err) {
-      console.log('KMI logo not found');
+    } catch {
     }
 
     try {
       const kmiPutriPath = join(publicPath, 'kmi_putri.png');
       const kmiPutriBuffer = readFileSync(kmiPutriPath);
       kmiPutriLogoBase64 = kmiPutriBuffer.toString('base64');
-    } catch (err) {
-      console.log('KMI Putri logo not found');
+    } catch {
     }
 
     try {
       const mahadPath = join(publicPath, 'mahad.png');
       const mahadBuffer = readFileSync(mahadPath);
       mahadLogoBase64 = mahadBuffer.toString('base64');
-    } catch (err) {
-      console.log('Mahad logo not found');
+    } catch {
     }
 
     try {
       const kasyfuPath = join(publicPath, 'kasyfu.jpg');
       const kasyfuBuffer = readFileSync(kasyfuPath);
       kasyfuImageBase64 = kasyfuBuffer.toString('base64');
-    } catch (err) {
-      console.log('Kasyfu image not found');
+    } catch {
     }
 
     // Generate HTML with all student covers
@@ -99,8 +95,7 @@ export async function POST(request: NextRequest) {
         if (nilaiApprove?.nomorRaport) {
           nomorRaport = nilaiApprove.nomorRaport;
         }
-      } catch (err) {
-        console.log(`Could not fetch nomorRaport for student ${student.id}:`, err);
+      } catch {
       }
       allCoversHTML += `
         <div class="cover-page">
@@ -406,7 +401,6 @@ export async function POST(request: NextRequest) {
       '--disable-default-apps',
     ];
 
-    console.log('Launching browser for all covers PDF');
     
     browser = await puppeteer.launch({
       args: launchArgs,
@@ -426,10 +420,8 @@ export async function POST(request: NextRequest) {
       deviceScaleFactor: 1,
     });
 
-    console.log('Setting page content...');
     await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 60000 });
 
-    console.log('Generating PDF...');
     const pdfBuffer = await page.pdf({
       width: '215mm',
       height: '330mm',
@@ -443,29 +435,27 @@ export async function POST(request: NextRequest) {
     });
 
     await browser.close();
-    console.log('PDF buffer size:', pdfBuffer.length);
 
     // Convert to base64
     const pdfBase64 = Buffer.from(pdfBuffer).toString('base64');
     const pdfDataUrl = `data:application/pdf;base64,${pdfBase64}`;
 
-    console.log('All covers PDF generated successfully');
     return NextResponse.json({
       success: true,
       pdf: pdfDataUrl,
       fileName: `Sampul_Semua_${className.replace(/\s+/g, '_')}.pdf`,
     });
   } catch (error) {
-    console.error('Error generating all covers PDF:', error);
+    serverError('Error generating all covers PDF:', error);
     if (browser) {
       try {
         await browser.close();
       } catch (e) {
-        console.error('Error closing browser:', e);
+        serverError('Error closing browser:', e);
       }
     }
     const errorMessage = error instanceof Error ? error.message : 'Gagal membuat PDF sampul semua siswa';
-    console.error('Returning error:', errorMessage);
+    serverError('Returning error:', errorMessage);
     return NextResponse.json(
       { success: false, error: errorMessage },
       { status: 500 }

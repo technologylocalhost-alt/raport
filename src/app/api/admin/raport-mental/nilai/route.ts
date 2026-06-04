@@ -2,18 +2,12 @@ import { NextRequest } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireRaportMentalAccess } from '@/lib/auth/access';
 import { handleError } from '@/middleware/errorHandler';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  if (!payload) return null;
-  const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) return user;
-  return null;
+async function requireRaportMental(req: NextRequest) {
+  return requireRaportMentalAccess(req, '/admin/raport-mental/penilaian');
 }
 
 /**
@@ -22,7 +16,7 @@ async function verifyAdmin(req: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await verifyAdmin(request);
+    const user = await requireRaportMental(request);
     if (!user) return errorResponse('Unauthorized', 401);
 
     const url = new URL(request.url);
@@ -52,7 +46,7 @@ export async function GET(request: NextRequest) {
 
     return successResponse(nilai);
   } catch (error) {
-    console.error('Error fetching nilai:', error);
+    serverError('Error fetching nilai:', error);
     return errorResponse('Gagal memuat data nilai', 500);
   }
 }
@@ -64,7 +58,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const user = await verifyAdmin(request);
+    const user = await requireRaportMental(request);
     if (!user) return errorResponse('Unauthorized', 401);
 
     const body = await request.json();
@@ -171,13 +165,13 @@ export async function POST(request: NextRequest) {
     return successResponse({ count: normalizedItems.length }, `${normalizedItems.length} nilai berhasil disimpan`);
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      console.error('Error saving nilai (Prisma):', {
+      serverError('Error saving nilai (Prisma):', {
         code: error.code,
         meta: error.meta,
         message: error.message,
       });
     } else {
-      console.error('Error saving nilai:', error);
+      serverError('Error saving nilai:', error);
     }
     return handleError(error);
   }

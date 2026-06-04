@@ -2,7 +2,8 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireTeacherWaliAdminPrincipal } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
 const importGradeSchema = z.object({
   studentNo: z.string().min(1, 'Student number is required'),
@@ -24,33 +25,14 @@ const importGradeSchema = z.object({
   notes: z.string().optional(),
 });
 
-async function getUser(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (user && (user.role === 'TEACHER' || user.role === 'WALI_KELAS' || user.role === 'ADMIN')) {
-    return user;
-  }
-  return null;
+async function requireGradeImportAccess(req: NextRequest) {
+  return requireTeacherWaliAdminPrincipal(req);
 }
 
 export async function POST(req: NextRequest) {
   try {
     // Get user
-    const user = await getUser(req);
+    const user = await requireGradeImportAccess(req);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
@@ -133,11 +115,11 @@ export async function POST(req: NextRequest) {
       }
 
       // Find competency by name (case-insensitive) - only if competencyName is provided
-      let competency: any = null;
+      let competency: (typeof competencies)[number] | null = null;
       if (row.competencyName && row.competencyName.trim() !== '') {
         competency = competencies.find(
           (c) => c.name.toLowerCase() === row.competencyName!.toLowerCase()
-        );
+        ) ?? null;
         
         if (!competency) {
           results.failed++;
@@ -213,7 +195,7 @@ export async function POST(req: NextRequest) {
       200
     );
   } catch (error) {
-    console.error('Error in grade import:', error);
+    serverError('Error in grade import:', error);
     return errorResponse(
       error instanceof Error ? error.message : 'Internal server error',
       500

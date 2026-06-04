@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 import {
   TrendingUp,
   CheckCircle,
@@ -92,7 +94,6 @@ export function NaikKelasContent() {
 
   // Step 3 data
   const [targetClasses, setTargetClasses] = useState<ClassItem[]>([]);
-  const [selectedTargetClassId, setSelectedTargetClassId] = useState<string>('');
 
   // Step 4 data
   const [students, setStudents] = useState<Student[]>([]);
@@ -100,28 +101,10 @@ export function NaikKelasContent() {
   const [studentTargetClass, setStudentTargetClass] = useState<Record<string, string>>({});
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '';
-
-  // ── Fetch classes on mount ──
-  useEffect(() => {
-    fetchClasses();
-  }, []);
-
-  // ── Pre-select class if passed via query param ──
-  useEffect(() => {
-    if (preselectedClassId && classes.length > 0) {
-      setSelectedSourceClassId(preselectedClassId);
-      checkEligibility(preselectedClassId);
-      setStep(2);
-    }
-  }, [preselectedClassId, classes]);
-
-  async function fetchClasses() {
+  const fetchClasses = useCallback(async () => {
     try {
       setIsLoading(true);
-      const res = await fetch('/api/admin/classes?limit=200', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiFetch('/api/admin/classes?limit=200');
       const data = await res.json();
       setClasses(data.data || []);
     } catch {
@@ -129,7 +112,7 @@ export function NaikKelasContent() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, []);
 
   const checkEligibility = useCallback(
     async (classId: string) => {
@@ -137,9 +120,7 @@ export function NaikKelasContent() {
       setEligibility(null);
       setError(null);
       try {
-        const res = await fetch(`/api/admin/classes/${classId}/promotion-eligibility`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await apiFetch(`/api/admin/classes/${classId}/promotion-eligibility`);
         const data = await res.json();
         if (data.success) {
           setEligibility(data.data);
@@ -152,26 +133,26 @@ export function NaikKelasContent() {
         setLoadingEligibility(false);
       }
     },
-    [token]
+    []
   );
 
-  async function fetchTargetClasses(nextLevelId: string) {
-    try {
-      const res = await fetch(`/api/admin/classes?levelId=${nextLevelId}&limit=200`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      setTargetClasses(data.data || []);
-    } catch {
-      setError('Gagal memuat kelas tujuan');
+  // ── Fetch classes on mount ──
+  useEffect(() => {
+    void fetchClasses();
+  }, [fetchClasses]);
+
+  // ── Pre-select class if passed via query param ──
+  useEffect(() => {
+    if (preselectedClassId && classes.length > 0) {
+      setSelectedSourceClassId(preselectedClassId);
+      void checkEligibility(preselectedClassId);
+      setStep(2);
     }
-  }
+  }, [checkEligibility, classes, preselectedClassId]);
 
   async function fetchStudents(classId: string) {
     try {
-      const res = await fetch(`/api/admin/students?classId=${classId}&limit=200`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiFetch(`/api/admin/students?classId=${classId}&limit=200`);
       const data = await res.json();
       let studs: Student[] = data.data || [];
       
@@ -179,9 +160,8 @@ export function NaikKelasContent() {
       if (studs.length > 0) {
         try {
           const studentIdList = studs.map((s) => s.id).join(',');
-          const gradesRes = await fetch(
-            `/api/admin/students/grades?studentIds=${studentIdList}&limit=500`,
-            { headers: { Authorization: `Bearer ${token}` } }
+          const gradesRes = await apiFetch(
+            `/api/admin/students/grades?studentIds=${studentIdList}&limit=500`
           );
           const gradesData = await gradesRes.json();
           const gradesMap: Record<string, { score: string }[]> = {};
@@ -211,7 +191,7 @@ export function NaikKelasContent() {
             return { ...student, averageScore: avgScore };
           });
         } catch (gradesError) {
-          console.error('Failed to fetch grades:', gradesError);
+          devError('Failed to fetch grades:', gradesError);
           // Continue dengan students data tanpa average score
         }
       }
@@ -240,7 +220,6 @@ export function NaikKelasContent() {
   function handleSelectSourceClass(classId: string) {
     setSelectedSourceClassId(classId);
     setEligibility(null);
-    setSelectedTargetClassId('');
     setError(null);
   }
 
@@ -249,7 +228,7 @@ export function NaikKelasContent() {
       setError('Pilih kelas terlebih dahulu');
       return;
     }
-    checkEligibility(selectedSourceClassId);
+    void checkEligibility(selectedSourceClassId);
     setStep(2);
   }
 
@@ -265,12 +244,9 @@ export function NaikKelasContent() {
     }
   }
 
-  function handleSelectTargetClass(classId: string) {
-    setSelectedTargetClassId(classId);
-  }
 
   function handleGoToStep4() {
-    fetchStudents(selectedSourceClassId);
+    void fetchStudents(selectedSourceClassId);
     setStep(4);
   }
 
@@ -331,11 +307,10 @@ export function NaikKelasContent() {
     setIsProcessing(true);
     setError(null);
     try {
-      const res = await fetch(`/api/admin/classes/${selectedSourceClassId}/promote`, {
+      const res = await apiFetch(`/api/admin/classes/${selectedSourceClassId}/promote`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ studentAssignments, retainStudentIds }),
       });
@@ -363,7 +338,6 @@ export function NaikKelasContent() {
     );
 
   const selectedSource = classes.find((c) => c.id === selectedSourceClassId);
-  const selectedTarget = targetClasses.find((c) => c.id === selectedTargetClassId);
   const promoteCount = Object.values(studentStatus).filter((v) => v === 'promote').length;
   const retainCount = Object.values(studentStatus).filter((v) => v === 'retain').length;
 
@@ -685,7 +659,7 @@ export function NaikKelasContent() {
             ) : (
               <div className="grid gap-3 max-h-96 overflow-y-auto pr-1">
                 {targetClasses.map((cls) => {
-                  const siswaCount = (cls as any)._count?.students ?? 0;
+                  const siswaCount = cls._count?.students ?? 0;
                   const willBeFull = siswaCount + (eligibility?.totalStudents ?? 0) > cls.capacity;
                   const isRecommended = targetClasses.length === 1;
                   return (
@@ -929,7 +903,6 @@ export function NaikKelasContent() {
               onClick={() => {
                 setStep(1);
                 setSelectedSourceClassId('');
-                setSelectedTargetClassId('');
                 setEligibility(null);
                 setStudents([]);
                 setStudentStatus({});

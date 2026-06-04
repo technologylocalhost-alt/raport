@@ -1,23 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/db';
+import { requireWaliKelasOnly } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
 export async function GET(request: NextRequest) {
   try {
-    const token = request.headers.get('Authorization')?.split(' ')[1];
-    if (!token) {
+    const user = await requireWaliKelasOnly(request);
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const user = verifyAccessToken(token);
-    if (!user || user.role !== 'WALI_KELAS') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Get all classes where user is wali kelas
     const classes = await prisma.class.findMany({
       where: {
-        waliKelasId: user.userId,
+        waliKelasId: user.id,
       },
       include: {
         level: true,
@@ -34,7 +30,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: classes.map((c: any) => ({
+      data: classes.map((c) => ({
         id: c.id,
         name: c.name,
         levelName: c.level?.name,
@@ -46,7 +42,7 @@ export async function GET(request: NextRequest) {
       })),
     });
   } catch (error) {
-    console.error('Error fetching wali kelas classes:', error);
+    serverError('Error fetching wali kelas classes:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

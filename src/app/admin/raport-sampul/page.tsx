@@ -1,8 +1,11 @@
 'use client';
 
-import { useState, useEffect, Fragment } from 'react';
+import { useCallback, useEffect, useState, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, AlertCircle, Filter, Users, BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { clearAuthData } from '@/lib/auth/client';
+import { devError } from '@/lib/dev-log';
 
 interface School {
   id: string;
@@ -37,6 +40,20 @@ interface Student {
   className: string;
 }
 
+interface ClassResponseItem {
+  id: string;
+  name: string;
+  levelId?: string;
+  level?: { name?: string; id?: string };
+}
+
+interface StudentResponseItem {
+  id: string;
+  name: string;
+  studentNo: string;
+  nourut?: number;
+}
+
 export default function AdminRaportPage() {
   const router = useRouter();
 
@@ -61,70 +78,26 @@ export default function AdminRaportPage() {
   const [totalPages, setTotalPages] = useState(1);
   const itemsPerPage = 20;
 
-  useEffect(() => {
-    fetchClasses();
-  }, []);
-
-  useEffect(() => {
-    if (selectedClassId) {
-      setCurrentPage(1);
-      fetchStudents(selectedClassId, 1);
-    } else {
-      setStudents([]);
-      setTotalStudents(0);
-      setTotalPages(1);
-    }
-  }, [selectedSchool, selectedSchoolYear, selectedClassId]);
-
-  useEffect(() => {
-    if (selectedClassId) {
-      fetchStudents(selectedClassId, currentPage);
-    }
-  }, [currentPage]);
-
-  const getSchoolIdForClass = (classId: string): string | undefined => {
-    const classObj = classes.find(c => c.id === classId);
-    if (!classObj?.levelId) return undefined;
-    const level = levels.find(l => l.id === classObj.levelId);
-    return level?.schoolId;
-  };
-
-  async function fetchClasses() {
+  const fetchClasses = useCallback(async () => {
     try {
       setIsLoadingClasses(true);
-      const token = localStorage.getItem('accessToken');
-      if (!token) {
-        router.push('/login');
-        return;
-      }
 
-      // Fetch school years
-      const yearsResponse = await fetch('/api/admin/school-years?limit=100', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const yearsResponse = await apiFetch('/api/admin/school-years?limit=100');
       const yearsData = await yearsResponse.json();
       setSchoolYears(yearsData.data || []);
 
-      // Fetch schools
-      const schoolsResponse = await fetch('/api/admin/schools?limit=1000', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const schoolsResponse = await apiFetch('/api/admin/schools?limit=1000');
       const schoolsData = await schoolsResponse.json();
       setSchools(schoolsData.data || []);
 
-      // Fetch levels
-      const levelsResponse = await fetch('/api/admin/levels?limit=1000', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const levelsResponse = await apiFetch('/api/admin/levels?limit=1000');
       const levelsData = await levelsResponse.json();
       setLevels(levelsData.data || []);
 
-      const response = await fetch(`/api/admin/classes?limit=1000${selectedSchoolYear ? `&schoolYearId=${selectedSchoolYear}` : ''}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await apiFetch(`/api/admin/classes?limit=1000${selectedSchoolYear ? `&schoolYearId=${selectedSchoolYear}` : ''}`);
 
       if (response.status === 401) {
-        localStorage.clear();
+        clearAuthData();
         router.push('/login');
         return;
       }
@@ -132,7 +105,7 @@ export default function AdminRaportPage() {
       const data = await response.json();
       if (data.success && data.data) {
         setClasses(
-          data.data.map((c: any) => ({
+          (data.data as ClassResponseItem[]).map((c) => ({
             id: c.id,
             name: c.name,
             levelName: c.level?.name || '',
@@ -140,28 +113,25 @@ export default function AdminRaportPage() {
           }))
         );
       }
-    } catch (err) {
-      console.error('Error fetching classes:', err);
+    } catch (error) {
+      devError('Error fetching classes:', error);
       setError('Gagal memuat daftar kelas');
     } finally {
       setIsLoadingClasses(false);
     }
-  }
+  }, [router, selectedSchoolYear]);
 
-  async function fetchStudents(classId: string, page: number) {
+  const fetchStudents = useCallback(async (classId: string, page: number) => {
     try {
       setIsLoadingStudents(true);
       setError('');
-      const token = localStorage.getItem('accessToken');
-      if (!token) return;
 
-      const response = await fetch(
-        `/api/admin/classes/${classId}/students?page=${page}&limit=${itemsPerPage}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+      const response = await apiFetch(
+        `/api/admin/classes/${classId}/students?page=${page}&limit=${itemsPerPage}`
       );
 
       if (response.status === 401) {
-        localStorage.clear();
+        clearAuthData();
         router.push('/login');
         return;
       }
@@ -170,7 +140,7 @@ export default function AdminRaportPage() {
       if (data.success && data.data) {
         const cls = classes.find((c) => c.id === classId);
         setStudents(
-          data.data.map((s: any) => ({
+          (data.data as StudentResponseItem[]).map((s) => ({
             id: s.id,
             name: s.name,
             studentNo: s.studentNo,
@@ -187,13 +157,42 @@ export default function AdminRaportPage() {
         setTotalStudents(0);
         setTotalPages(1);
       }
-    } catch (err) {
-      console.error('Error fetching students:', err);
+    } catch (error) {
+      devError('Error fetching students:', error);
       setError('Gagal memuat daftar siswa');
     } finally {
       setIsLoadingStudents(false);
     }
-  }
+  }, [classes, itemsPerPage, router]);
+
+  useEffect(() => {
+    void fetchClasses();
+  }, [fetchClasses]);
+
+  useEffect(() => {
+    if (selectedClassId) {
+      setCurrentPage(1);
+      void fetchStudents(selectedClassId, 1);
+    } else {
+      setStudents([]);
+      setTotalStudents(0);
+      setTotalPages(1);
+    }
+  }, [fetchStudents, selectedClassId]);
+
+  useEffect(() => {
+    if (selectedClassId) {
+      void fetchStudents(selectedClassId, currentPage);
+    }
+  }, [currentPage, fetchStudents, selectedClassId]);
+
+  const getSchoolIdForClass = (classId: string): string | undefined => {
+    const classObj = classes.find(c => c.id === classId);
+    if (!classObj?.levelId) return undefined;
+    const level = levels.find(l => l.id === classObj.levelId);
+    return level?.schoolId;
+  };
+
 
   const filteredStudents = students.filter(
     (s) =>
@@ -460,7 +459,7 @@ export default function AdminRaportPage() {
 
           {/* Mobile Cards */}
           <div className="md:hidden space-y-3">
-            {filteredStudents.map((student, idx) => (
+            {filteredStudents.map((student) => (
               <div
                 key={student.id}
                 className="bg-white rounded-lg shadow border border-gray-100 p-4 space-y-3"

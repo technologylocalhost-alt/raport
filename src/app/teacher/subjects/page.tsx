@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, BookOpen } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface Subject {
   id: string;
@@ -39,13 +41,7 @@ export default function TeacherSubjectsPage() {
     try {
       setIsLoading(true);
       setError('');
-      const token = localStorage.getItem('accessToken');
-      
-      const response = await fetch('/api/teacher/subjects', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch('/api/teacher/subjects');
 
       const data: ApiResponse = await response.json();
       
@@ -55,7 +51,7 @@ export default function TeacherSubjectsPage() {
         setError(data.message || 'Gagal memuat mata pelajaran');
       }
     } catch (error) {
-      console.error('Failed to fetch subjects:', error);
+      devError('Failed to fetch subjects:', error);
       setError('Terjadi kesalahan saat memuat data mata pelajaran');
     } finally {
       setIsLoading(false);

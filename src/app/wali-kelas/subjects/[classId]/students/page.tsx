@@ -1,9 +1,11 @@
 'use client';
 
-import { Fragment, useState, useEffect } from 'react';
+import { Fragment, useCallback, useState, useEffect } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Users, PenTool, X, AlertCircle, CheckCircle, ChevronDown, Edit2, Trash2, ChevronLeft, ChevronRight, Upload, Download } from 'lucide-react';
+import { ArrowLeft, Users, X, AlertCircle, CheckCircle, ChevronDown, Edit2, Trash2, ChevronLeft, ChevronRight, Upload, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface Student {
   id: string;
@@ -36,12 +38,6 @@ interface Grade {
   isApproved?: boolean;
 }
 
-interface ApiResponse {
-  success: boolean;
-  data?: Student[];
-  message?: string;
-}
-
 interface CompetenciesResponse {
   success: boolean;
   competencies?: Competency[];
@@ -57,6 +53,39 @@ interface ImportGradeRow {
   notes?: string;
   rowIndex: number;
   errors?: string[];
+}
+
+interface StudentListResponse {
+  success: boolean;
+  data?: Student[];
+  total?: number;
+  message?: string;
+}
+
+interface ApprovedGradeResponseItem {
+  competencyId?: string | null;
+  assessmentType: string;
+}
+
+interface ErrorDetailItem {
+  field: string;
+  message: string;
+}
+
+interface ErrorResponse {
+  error?: string;
+  details?: ErrorDetailItem[];
+}
+
+interface ImportSheetRow {
+  'Kelas'?: string;
+  'Mata Pelajaran'?: string;
+  'Nomor Siswa'?: string;
+  'Nama Siswa'?: string;
+  'Nama Kompetensi'?: string;
+  'Nilai (1-10)'?: string | number;
+  'Jenis Penilaian'?: string;
+  'Catatan'?: string;
 }
 
 export default function WaliKelasStudentsPage() {
@@ -123,7 +152,6 @@ export default function WaliKelasStudentsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalStudents, setTotalStudents] = useState(0);
-  const itemsPerPage = 10;
 
   // Import Excel states
   const [showImportModal, setShowImportModal] = useState(false);
@@ -134,20 +162,164 @@ export default function WaliKelasStudentsPage() {
   const [importSuccess, setImportSuccess] = useState('');
   const [importSubmitting, setImportSubmitting] = useState(false);
 
-  useEffect(() => {
-    fetchClassStudents();
-    fetchClassInfo();
-    
-    // Refresh data when page becomes visible (tab focus)
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        console.log('Page visibility changed to visible, refreshing data...');
-        // Refresh all student grades and approved status
-        if (students.length > 0) {
-          students.forEach((student) => {
-            fetchStudentGrades(student.id);
-          });
+  const fetchClassInfo = useCallback(async () => {
+    try {
+      if (subjectId) {
+        const response = await apiFetch(`/api/wali-kelas/competencies?subjectId=${subjectId}`);
+        const data = await response.json();
+        
+        if (data.success && data.competencies && data.competencies.length > 0) {
+          const subject = data.competencies[0];
+          setSubjectName(subject.subjectName || '');
         }
+      }
+    } catch (error) {
+      devError('Error fetching info:', error);
+    }
+  }, [subjectId]);
+
+  const fetchClassStudents = useCallback(async () => {
+    try {
+      if (!classId || classId.trim() === '') {
+        setError('ID Kelas tidak valid');
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      setError('');
+
+      const response = await apiFetch(`/api/wali-kelas/students?classId=${classId}&limit=10000`);
+
+      const data: StudentListResponse = await response.json();
+
+      if (response.status === 400) {
+        setError(`Permintaan tidak valid: ${data.message || 'Parameter tidak valid'}`);
+        return;
+      }
+
+      if (response.status === 401) {
+        setError('Anda tidak terautentikasi. Silakan login kembali');
+        return;
+      }
+
+      if (response.status === 403) {
+        setError('Anda tidak memiliki akses ke kelas ini');
+        return;
+      }
+
+      if (response.status === 404) {
+        setError('Kelas tidak ditemukan');
+        return;
+      }
+
+      if (!response.ok) {
+        setError(`Gagal memuat data siswa: ${data.message || response.statusText}`);
+        return;
+      }
+      
+      if (data.success && data.data && Array.isArray(data.data)) {
+        setStudents(data.data);
+        if (data.data.length > 0 && data.data[0].className) {
+          setClassName(data.data[0].className);
+        }
+        const total = data.total || data.data.length || 0;
+        setTotalStudents(total);
+        setTotalPages(1);
+      } else if (data.success && Array.isArray(data.data)) {
+        setStudents(data.data);
+      } else {
+        setError('Format respons data tidak valid');
+        setStudents([]);
+      }
+    } catch (err) {
+      devError('Error fetching students:', err);
+      setError('Gagal memuat data siswa');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [classId]);
+
+  const fetchCompetencies = useCallback(async (studentId?: string) => {
+    void studentId;
+    try {
+      setCompetenciesLoading(true);
+
+      const response = await apiFetch(`/api/wali-kelas/competencies?subjectId=${subjectId}`);
+
+      const data: CompetenciesResponse = await response.json();
+      if (data.success && data.competencies) {
+        setCompetencies(data.competencies);
+      }
+    } catch (error) {
+      devError('Error fetching competencies:', error);
+      setGradeError('Gagal memuat kompetensi');
+    } finally {
+      setCompetenciesLoading(false);
+    }
+  }, [subjectId]);
+
+  const fetchApprovedGrades = useCallback(async (studentId: string) => {
+    try {
+      const response = await apiFetch(
+        `/api/wali-kelas/approved-grades?studentId=${studentId}&subjectId=${subjectId}&classId=${classId}`
+      );
+
+      const data = await response.json();
+      if (data.success && data.data) {
+        const approvedIds = new Set<string>(
+          (data.data as ApprovedGradeResponseItem[]).map((grade) => {
+            if (grade.competencyId === null || grade.competencyId === '') {
+              return `null-${grade.assessmentType}`;
+            }
+            return `${grade.competencyId}-${grade.assessmentType}`;
+          })
+        );
+        setApprovedGrades((prev) => ({
+          ...prev,
+          [studentId]: approvedIds,
+        }));
+      }
+    } catch (error) {
+      devError('Error fetching approved grades:', error);
+    }
+  }, [classId, subjectId]);
+
+  const fetchStudentGrades = useCallback(async (studentId: string) => {
+    try {
+      setLoadingGrades((prev) => ({ ...prev, [studentId]: true }));
+
+      const response = await apiFetch(
+        `/api/teacher/grades?studentId=${studentId}&subjectId=${subjectId}&classId=${classId}`
+      );
+
+      const data = await response.json();
+      if (data.success) {
+        setGrades((prev) => {
+          const updated = {
+            ...prev,
+            [studentId]: data.data || [],
+          };
+          return updated;
+        });
+        await fetchApprovedGrades(studentId);
+      }
+    } catch (error) {
+      devError('Error fetching grades:', error);
+    } finally {
+      setLoadingGrades((prev) => ({ ...prev, [studentId]: false }));
+    }
+  }, [classId, fetchApprovedGrades, subjectId]);
+
+  useEffect(() => {
+    void fetchClassStudents();
+    void fetchClassInfo();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && students.length > 0) {
+        students.forEach((student) => {
+          void fetchStudentGrades(student.id);
+        });
       }
     };
 
@@ -155,12 +327,11 @@ export default function WaliKelasStudentsPage() {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [classId, subjectId]);
+  }, [fetchClassInfo, fetchClassStudents, fetchStudentGrades, students]);
 
   // Auto-select first student when page loads and student changes
   useEffect(() => {
-    if (students.length > 0 && selectedStudent && !students.find(s => s.id === selectedStudent.id)) {
-      // Current selected student is not on this page, select first student instead
+    if (students.length > 0 && selectedStudent && !students.find((s) => s.id === selectedStudent.id)) {
       const firstStudent = students[0];
       setSelectedStudent(firstStudent);
       setEditingGradeId(null);
@@ -172,9 +343,9 @@ export default function WaliKelasStudentsPage() {
       });
       setGradeError('');
       setGradeSuccess('');
-      fetchCompetencies(firstStudent.id);
+      void fetchCompetencies(firstStudent.id);
     }
-  }, [students]);
+  }, [fetchCompetencies, selectedStudent, students]);
 
   // Clear form when subjectId changes
   useEffect(() => {
@@ -208,199 +379,11 @@ export default function WaliKelasStudentsPage() {
     if (students.length > 0) {
       students.forEach((student) => {
         if (!grades[student.id]) {
-          fetchStudentGrades(student.id);
+          void fetchStudentGrades(student.id);
         }
       });
     }
-  }, [students]);
-
-  async function fetchClassInfo() {
-    try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) return;
-
-      // Get subject name from competencies endpoint
-      if (subjectId) {
-        const response = await fetch(`/api/wali-kelas/competencies?subjectId=${subjectId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await response.json();
-        
-        if (data.success && data.competencies && data.competencies.length > 0) {
-          const subject = data.competencies[0];
-          setSubjectName(subject.subjectName || '');
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching info:', error);
-    }
-  }
-
-  async function fetchClassStudents() {
-    try {
-      if (!classId || classId.trim() === '') {
-        setError('ID Kelas tidak valid');
-        setIsLoading(false);
-        return;
-      }
-
-      setIsLoading(true);
-      setError('');
-      const token = localStorage.getItem('accessToken');
-
-      if (!token) {
-        setError('Token tidak ditemukan. Silakan login kembali');
-        setIsLoading(false);
-        return;
-      }
-      
-      const response = await fetch(`/api/wali-kelas/students?classId=${classId}&limit=10000`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data: any = await response.json();
-
-      console.log('Students fetched:', data);
-
-      if (response.status === 400) {
-        setError(`Permintaan tidak valid: ${data.message || 'Parameter tidak valid'}`);
-        return;
-      }
-
-      if (response.status === 401) {
-        setError('Anda tidak terautentikasi. Silakan login kembali');
-        return;
-      }
-
-      if (response.status === 403) {
-        setError('Anda tidak memiliki akses ke kelas ini');
-        return;
-      }
-
-      if (response.status === 404) {
-        setError('Kelas tidak ditemukan');
-        return;
-      }
-
-      if (!response.ok) {
-        setError(`Gagal memuat data siswa: ${data.message || response.statusText}`);
-        return;
-      }
-      
-      if (data.success && data.data && Array.isArray(data.data)) {
-        setStudents(data.data);
-        // Set class name from first student if available
-        if (data.data.length > 0 && data.data[0].className) {
-          setClassName(data.data[0].className);
-        }
-        // Set pagination info
-        const total = data.total || data.data.length || 0;
-        setTotalStudents(total);
-        setTotalPages(1);
-      } else if (data.success && Array.isArray(data.data)) {
-        setStudents(data.data);
-      } else {
-        setError('Format respons data tidak valid');
-        setStudents([]);
-      }
-    } catch (err) {
-      console.error('Error fetching students:', err);
-      setError('Gagal memuat data siswa');
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function fetchCompetencies(studentId: string) {
-    try {
-      setCompetenciesLoading(true);
-      const token = localStorage.getItem('accessToken');
-      if (!token) return;
-
-      const response = await fetch(`/api/wali-kelas/competencies?subjectId=${subjectId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      const data: CompetenciesResponse = await response.json();
-      console.log('Competencies fetched:', data);
-      if (data.success && data.competencies) {
-        setCompetencies(data.competencies);
-      }
-    } catch (error) {
-      console.error('Error fetching competencies:', error);
-      setGradeError('Gagal memuat kompetensi');
-    } finally {
-      setCompetenciesLoading(false);
-    }
-  }
-
-  async function fetchStudentGrades(studentId: string) {
-    try {
-      setLoadingGrades((prev) => ({ ...prev, [studentId]: true }));
-      const token = localStorage.getItem('accessToken');
-      if (!token) return;
-
-      const response = await fetch(
-        `/api/teacher/grades?studentId=${studentId}&subjectId=${subjectId}&classId=${classId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      const data = await response.json();
-      console.log('Grades fetched for student:', studentId, data);
-      if (data.success) {
-        console.log(`Setting ${data.data?.length || 0} grades for student ${studentId}`);
-        setGrades((prev) => {
-          const updated = {
-            ...prev,
-            [studentId]: data.data || [],
-          };
-          console.log('Grades state updated, new state:', updated);
-          return updated;
-        });
-        // Fetch approved grades for this student
-        await fetchApprovedGrades(studentId);
-      }
-    } catch (error) {
-      console.error('Error fetching grades:', error);
-    } finally {
-      setLoadingGrades((prev) => ({ ...prev, [studentId]: false }));
-    }
-  }
-
-  async function fetchApprovedGrades(studentId: string) {
-    try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) return;
-
-      const response = await fetch(
-        `/api/wali-kelas/approved-grades?studentId=${studentId}&subjectId=${subjectId}&classId=${classId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      const data = await response.json();
-      if (data.success && data.data) {
-        // Create a Set of approved grade IDs for this student
-        // Use only assessmentType as key if competencyId is null, else use both
-        const approvedIds = new Set<string>(
-          data.data.map((grade: any) => {
-            if (grade.competencyId === null || grade.competencyId === '') {
-              return `null-${grade.assessmentType}`;
-            }
-            return `${grade.competencyId}-${grade.assessmentType}`;
-          })
-        );
-        console.log(`Approved grades for student ${studentId}:`, approvedIds);
-        setApprovedGrades((prev) => ({
-          ...prev,
-          [studentId]: approvedIds,
-        }));
-      }
-    } catch (error) {
-      console.error('Error fetching approved grades:', error);
-    }
-  }
+  }, [fetchStudentGrades, grades, students]);
 
   const handleOpenGradeModal = async (student: Student) => {
     setSelectedStudent(student);
@@ -433,10 +416,9 @@ export default function WaliKelasStudentsPage() {
     try {
       setIsSubmitting(true);
       setGradeError('');
-      const token = localStorage.getItem('accessToken');
 
-      if (!token || !selectedStudent) {
-        setGradeError('Token atau data siswa tidak valid');
+      if (!selectedStudent) {
+        setGradeError('Data siswa tidak valid');
         return;
       }
 
@@ -449,23 +431,19 @@ export default function WaliKelasStudentsPage() {
         notes: gradeFormData.notes,
       };
 
-      console.log('Submitting grade payload:', payload);
-
       let response;
       if (editingGradeId) {
-        response = await fetch(`/api/teacher/grades/${editingGradeId}`, {
+        response = await apiFetch(`/api/teacher/grades/${editingGradeId}`, {
           method: 'PUT',
           headers: {
-            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(payload),
         });
       } else {
-        response = await fetch('/api/teacher/grades', {
+        response = await apiFetch('/api/teacher/grades', {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(payload),
@@ -473,7 +451,6 @@ export default function WaliKelasStudentsPage() {
       }
 
       if (response.ok) {
-        console.log('Grade saved successfully, response status:', response.status);
         setGradeSuccess(editingGradeId ? 'Nilai berhasil diperbarui' : 'Nilai berhasil ditambahkan');
         setEditingGradeId(null);
         setGradeFormData({
@@ -487,26 +464,23 @@ export default function WaliKelasStudentsPage() {
           setGradeSuccess('');
         }, 3000);
         // Fetch latest grades and ensure the list is expanded to show them
-        console.log('Fetching grades for student:', selectedStudent.id);
         await fetchStudentGrades(selectedStudent.id);
         // Ensure grades are expanded to show the new data
-        console.log('Current expandedStudentId:', expandedStudentId, 'selected student id:', selectedStudent.id);
         if (expandedStudentId !== selectedStudent.id) {
-          console.log('Setting expandedStudentId to:', selectedStudent.id);
           setExpandedStudentId(selectedStudent.id);
         }
       } else {
-        let errorResponse: any = {};
+        let errorResponse: ErrorResponse = {};
         try {
           const text = await response.text();
           if (text) {
             errorResponse = JSON.parse(text);
           }
         } catch (parseError) {
-          console.error('Failed to parse error response:', parseError);
+          devError('Failed to parse error response:', parseError);
         }
         
-        console.error('Grade submission error:', errorResponse, 'Status:', response.status);
+        devError('Grade submission error:', errorResponse, response.status);
         
         // Handle 409 Conflict - grade has been approved
         if (response.status === 409) {
@@ -528,7 +502,7 @@ export default function WaliKelasStudentsPage() {
         // Handle field errors from validation
         if (errorResponse.details && Array.isArray(errorResponse.details)) {
           const fieldErrorMessages = errorResponse.details
-            .map((err: any) => `${err.field}: ${err.message}`)
+            .map((err: ErrorDetailItem) => `${err.field}: ${err.message}`)
             .join(', ');
           setGradeError(`${errorResponse.error}: ${fieldErrorMessages}`);
         } else {
@@ -536,7 +510,7 @@ export default function WaliKelasStudentsPage() {
         }
       }
     } catch (error) {
-      console.error('Error submitting grade:', error);
+      devError('Error submitting grade:', error);
       setGradeError('Terjadi kesalahan saat menyimpan nilai');
     } finally {
       setIsSubmitting(false);
@@ -561,7 +535,7 @@ export default function WaliKelasStudentsPage() {
     });
     // Fetch competencies if not already loaded
     if (competencies.length === 0) {
-      fetchCompetencies(student.id);
+      void fetchCompetencies(student.id);
     }
   };
 
@@ -569,12 +543,8 @@ export default function WaliKelasStudentsPage() {
     if (!confirm('Hapus nilai ini?')) return;
 
     try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) return;
-
-      const response = await fetch(`/api/teacher/grades/${gradeId}`, {
+      const response = await apiFetch(`/api/teacher/grades/${gradeId}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (response.ok) {
@@ -584,7 +554,7 @@ export default function WaliKelasStudentsPage() {
         setGradeError('Gagal menghapus nilai');
       }
     } catch (error) {
-      console.error('Error deleting grade:', error);
+      devError('Error deleting grade:', error);
       setGradeError('Terjadi kesalahan saat menghapus nilai');
     }
   };
@@ -605,7 +575,7 @@ export default function WaliKelasStudentsPage() {
     } else {
       setExpandedStudentId(studentId);
       if (!grades[studentId]) {
-        fetchStudentGrades(studentId);
+        void fetchStudentGrades(studentId);
       }
     }
   };
@@ -619,7 +589,7 @@ export default function WaliKelasStudentsPage() {
     const currentIndex = getCurrentStudentIndex();
     if (currentIndex === -1) return;
 
-    let nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
+    const nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
     
     // Check boundary
     if (nextIndex < 0 || nextIndex >= students.length) return;
@@ -682,7 +652,7 @@ export default function WaliKelasStudentsPage() {
       const arrayBuffer = await file.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
+      const jsonData = XLSX.utils.sheet_to_json<ImportSheetRow>(worksheet);
 
       if (jsonData.length === 0) {
         setImportError('File kosong atau tidak memiliki data');
@@ -706,8 +676,9 @@ export default function WaliKelasStudentsPage() {
         if (!row['Nama Siswa']) errors.push('Nama Siswa kosong');
         // Kompetensi adalah opsional
         if (!score || isNaN(score) || score < 1 || score > 10) errors.push('Nilai harus 1-10');
-        if (!row['Jenis Penilaian']) errors.push('Jenis Penilaian kosong');
-        if (!Object.keys(assessmentTypeLabels).includes(row['Jenis Penilaian'])) {
+        const assessmentType = row['Jenis Penilaian'] ? String(row['Jenis Penilaian']).trim() : '';
+        if (!assessmentType) errors.push('Jenis Penilaian kosong');
+        if (assessmentType && !Object.keys(assessmentTypeLabels).includes(assessmentType)) {
           errors.push(`Jenis Penilaian tidak valid: ${row['Jenis Penilaian']}`);
         }
 
@@ -725,7 +696,7 @@ export default function WaliKelasStudentsPage() {
 
       setImportedRows(parsedRows);
     } catch (error) {
-      console.error('Error parsing file:', error);
+      devError('Error parsing file:', error);
       setImportError('Error membaca file. Pastikan file adalah Excel (.xlsx)');
     } finally {
       setImportLoading(false);
@@ -754,12 +725,6 @@ export default function WaliKelasStudentsPage() {
     try {
       setImportSubmitting(true);
       setImportError('');
-      const token = localStorage.getItem('accessToken');
-
-      if (!token) {
-        setImportError('Token tidak ditemukan');
-        return;
-      }
 
       // Create grade objects for submission
       const gradesToSubmit = importedRows.map((row) => ({
@@ -771,13 +736,11 @@ export default function WaliKelasStudentsPage() {
       }));
 
       // Log untuk memastikan import gunakan subjectId yang benar
-      console.log('Submitting import with subjectId:', subjectId, 'classId:', classId);
 
       // Send to API dengan subjectId yang benar
-      const response = await fetch(`/api/teacher/grades/import?subjectId=${subjectId}&classId=${classId}`, {
+      const response = await apiFetch(`/api/teacher/grades/import?subjectId=${subjectId}&classId=${classId}`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(gradesToSubmit),
@@ -806,16 +769,16 @@ export default function WaliKelasStudentsPage() {
           setImportError('');
         }, 2000);
         // Refresh data
-        fetchClassStudents();
+        void fetchClassStudents();
         // Reload grades for all students
         students.forEach((student) => {
-          fetchStudentGrades(student.id);
+          void fetchStudentGrades(student.id);
         });
       } else {
         setImportError(data.error || 'Gagal mengimport nilai');
       }
     } catch (error) {
-      console.error('Error submitting import:', error);
+      devError('Error submitting import:', error);
       setImportError('Terjadi kesalahan saat mengimport nilai');
     } finally {
       setImportSubmitting(false);
@@ -1376,6 +1339,9 @@ export default function WaliKelasStudentsPage() {
                     <label className="block text-sm font-semibold text-gray-900 mb-2">
                       Upload File Excel (.xlsx)
                     </label>
+                    {importFile && (
+                      <p className="text-sm text-gray-600 mb-2">File dipilih: {importFile.name}</p>
+                    )}
                     <input
                       type="file"
                       accept=".xlsx,.xls"

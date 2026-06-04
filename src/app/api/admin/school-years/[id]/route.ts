@@ -1,31 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-  
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) {
-    return user;
-  }
-  return null;
+async function requireSchoolYearAccess(req: NextRequest) {
+  return requireAdminOrPrincipal(req);
 }
 
 const schoolYearSchema = z.object({
@@ -47,7 +29,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const admin = await verifyAdmin(request);
+    const admin = await requireSchoolYearAccess(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -82,7 +64,7 @@ export async function GET(
 
     return successResponse(schoolYear);
   } catch (error) {
-    console.error('Get school year error:', error);
+    serverError('Get school year error:', error);
     return errorResponse('Failed to fetch school year', 500);
   }
 }
@@ -97,7 +79,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const admin = await verifyAdmin(request);
+    const admin = await requireSchoolYearAccess(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -126,7 +108,7 @@ export async function PUT(
     }
 
     // Build update data object, only include fields that have values
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     if (validatedData.year !== undefined) updateData.year = validatedData.year;
     if (validatedData.tahunAkademikArabic !== undefined) {
       updateData.tahunAkademikArabic = validatedData.tahunAkademikArabic || null;
@@ -162,7 +144,7 @@ export async function PUT(
     if (error instanceof z.ZodError) {
       return errorResponse('Validation error', 400, error.issues);
     }
-    console.error('Update school year error:', error);
+    serverError('Update school year error:', error);
     return errorResponse('Failed to update school year', 500);
   }
 }
@@ -179,7 +161,7 @@ export async function DELETE(
   try {
     const result = await params;
     id = result.id;
-    const admin = await verifyAdmin(request);
+    const admin = await requireSchoolYearAccess(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -226,7 +208,7 @@ export async function DELETE(
 
     return successResponse({ message: 'School year deleted successfully' });
   } catch (error) {
-    console.error('Delete school year error:', error);
+    serverError('Delete school year error:', error);
     return errorResponse('Failed to delete school year', 500);
   }
 }

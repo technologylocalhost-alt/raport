@@ -1,29 +1,11 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) {
-    return user;
-  }
-  return null;
+async function requireGradeSummaryAccess(req: NextRequest) {
+  return requireAdminOrPrincipal(req);
 }
 
 /**
@@ -32,7 +14,7 @@ async function verifyAdmin(req: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await verifyAdmin(request);
+    const user = await requireGradeSummaryAccess(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
@@ -44,7 +26,7 @@ export async function GET(request: NextRequest) {
     const semesterId = searchParams.get('semesterId');
 
     // Build where clause for classes
-    const classWhere: any = {};
+    const classWhere: Record<string, string> = {};
     if (schoolYearId) classWhere.schoolYearId = schoolYearId;
     if (levelId) classWhere.levelId = levelId;
     if (semesterId) classWhere.semesterId = semesterId;
@@ -114,7 +96,7 @@ export async function GET(request: NextRequest) {
 
     return successResponse(gradesPerClass, 'Berhasil mengambil data nilai per kelas');
   } catch (error) {
-    console.error('Get grades per class error:', error);
+    serverError('Get grades per class error:', error);
     return errorResponse('Failed to fetch grades per class', 500);
   }
 }

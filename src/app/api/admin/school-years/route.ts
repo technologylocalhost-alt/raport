@@ -1,31 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-  
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) {
-    return user;
-  }
-  return null;
+async function requireSchoolYearAccess(req: NextRequest) {
+  return requireAdminOrPrincipal(req);
 }
 
 const schoolYearSchema = z.object({
@@ -79,7 +61,7 @@ export async function GET(request: NextRequest) {
 
     return paginatedResponse(schoolYears, total, page, limit);
   } catch (error) {
-    console.error('Get school years error:', error);
+    serverError('Get school years error:', error);
     return errorResponse('Failed to fetch school years', 500);
   }
 }
@@ -89,24 +71,10 @@ export async function GET(request: NextRequest) {
  * Create a new school year
  */
 export async function POST(request: NextRequest) {
+  let admin;
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return errorResponse('Unauthorized', 401);
-    }
-
-    const token = authHeader.slice(7);
-    const payload = verifyAccessToken(token);
-    
-    if (!payload) {
-      return errorResponse('Unauthorized', 401);
-    }
-
-    const admin = await prisma.user.findUnique({
-      where: { id: payload.userId },
-    });
-    
-    if (!admin || (admin.role !== 'ADMIN' && admin.role !== 'PRINCIPAL')) {
+    admin = await requireSchoolYearAccess(request);
+    if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
 
@@ -162,30 +130,20 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return errorResponse('Validation error', 400, error.issues);
     }
-    console.error('Create school year error:', error);
+    serverError('Create school year error:', error);
     
     // Log failed school year creation
-    const authHeader = request.headers.get('authorization');
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.slice(7);
-      const payload = verifyAccessToken(token);
-      if (payload) {
-        const admin = await prisma.user.findUnique({
-          where: { id: payload.userId },
-        });
-        if (admin) {
-          await logActivity({
-            userId: admin.id,
-            action: 'CREATE',
-            resourceType: 'SchoolYear',
-            description: 'Failed to create school year',
-            ipAddress: getClientIp(request),
-            userAgent: getUserAgent(request),
-            status: 'FAILED',
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
-          });
-        }
-      }
+    if (admin) {
+      await logActivity({
+        userId: admin.id,
+        action: 'CREATE',
+        resourceType: 'SchoolYear',
+        description: 'Failed to create school year',
+        ipAddress: getClientIp(request),
+        userAgent: getUserAgent(request),
+        status: 'FAILED',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
 
     return errorResponse('Failed to create school year', 500);

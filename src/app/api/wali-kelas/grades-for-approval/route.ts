@@ -1,29 +1,12 @@
+import { AssessmentType } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireWaliKelasOnly } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
-async function getUser(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (user?.role === 'WALI_KELAS') {
-    return user;
-  }
-  return null;
+async function requireGradesForApprovalAccess(req: NextRequest) {
+  return requireWaliKelasOnly(req);
 }
 
 /**
@@ -32,7 +15,7 @@ async function getUser(req: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await getUser(request);
+    const user = await requireGradesForApprovalAccess(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
@@ -43,7 +26,7 @@ export async function GET(request: NextRequest) {
     const assessmentType = searchParams.get('assessmentType') || '';
 
     // Get the wali kelas's classes
-    let query: any = {
+    const query: { where: { waliKelasId: string; id?: string } } = {
       where: {
         waliKelasId: user.id,
       },
@@ -67,16 +50,20 @@ export async function GET(request: NextRequest) {
     const classIds = classes.map((c) => c.id);
 
     // Get all grades for these classes
-    const grades = await prisma.grade.findMany({
-      where: {
-        student: {
-          classId: {
-            in: classIds,
-          },
-          ...(studentId ? { id: studentId } : {}),
+    const gradeWhere = {
+      student: {
+        classId: {
+          in: classIds,
         },
-        ...(assessmentType ? { assessmentType: assessmentType as any } : {}),
+        ...(studentId ? { id: studentId } : {}),
       },
+      ...(assessmentType && Object.values(AssessmentType).includes(assessmentType as AssessmentType)
+        ? { assessmentType: assessmentType as AssessmentType }
+        : {}),
+    };
+
+    const grades = await prisma.grade.findMany({
+      where: gradeWhere,
       include: {
         student: {
           include: {
@@ -90,8 +77,9 @@ export async function GET(request: NextRequest) {
     });
 
     // Group by subject and class
-    const gradesBySubject: {
-      [key: string]: {
+    const gradesBySubject: Record<
+      string,
+      {
         subjectId: string;
         subjectName: string;
         classId: string;
@@ -99,9 +87,18 @@ export async function GET(request: NextRequest) {
         totalStudents: number;
         gradesCount: number;
         teachers: Set<string>;
-        grades: any[];
-      };
-    } = {};
+        grades: Array<{
+          id: string;
+          studentId: string;
+          studentName: string;
+          gender: string;
+          competencyName: string;
+          score: string;
+          assessmentType: AssessmentType;
+          teacherName: string;
+        }>;
+      }
+    > = {};
 
     grades.forEach((grade) => {
       // Skip grades without subject (cannot group without a subject)
@@ -169,7 +166,7 @@ export async function GET(request: NextRequest) {
       200
     );
   } catch (error) {
-    console.error('Error fetching grades for approval:', error);
+    serverError('Error fetching grades for approval:', error);
     return errorResponse('Failed to fetch grades', 500);
   }
 }

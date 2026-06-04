@@ -1,27 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import puppeteer, { type Browser } from 'puppeteer';
 import chromium from '@sparticuz/chromium';
-import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireRaportMentalAccess } from '@/lib/auth/access';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  if (!payload) return null;
-
-  const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) return user;
-  return null;
+async function requireRaportMental(req: NextRequest) {
+  return requireRaportMentalAccess(req, '/admin/raport-mental/penilaian');
 }
 
 export async function POST(request: NextRequest) {
   let browser: Browser | null = null;
 
   try {
-    const user = await verifyAdmin(request);
+    const user = await requireRaportMental(request);
     if (!user) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
@@ -90,7 +81,7 @@ export async function POST(request: NextRequest) {
       fileName: safeName.endsWith('.pdf') ? safeName : `${safeName}.pdf`,
     });
   } catch (error) {
-    console.error('Generate raport mental PDF error:', error);
+    serverError('Generate raport mental PDF error:', error);
     if (browser) {
       try { await browser.close(); } catch {}
     }

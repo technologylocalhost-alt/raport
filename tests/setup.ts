@@ -5,6 +5,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { execSync } from 'child_process';
+import jwt from 'jsonwebtoken';
 
 // Test database URL - use environment variable
 const TEST_DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/raport_test';
@@ -32,7 +33,7 @@ export async function setupTestDatabase() {
     });
 
     console.log('✅ Test database setup complete');
-  } catch (error) {
+  } catch {
     console.warn('⚠️  Could not setup test database. Make sure PostgreSQL is running.');
     console.warn('    You can skip database tests or setup manually.');
   }
@@ -68,7 +69,7 @@ export async function cleanDatabase() {
     }
 
     console.log('🧹 Database cleaned');
-  } catch (error) {
+  } catch {
     console.warn('⚠️  Could not clean database. Make sure test database exists.');
   }
 }
@@ -142,9 +143,8 @@ export function generateTestToken(payload: {
   role: string;
 }): string {
   // Gunakan JWT library untuk generate token
-  const jwt = require('jsonwebtoken');
   const secret = process.env.JWT_ACCESS_SECRET || 'test-secret-key';
-  
+
   return jwt.sign(payload, secret, { expiresIn: '1h' });
 }
 

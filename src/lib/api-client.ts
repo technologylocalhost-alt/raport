@@ -1,10 +1,10 @@
 /**
- * Enhanced fetch with automatic token injection and refresh for API calls
- * Adds Authorization header with access token from localStorage
- * Automatically refreshes token on 401 and retries the request
+ * Enhanced fetch with automatic token injection and refresh for API calls.
+ * Keeps current bearer-token flow working while centralizing auth behavior.
  */
 
-import { logout } from './auth/client';
+import { getAccessToken, logout, setAccessToken } from './auth/client';
+import { devError, devWarn } from './dev-log';
 
 // Flag to prevent multiple simultaneous refresh attempts
 let isRefreshing = false;
@@ -30,15 +30,15 @@ async function refreshAccessToken(): Promise<string | null> {
     });
 
     if (!response.ok) {
-      console.warn('[Auth] Token refresh failed:', response.status);
+      devWarn('[Auth] Token refresh failed:', response.status);
       
       // Try to get error details
       try {
         const errorData = await response.json();
         if (errorData.shouldLogout) {
-          console.log('[Auth] Server indicated should logout');
+          devWarn('[Auth] Server indicated should logout');
         }
-      } catch (e) {
+      } catch {
         // Ignore JSON parse error
       }
       
@@ -48,22 +48,20 @@ async function refreshAccessToken(): Promise<string | null> {
     const data = await response.json();
     
     if (data.success && data.accessToken) {
-      // Store new token
-      localStorage.setItem('accessToken', data.accessToken);
-      console.log('[Auth] Token refreshed successfully');
+      setAccessToken(data.accessToken);
       return data.accessToken;
     }
 
-    console.warn('[Auth] Token refresh response invalid:', data);
+    devWarn('[Auth] Token refresh response invalid:', data);
     
     // Check if should logout
     if (data.shouldLogout) {
-      console.log('[Auth] Server indicated should logout');
+      devWarn('[Auth] Server indicated should logout');
     }
     
     return null;
   } catch (error) {
-    console.error('[Auth] Token refresh error:', error);
+    devError('[Auth] Token refresh error:', error);
     return null;
   }
 }
@@ -71,7 +69,7 @@ async function refreshAccessToken(): Promise<string | null> {
 export async function apiFetch(
   url: string,
   options: RequestInit & { skipAuth?: boolean; skipRefresh?: boolean } = {}
-) {
+): Promise<Response> {
   const { skipAuth = false, skipRefresh = false, ...fetchOptions } = options;
 
   // Prepare headers
@@ -79,7 +77,7 @@ export async function apiFetch(
 
   // Add Authorization header if token exists and skipAuth is false
   if (!skipAuth && typeof window !== 'undefined') {
-    const token = localStorage.getItem('accessToken');
+    const token = getAccessToken();
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
     }
@@ -96,13 +94,9 @@ export async function apiFetch(
 
   // Handle 401 - token might be expired
   if (response.status === 401 && !skipAuth && !skipRefresh) {
-    console.log('[Auth] Received 401, attempting token refresh...');
-    
     // If already refreshing, wait for it to complete
     if (isRefreshing) {
-      console.log('[Auth] Refresh already in progress, waiting...');
-      
-      return new Promise((resolve) => {
+      return new Promise<Response>((resolve) => {
         subscribeTokenRefresh((newToken) => {
           if (newToken) {
             // Retry original request with new token
@@ -110,12 +104,12 @@ export async function apiFetch(
             fetch(url, { ...init, headers })
               .then(resolve)
               .catch(() => {
-                logout();
+                void logout();
                 resolve(response); // Return original 401 response
               });
           } else {
             // Refresh failed, logout
-            logout();
+            void logout();
             resolve(response);
           }
         });
@@ -142,14 +136,14 @@ export async function apiFetch(
         // Refresh failed
         onRefreshed(null);
         isRefreshing = false;
-        logout();
+        void logout();
         return response;
       }
     } catch (error) {
-      console.error('[Auth] Token refresh failed:', error);
+      devError('[Auth] Token refresh failed:', error);
       onRefreshed(null);
       isRefreshing = false;
-      logout();
+      void logout();
       return response;
     }
   }

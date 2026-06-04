@@ -1,41 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/db';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
+import { UserRole, Bagian } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import bcrypt from 'bcryptjs';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (user && user.role === 'ADMIN') {
-    return user;
-  }
-  return null;
-}
 
 /**
  * POST /api/admin/users/import
  * Import users from Excel file
  */
 export async function POST(request: NextRequest) {
-  let user: any;
+  let user;
   try {
-    user = await verifyAdmin(request);
+    user = await requireMenuAccess(request, '/admin/users', ['ADMIN']);
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -87,7 +67,7 @@ export async function POST(request: NextRequest) {
     };
 
     // Function to get value from row with flexible column name matching
-    function getRowValue(row: any, ...possibleKeys: string[]): string {
+    function getRowValue(row: Record<string, unknown>, ...possibleKeys: string[]): string {
       for (const key of possibleKeys) {
         if (row[key] !== undefined && row[key] !== null && row[key] !== '') {
           return row[key].toString().trim();
@@ -97,7 +77,7 @@ export async function POST(request: NextRequest) {
     }
 
     for (let i = 0; i < data.length; i++) {
-      const row = data[i] as any;
+      const row = data[i] as Record<string, unknown>;
 
       try {
         // Skip empty rows
@@ -112,6 +92,7 @@ export async function POST(request: NextRequest) {
         let role = getRowValue(row, 'Role', 'ROLE', 'role').toUpperCase();
         const schoolName = getRowValue(row, 'Sekolah', 'SEKOLAH', 'sekolah', 'School', 'Nama Sekolah');
         const status = getRowValue(row, 'Status', 'STATUS', 'status')?.toUpperCase();
+        const bagianRaw = getRowValue(row, 'Bagian', 'BAGIAN', 'bagian', 'Divisi');
 
         if (!email || !name) {
           results.errors.push(`Baris ${i + 2}: Email dan Nama harus diisi`);
@@ -149,22 +130,53 @@ export async function POST(request: NextRequest) {
 
         const isActive = status === 'AKTIF' || status === 'true' || status === '1' || status === 'TRUE';
 
+        // Parse bagian (comma-separated)
+        const bagianMap: Record<string, string> = {
+          'PENGASUHAN': 'PENGASUHAN',
+          'MABIKORI': 'MABIKORI',
+          'PUSDAC': 'PUSDAC',
+          'LAC': 'LAC',
+          'EKSKUL': 'EKSKUL',
+        };
+        const bagianList: string[] = [];
+        if (bagianRaw) {
+          const parts = bagianRaw.split(',').map((p: string) => p.trim().toUpperCase());
+          for (const p of parts) {
+            const mapped = bagianMap[p];
+            if (mapped && !bagianList.includes(mapped)) {
+              bagianList.push(mapped);
+            }
+          }
+        }
+
         // Check if user exists
         const existingUser = await prisma.user.findUnique({
           where: { email },
         });
 
         if (existingUser) {
-          // Update existing user
-          await prisma.user.update({
-            where: { email },
-            data: {
-              name,
-              role: role as any,
-              schoolId: school.id,
-              isActive,
-              ...(password && { password: await bcrypt.hash(password, 10) }),
-            },
+          // Update existing user with bagian in transaction
+          await prisma.$transaction(async (tx) => {
+            await tx.user.update({
+              where: { email },
+              data: {
+                name,
+                role: role as UserRole,
+                schoolId: school.id,
+                isActive,
+                ...(password && { password: await bcrypt.hash(password, 10) }),
+              },
+            });
+            // Update bagian if provided
+            if (bagianList.length > 0) {
+              await tx.userBagian.deleteMany({ where: { userId: existingUser.id } });
+              await tx.userBagian.createMany({
+                data: bagianList.map((b) => ({
+                  userId: existingUser.id,
+                  bagian: b as Bagian,
+                })),
+              });
+            }
           });
           results.updated++;
         } else {
@@ -177,20 +189,31 @@ export async function POST(request: NextRequest) {
             continue;
           }
 
-          await prisma.user.create({
-            data: {
-              email,
-              name,
-              password: await bcrypt.hash(password, 10),
-              role: role as any,
-              schoolId: school.id,
-              isActive,
-            },
+          await prisma.$transaction(async (tx) => {
+            const newUser = await tx.user.create({
+              data: {
+                email,
+                name,
+                password: await bcrypt.hash(password, 10),
+                role: role as UserRole,
+                schoolId: school.id,
+                isActive,
+              },
+            });
+            // Create bagian records
+            if (bagianList.length > 0) {
+              await tx.userBagian.createMany({
+                data: bagianList.map((b) => ({
+                  userId: newUser.id,
+                  bagian: b as Bagian,
+                })),
+              });
+            }
           });
           results.imported++;
         }
-      } catch (error: any) {
-        results.errors.push(`Baris ${i + 2}: ${error.message}`);
+      } catch (error: unknown) {
+        results.errors.push(`Baris ${i + 2}: ${error instanceof Error ? error.message : 'Unknown error'}`);
         results.skipped++;
       }
     }
@@ -212,8 +235,8 @@ export async function POST(request: NextRequest) {
       { success: true, data: results },
       { status: 200 }
     );
-  } catch (error: any) {
-    console.error('Import users error:', error);
+  } catch (error: unknown) {
+    serverError('Import users error:', error);
     if (user) {
       await logActivity({
         userId: user.id,
@@ -221,7 +244,7 @@ export async function POST(request: NextRequest) {
         resourceType: 'User',
         resourceId: '',
         description: 'Failed to import users',
-        errorMessage: error?.message || 'Unknown error',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
         ipAddress: getClientIp(request),
         userAgent: getUserAgent(request),
         status: 'FAILED',

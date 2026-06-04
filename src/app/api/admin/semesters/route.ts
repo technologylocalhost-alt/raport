@@ -1,31 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
+import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-  
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) {
-    return user;
-  }
-  return null;
+async function requireSemesterAccess(req: NextRequest) {
+  return requireAdminOrPrincipal(req);
 }
 
 const semesterSchema = z.object({
@@ -44,7 +27,7 @@ const semesterSchema = z.object({
  */
 export async function GET(request: NextRequest) {
   try {
-    const admin = await verifyAdmin(request);
+    const admin = await requireSemesterAccess(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -56,7 +39,7 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-    const where = {
+    const where: Prisma.SemesterWhereInput = {
       ...(schoolYearId && { schoolYearId }),
     };
 
@@ -78,7 +61,7 @@ export async function GET(request: NextRequest) {
 
     return paginatedResponse(semesters, total, page, limit);
   } catch (error) {
-    console.error('Get semesters error:', error);
+    serverError('Get semesters error:', error);
     return errorResponse('Failed to fetch semesters', 500);
   }
 }
@@ -88,12 +71,12 @@ export async function GET(request: NextRequest) {
  * Create a new semester
  */
 export async function POST(request: NextRequest) {
-  let admin;
+  const admin = await requireSemesterAccess(request);
+  if (!admin) {
+    return errorResponse('Unauthorized', 401);
+  }
+
   try {
-    admin = await verifyAdmin(request);
-    if (!admin) {
-      return errorResponse('Unauthorized', 401);
-    }
 
     const body = await request.json();
     const validatedData = semesterSchema.parse(body);
@@ -164,10 +147,10 @@ export async function POST(request: NextRequest) {
         field: err.path.join('.'),
         message: err.message
       }));
-      console.error('Semester validation errors:', fieldErrors);
+      serverError('Semester validation errors:', fieldErrors);
       return errorResponse('Validation error', 400, fieldErrors);
     }
-    console.error('Create semester error:', error);
+    serverError('Create semester error:', error);
     
     // Log failed semester creation
     if (admin) {

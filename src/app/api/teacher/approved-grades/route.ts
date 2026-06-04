@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireTeacherOnly } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
 export async function GET(request: NextRequest) {
   try {
-    const token = request.headers.get('authorization')?.replace('Bearer ', '');
-    if (!token) {
-      return NextResponse.json({ success: false, error: 'Token tidak ditemukan' }, { status: 401 });
-    }
-
-    const decoded = verifyAccessToken(token);
-    if (!decoded || decoded.role !== 'TEACHER') {
+    const user = await requireTeacherOnly(request);
+    if (!user) {
       return NextResponse.json({ success: false, error: 'Akses ditolak' }, { status: 403 });
     }
 
@@ -46,7 +42,7 @@ export async function GET(request: NextRequest) {
       data: approvedGrades,
     });
   } catch (error) {
-    console.error('Error fetching approved grades:', error);
+    serverError('Error fetching approved grades:', error);
     return NextResponse.json(
       { success: false, error: 'Gagal memuat nilai yang disetujui' },
       { status: 500 }

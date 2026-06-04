@@ -1,31 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-  
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) {
-    return user;
-  }
-  return null;
+async function requireSemesterAccess(req: NextRequest) {
+  return requireAdminOrPrincipal(req);
 }
 
 const semesterUpdateSchema = z.object({
@@ -47,7 +29,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const admin = await verifyAdmin(request);
+    const admin = await requireSemesterAccess(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -75,7 +57,7 @@ export async function GET(
 
     return successResponse(semester);
   } catch (error) {
-    console.error('Get semester error:', error);
+    serverError('Get semester error:', error);
     return errorResponse('Failed to fetch semester', 500);
   }
 }
@@ -90,7 +72,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const admin = await verifyAdmin(request);
+    const admin = await requireSemesterAccess(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -125,7 +107,7 @@ export async function PUT(
       }
     }
 
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     if (validatedData.number !== undefined) updateData.number = validatedData.number;
     if (validatedData.semesterLabelArabic !== undefined) {
       updateData.semesterLabelArabic = validatedData.semesterLabelArabic || null;
@@ -163,10 +145,10 @@ export async function PUT(
         field: err.path.join('.'),
         message: err.message
       }));
-      console.error('Semester update validation errors:', fieldErrors);
+      serverError('Semester update validation errors:', fieldErrors);
       return errorResponse('Validation error', 400, fieldErrors);
     }
-    console.error('Update semester error:', error);
+    serverError('Update semester error:', error);
     return errorResponse('Failed to update semester', 500);
   }
 }
@@ -183,7 +165,7 @@ export async function DELETE(
   try {
     const result = await params;
     id = result.id;
-    const admin = await verifyAdmin(request);
+    const admin = await requireSemesterAccess(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -229,7 +211,7 @@ export async function DELETE(
 
     return successResponse({ message: 'Semester berhasil dihapus' });
   } catch (error) {
-    console.error('Delete semester error:', error);
+    serverError('Delete semester error:', error);
     return errorResponse('Failed to delete semester', 500);
   }
 }

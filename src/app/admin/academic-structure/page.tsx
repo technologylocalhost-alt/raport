@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, ChevronDown, ChevronUp, Calendar } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface SchoolYear {
   id: string;
@@ -38,6 +40,11 @@ interface School {
   name: string;
 }
 
+interface ValidationDetail {
+  field?: string;
+  message: string;
+}
+
 export default function AcademicStructurePage() {
   const [schoolYears, setSchoolYears] = useState<SchoolYearWithSemesters[]>([]);
   const [schools, setSchools] = useState<School[]>([]);
@@ -67,24 +74,19 @@ export default function AcademicStructurePage() {
   });
 
   useEffect(() => {
-    fetchSchools();
-    fetchAcademicStructure();
+    void fetchSchools();
+    void fetchAcademicStructure();
   }, []);
 
   async function fetchSchools() {
     try {
       setSchoolsLoading(true);
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch('/api/admin/schools?limit=100', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch('/api/admin/schools?limit=100');
 
       const data = await response.json();
       setSchools(data.data || []);
     } catch (error) {
-      console.error('Failed to fetch schools:', error);
+      devError('Failed to fetch schools:', error);
     } finally {
       setSchoolsLoading(false);
     }
@@ -93,21 +95,12 @@ export default function AcademicStructurePage() {
   async function fetchAcademicStructure() {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch('/api/admin/school-years?limit=100', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch('/api/admin/school-years?limit=100');
 
       const data = await response.json();
       const yearsWithSemesters = await Promise.all(
         (data.data || []).map(async (year: SchoolYear) => {
-          const semesterRes = await fetch(`/api/admin/school-years/${year.id}`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          });
+          const semesterRes = await apiFetch(`/api/admin/school-years/${year.id}`);
           const semesterData = await semesterRes.json();
           return {
             ...year,
@@ -118,7 +111,7 @@ export default function AcademicStructurePage() {
 
       setSchoolYears(yearsWithSemesters);
     } catch (error) {
-      console.error('Failed to fetch academic structure:', error);
+      devError('Failed to fetch academic structure:', error);
     } finally {
       setIsLoading(false);
     }
@@ -141,7 +134,6 @@ export default function AcademicStructurePage() {
     }
 
     try {
-      const token = localStorage.getItem('accessToken');
       const url = editingYearId
         ? `/api/admin/school-years/${editingYearId}`
         : '/api/admin/school-years';
@@ -162,19 +154,15 @@ export default function AcademicStructurePage() {
         isActive: yearFormData.isActive,
       };
 
-      console.log('Year payload:', JSON.stringify(payload, null, 2));
-
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: editingYearId ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });
 
       const result = await response.json();
-      console.log('Year save response:', result);
 
       if (response.ok) {
         alert(editingYearId ? '✅ Tahun akademik berhasil diperbarui!' : '✅ Tahun akademik berhasil ditambahkan!');
@@ -188,16 +176,16 @@ export default function AcademicStructurePage() {
           endDate: '',
           isActive: true,
         });
-        fetchAcademicStructure();
+        void fetchAcademicStructure();
       } else {
         let errorMsg = result.error || 'Gagal menyimpan tahun akademik';
         if (result.details && Array.isArray(result.details)) {
-          errorMsg = result.details.map((d: any) => `${d.message}`).join(', ');
+          errorMsg = (result.details as ValidationDetail[]).map((d) => d.message).join(', ');
         }
         alert(`❌ ${errorMsg}`);
       }
     } catch (error) {
-      console.error('Failed to save year:', error);
+      devError('Failed to save year:', error);
       alert('❌ Gagal menyimpan tahun akademik');
     }
   }
@@ -206,23 +194,19 @@ export default function AcademicStructurePage() {
     if (!confirm('Apakah Anda yakin ingin menghapus tahun akademik ini?')) return;
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/school-years/${id}`, {
+      const response = await apiFetch(`/api/admin/school-years/${id}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       if (response.ok) {
         alert('✅ Tahun akademik berhasil dihapus!');
-        fetchAcademicStructure();
+        void fetchAcademicStructure();
       } else {
         const result = await response.json();
         alert(`❌ ${result.error || 'Gagal menghapus tahun akademik'}`);
       }
     } catch (error) {
-      console.error('Failed to delete year:', error);
+      devError('Failed to delete year:', error);
       alert('❌ Gagal menghapus tahun akademik');
     }
   }
@@ -244,7 +228,6 @@ export default function AcademicStructurePage() {
     }
 
     try {
-      const token = localStorage.getItem('accessToken');
       const url = editingSemesterId
         ? `/api/admin/semesters/${editingSemesterId}`
         : '/api/admin/semesters';
@@ -262,17 +245,15 @@ export default function AcademicStructurePage() {
         isActive: semesterFormData.isActive,
       };
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: editingSemesterId ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });
 
       const result = await response.json();
-      console.log('Semester save response:', result);
 
       if (response.ok) {
         alert(editingSemesterId ? '✅ Semester berhasil diperbarui!' : '✅ Semester berhasil ditambahkan!');
@@ -285,16 +266,16 @@ export default function AcademicStructurePage() {
           endDate: '',
           isActive: true,
         });
-        fetchAcademicStructure();
+        void fetchAcademicStructure();
       } else {
         let errorMsg = result.error || 'Gagal menyimpan semester';
         if (result.details && Array.isArray(result.details)) {
-          errorMsg = result.details.map((d: any) => `${d.field}: ${d.message}`).join('\n');
+          errorMsg = (result.details as ValidationDetail[]).map((d) => `${d.field}: ${d.message}`).join('\n');
         }
         alert(`❌ ${errorMsg}`);
       }
     } catch (error) {
-      console.error('Failed to save semester:', error);
+      devError('Failed to save semester:', error);
       alert('❌ Gagal menyimpan semester');
     }
   }
@@ -303,23 +284,19 @@ export default function AcademicStructurePage() {
     if (!confirm('Apakah Anda yakin ingin menghapus semester ini?')) return;
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/semesters/${id}`, {
+      const response = await apiFetch(`/api/admin/semesters/${id}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       if (response.ok) {
         alert('✅ Semester berhasil dihapus!');
-        fetchAcademicStructure();
+        void fetchAcademicStructure();
       } else {
         const result = await response.json();
         alert(`❌ ${result.error || 'Gagal menghapus semester'}`);
       }
     } catch (error) {
-      console.error('Failed to delete semester:', error);
+      devError('Failed to delete semester:', error);
       alert('❌ Gagal menghapus semester');
     }
   }

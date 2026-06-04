@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-interface ApiResponse<T = any> {
+interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
@@ -28,12 +28,12 @@ export function successResponse<T>(data: T, message?: string | number, status: n
 /**
  * Create an error response
  */
-export function errorResponse(error: string, status = 400, details?: any): NextResponse<ApiResponse> {
+export function errorResponse(error: string, status = 400, details?: unknown): NextResponse<ApiResponse> {
   return NextResponse.json(
     {
       success: false,
       error,
-      ...(details && { details }),
+      ...(details !== undefined ? { details } : {}),
     },
     { status }
   );

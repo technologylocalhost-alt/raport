@@ -1,29 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireWaliKelasAdminPrincipal } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ classId: string }> }
 ) {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const user = await requireWaliKelasAdminPrincipal(request);
 
-    const token = authHeader.slice(7);
-    const payload = verifyAccessToken(token);
-
-    if (!payload) {
-      return NextResponse.json({ error: 'Token invalid' }, { status: 401 });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: payload.userId },
-    });
-
-    if (!user || (user.role !== 'WALI_KELAS' && user.role !== 'ADMIN' && user.role !== 'PRINCIPAL')) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -52,7 +39,7 @@ export async function GET(
       data: subjects,
     });
   } catch (error) {
-    console.error('Error fetching class subjects:', error);
+    serverError('Error fetching class subjects:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

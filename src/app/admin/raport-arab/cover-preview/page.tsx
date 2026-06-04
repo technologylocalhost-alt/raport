@@ -1,20 +1,31 @@
+/* eslint-disable @next/next/no-img-element */
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Printer, Download, Eye } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface Student {
   id: string;
   name: string;
   studentNo: string;
-  raportNo?: string;
+  raportNo?: string | null;
   gender?: string;
 }
 
 interface ClassData {
   id: string;
   name: string;
+}
+
+interface StudentApiItem {
+  id: string;
+  name?: string;
+  studentNo?: string;
+  raportNo?: string | null;
+  gender?: string;
 }
 
 function CoverPreviewContent() {
@@ -43,16 +54,8 @@ function CoverPreviewContent() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const token = localStorage.getItem('accessToken');
-        if (!token) {
-          setError('Sesi Anda telah berakhir');
-          return;
-        }
-
         // Fetch class data
-        const classResponse = await fetch(`/api/admin/classes/${classId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const classResponse = await apiFetch(`/api/admin/classes/${classId}`);
 
         if (classResponse.ok) {
           const classDataJson = await classResponse.json();
@@ -65,14 +68,12 @@ function CoverPreviewContent() {
         }
 
         // Fetch student data with raport number
-        const studentResponse = await fetch(`/api/admin/classes/${classId}/students?limit=1000`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const studentResponse = await apiFetch(`/api/admin/classes/${classId}/students?limit=1000`);
 
         if (studentResponse.ok) {
           const studentData = await studentResponse.json();
           if (studentData.success && Array.isArray(studentData.data)) {
-            const students = studentData.data.map((s: any) => ({
+            const students = (studentData.data as StudentApiItem[]).map((s) => ({
               id: s.id,
               name: s.name || 'N/A',
               studentNo: s.studentNo || 'N/A',
@@ -81,15 +82,15 @@ function CoverPreviewContent() {
             }));
             setAllStudents(students);
 
-            const foundIndex = students.findIndex((s: any) => s.id === studentId);
+            const foundIndex = students.findIndex((s) => s.id === studentId);
             if (foundIndex !== -1) {
               setStudent(students[foundIndex]);
               setCurrentStudentIndex(foundIndex);
             }
           }
         }
-      } catch (err) {
-        console.error('Error fetching student:', err);
+      } catch (error) {
+        devError('Error fetching student:', error);
         setError('Gagal memuat data siswa');
       } finally {
         setIsLoading(false);
@@ -157,11 +158,10 @@ function CoverPreviewContent() {
         return;
       }
 
-      const response = await fetch('/api/wali-kelas/generate-cover-pdf', {
+      const response = await apiFetch('/api/wali-kelas/generate-cover-pdf', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
         body: JSON.stringify({
           studentName: student.name,
@@ -187,7 +187,7 @@ function CoverPreviewContent() {
       link.click();
       document.body.removeChild(link);
     } catch (error) {
-      console.error('Error generating cover PDF:', error);
+      devError('Error generating cover PDF:', error);
       alert(`Gagal membuat PDF cover: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };

@@ -1,53 +1,32 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { getAuthenticatedUser } from '@/lib/auth/access';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-  
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) {
-    return user;
-  }
-  return null;
+async function requireSubjectManagement(req: NextRequest) {
+  return requireMenuAccess(req, '/admin/subjects', ['ADMIN', 'PRINCIPAL']);
 }
 
-async function verifyUser(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
+async function requireSubjectReadAccess(req: NextRequest) {
+  const user = await getAuthenticatedUser(req);
+  if (!user) return null;
+
+  if (user.role === 'ADMIN' || user.role === 'PRINCIPAL') {
+    return requireMenuAccess(req, '/admin/subjects', ['ADMIN', 'PRINCIPAL']);
   }
 
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  
-  if (!payload) {
-    return null;
+  if (user.role === 'TEACHER') {
+    return requireMenuAccess(req, '/teacher/subjects', ['TEACHER']);
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-  
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL' || user.role === 'TEACHER' || user.role === 'WALI_KELAS')) {
-    return user;
+  if (user.role === 'WALI_KELAS') {
+    return requireMenuAccess(req, '/wali-kelas/management', ['WALI_KELAS']);
   }
+
   return null;
 }
 
@@ -69,7 +48,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const user = await verifyUser(request);
+    const user = await requireSubjectReadAccess(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
@@ -88,7 +67,7 @@ export async function GET(
 
     return successResponse(subject);
   } catch (error) {
-    console.error('Get subject error:', error);
+    serverError('Get subject error:', error);
     return errorResponse('Failed to fetch subject', 500);
   }
 }
@@ -103,7 +82,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const admin = await verifyAdmin(request);
+    const admin = await requireSubjectManagement(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -147,7 +126,7 @@ export async function PUT(
     if (error instanceof z.ZodError) {
       return errorResponse('Validation error', 400, error.issues);
     }
-    console.error('Update subject error:', error);
+    serverError('Update subject error:', error);
     return errorResponse('Failed to update subject', 500);
   }
 }
@@ -162,7 +141,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const admin = await verifyAdmin(request);
+    const admin = await requireSubjectManagement(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -210,7 +189,7 @@ export async function DELETE(
 
     return successResponse({ message: 'Subject deleted successfully' });
   } catch (error) {
-    console.error('Delete subject error:', error);
+    serverError('Delete subject error:', error);
     return errorResponse('Failed to delete subject', 500);
   }
 }

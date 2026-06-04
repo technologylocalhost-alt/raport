@@ -1,38 +1,12 @@
+import { AssessmentType } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireTeacherWaliAdminPrincipal } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
-async function getUser(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  console.log('[NilaiApprove] Auth Header:', authHeader ? `Bearer ${authHeader.slice(0, 50)}...` : 'missing');
-  
-  if (!authHeader?.startsWith('Bearer ')) {
-    console.log('[NilaiApprove] Invalid auth header format:', authHeader?.slice(0, 50));
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  console.log('[NilaiApprove] Token verification result:', payload ? `success (userId: ${payload.userId}, role: ${payload.role})` : 'failed');
-
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  console.log('[NilaiApprove] User database lookup:', user ? `found (role: ${user.role})` : 'not found');
-  
-  // Return user if authenticated (any role for now, restrict at endpoint level if needed)
-  if (user) {
-    console.log('[NilaiApprove] Authorization passed for user:', user.id);
-    return user;
-  }
-  console.log('[NilaiApprove] User not found in database');
-  return null;
+async function requireApprovedGradeAccess(req: NextRequest) {
+  return requireTeacherWaliAdminPrincipal(req);
 }
 
 /**
@@ -41,11 +15,9 @@ async function getUser(req: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await getUser(request);
-    console.log('[NilaiApprove] GET request - authenticated user:', user ? `${user.id} (${user.role})` : 'none');
-    
+    const user = await requireApprovedGradeAccess(request);
+
     if (!user) {
-      console.log('[NilaiApprove] Rejecting request - no authenticated user');
       return errorResponse('Unauthorized', 401);
     }
 
@@ -53,13 +25,9 @@ export async function GET(request: NextRequest) {
     const studentId = searchParams.get('studentId') || '';
     const classId = searchParams.get('classId') || '';
     const assessmentType = searchParams.get('assessmentType') || '';
-    const limit = parseInt(searchParams.get('limit') || '100');
-
-    console.log('[NilaiApprove] Request params:', { studentId, classId, assessmentType, limit });
 
     // Validate at least classId is provided
     if (!classId) {
-      console.log('[NilaiApprove] Missing required classId parameter');
       return errorResponse('classId is required', 400);
     }
 
@@ -69,11 +37,8 @@ export async function GET(request: NextRequest) {
     });
 
     if (!classData) {
-      console.log('[NilaiApprove] Class not found:', classId);
       return errorResponse('Class not found', 404);
     }
-
-    console.log('[NilaiApprove] Class found:', classData.id);
 
     // If studentId is provided, verify the student belongs to this class
     if (studentId) {
@@ -85,7 +50,6 @@ export async function GET(request: NextRequest) {
       });
 
       if (!student) {
-        console.log('[NilaiApprove] Student not found in class');
         return errorResponse('Student not found in this class', 404);
       }
     }
@@ -93,11 +57,13 @@ export async function GET(request: NextRequest) {
     // Fetch approved grades for this class (or specific student if provided)
     const approvedGrades = await prisma.nilaiApprove.findMany({
       where: {
-        ...(studentId ? { studentId: studentId } : {}),
-        ...(assessmentType ? { assessmentType: assessmentType as any } : {}),
+        ...(studentId ? { studentId } : {}),
+        ...(assessmentType && Object.values(AssessmentType).includes(assessmentType as AssessmentType)
+          ? { assessmentType: assessmentType as AssessmentType }
+          : {}),
         // Filter by classId through student's class relationship
         student: {
-          classId: classId,
+          classId,
         },
       },
       include: {
@@ -176,7 +142,7 @@ export async function GET(request: NextRequest) {
       200
     );
   } catch (error) {
-    console.error('Error fetching NilaiApprove:', error);
+    serverError('Error fetching NilaiApprove:', error);
     return errorResponse('Failed to fetch approved grades', 500);
   }
 }

@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Filter, Download, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Filter, CheckCircle2 } from 'lucide-react';
 import ApprovalModal from './ApprovalModal';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface Grade {
   id: string;
@@ -31,7 +33,49 @@ interface GradesSummary {
   suluk?: string;
   muazobah?: string;
   nazofah?: string;
-  [key: string]: string | number | undefined; // For dynamic assessment type columns
+  [key: string]: string | number | undefined;
+}
+
+interface ClassStudentItem {
+  name: string;
+  no: string;
+  nourut?: number;
+}
+
+interface ClassSubjectItem {
+  id: string;
+  name: string;
+  code: string;
+}
+
+interface WaliKelasClassApiItem {
+  id: string;
+  name?: string;
+}
+
+interface ApprovalApiItem {
+  studentId: string;
+  subjectId: string;
+}
+
+interface TeacherGradeApiItem {
+  id: string;
+  studentId: string;
+  subjectId: string;
+  studentName?: string;
+  studentNo?: string;
+  studentNourut?: number;
+  competencyName?: string;
+  subjectName?: string;
+  score?: string | number;
+  assessmentType?: string;
+  teacherName?: string;
+}
+
+interface StudentApiItem {
+  name: string;
+  nisn: string;
+  nourut?: number;
 }
 
 export default function PenilaianPage() {
@@ -39,7 +83,6 @@ export default function PenilaianPage() {
   const [grades, setGrades] = useState<Grade[]>([]);
   const [filteredGrades, setFilteredGrades] = useState<Grade[]>([]);
   const [gradesSummary, setGradesSummary] = useState<GradesSummary[]>([]);
-  const [approvedGrades, setApprovedGrades] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedClass, setSelectedClass] = useState<string>('');
@@ -47,11 +90,9 @@ export default function PenilaianPage() {
   const [selectedStudent, setSelectedStudent] = useState<string>('');
   const [selectedAssessmentType, setSelectedAssessmentType] = useState<string>('');
   const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
-  const [classStudents, setClassStudents] = useState<Array<{name: string, no: string, nourut?: number}>>([]);
-  const [isLoadingStudents, setIsLoadingStudents] = useState(false);
-  const [classNameToIdMap, setClassNameToIdMap] = useState<{[key: string]: string}>({});
-  const [classSubjects, setClassSubjects] = useState<Array<{id: string, name: string, code: string}>>([]);
-  const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
+  const [classStudents, setClassStudents] = useState<ClassStudentItem[]>([]);
+  const [classNameToIdMap, setClassNameToIdMap] = useState<Record<string, string>>({});
+  const [classSubjects, setClassSubjects] = useState<ClassSubjectItem[]>([]);
 
   const classes = Array.from(new Set(grades.map((g) => g.className))).sort();
   const subjects = Array.from(
@@ -87,9 +128,6 @@ export default function PenilaianPage() {
     return relevantGrades.some((g) => g.assessmentType === type.code);
   });
 
-  useEffect(() => {
-    fetchGrades();
-  }, []);
 
   useEffect(() => {
     // Jika belum memilih kelas, jangan tampilkan data
@@ -99,11 +137,9 @@ export default function PenilaianPage() {
     }
 
     let filtered = [...grades];
-    console.log(`[filter effect] Total grades: ${filtered.length}`);
 
     if (selectedClass) {
       filtered = filtered.filter((g) => g.className === selectedClass);
-      console.log(`[filter effect] After class filter: ${filtered.length}`);
     }
 
     if (selectedSubject) {
@@ -115,118 +151,69 @@ export default function PenilaianPage() {
     }
 
     if (selectedAssessmentType) {
-      console.log(`[filter effect] Filtering by assessment type: ${selectedAssessmentType}`);
       filtered = filtered.filter((g) => g.assessmentType === selectedAssessmentType);
-      console.log(`[filter effect] After assessment type filter: ${filtered.length}`);
     }
-
-    console.log(`[filter effect] Final filtered: ${filtered.length}, selectedAssessmentType: ${selectedAssessmentType}`);
     setFilteredGrades(filtered);
   }, [grades, selectedClass, selectedSubject, selectedStudent, selectedAssessmentType]);
 
-  useEffect(() => {
-    setGradesSummary(createSummary());
-  }, [filteredGrades, classStudents, classSubjects, selectedClass, selectedAssessmentType, selectedStudent, selectedSubject]);
 
-  useEffect(() => {
-    // Fetch all students for the selected class
-    if (!selectedClass) {
-      setClassStudents([]);
-      setClassSubjects([]);
-      return;
-    }
-
-    fetchStudentsForClass();
-    fetchClassSubjects();
-  }, [selectedClass, classNameToIdMap]);
-
-  async function fetchStudentsForClass() {
+  const fetchStudentsForClass = useCallback(async () => {
     if (!selectedClass || !classNameToIdMap[selectedClass]) {
-      console.log(`[fetchStudentsForClass] selectedClass: ${selectedClass}, mapping exists: ${!!classNameToIdMap[selectedClass]}`);
       return;
     }
 
     try {
-      setIsLoadingStudents(true);
-      const token = localStorage.getItem('accessToken');
       const classId = classNameToIdMap[selectedClass];
-      console.log(`[fetchStudentsForClass] Fetching students for classId: ${classId}`);
 
-      const response = await fetch(
-        `/api/wali-kelas/students?classId=${classId}&limit=1000`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      const response = await apiFetch(
+        `/api/wali-kelas/students?classId=${classId}&limit=1000`
       );
 
       if (response.ok) {
         const data = await response.json();
-        const students = (data.data || []).map((s: any) => ({
+        const students = (data.data || []).map((s: StudentApiItem) => ({
           name: s.name,
           no: s.nisn,
           nourut: s.nourut,
         }));
-        console.log(`[fetchStudentsForClass] Fetched ${students.length} students`);
-        setClassStudents(students.sort((a: any, b: any) => a.name.localeCompare(b.name)));
+        setClassStudents(students.sort((a: ClassStudentItem, b: ClassStudentItem) => a.name.localeCompare(b.name)));
       } else {
-        console.error(`[fetchStudentsForClass] Error: ${response.status}`);
+        devError(`[fetchStudentsForClass] Error: ${response.status}`);
       }
-      setIsLoadingStudents(false);
-    } catch (err) {
-      console.error('Error fetching students:', err);
-      setIsLoadingStudents(false);
+    } catch (error) {
+      devError('Error fetching students:', error);
     }
-  }
+  }, [classNameToIdMap, selectedClass]);
 
-  async function fetchClassSubjects() {
+  const fetchClassSubjects = useCallback(async () => {
     if (!selectedClass || !classNameToIdMap[selectedClass]) {
-      console.log(`[fetchClassSubjects] selectedClass: ${selectedClass}, mapping exists: ${!!classNameToIdMap[selectedClass]}`);
       return;
     }
 
     try {
-      setIsLoadingSubjects(true);
-      const token = localStorage.getItem('accessToken');
       const classId = classNameToIdMap[selectedClass];
-      console.log(`[fetchClassSubjects] Fetching subjects for classId: ${classId}`);
 
-      const response = await fetch(
-        `/api/wali-kelas/classes/${classId}/subjects`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      const response = await apiFetch(
+        `/api/wali-kelas/classes/${classId}/subjects`
       );
 
       if (response.ok) {
         const data = await response.json();
-        const subjects = data.data || [];
-        console.log(`[fetchClassSubjects] Fetched ${subjects.length} subjects`);
-        setClassSubjects(subjects.sort((a: any, b: any) => a.name.localeCompare(b.name)));
+        const subjects = (data.data || []) as ClassSubjectItem[];
+        setClassSubjects(subjects.sort((a: ClassSubjectItem, b: ClassSubjectItem) => a.name.localeCompare(b.name)));
       } else {
-        console.error(`[fetchClassSubjects] Error: ${response.status}`);
+        devError(`[fetchClassSubjects] Error: ${response.status}`);
       }
-      setIsLoadingSubjects(false);
-    } catch (err) {
-      console.error('Error fetching subjects:', err);
-      setIsLoadingSubjects(false);
+    } catch (error) {
+      devError('Error fetching subjects:', error);
     }
-  }
+  }, [classNameToIdMap, selectedClass]);
 
-  async function fetchGrades() {
+  const fetchGrades = useCallback(async () => {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('accessToken');
-
       // Get current user's classes (they are wali kelas)
-      const response = await fetch('/api/wali-kelas/classes', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch('/api/wali-kelas/classes');
 
       if (!response.ok) {
         setError('Gagal memuat data kelas');
@@ -235,9 +222,10 @@ export default function PenilaianPage() {
       }
 
       const classData = await response.json();
-      const classIds = classData.data.map((c: any) => c.id);
-      const classNameMap: { [key: string]: string } = {};
-      classData.data.forEach((c: any) => {
+      const classItems = (classData.data || []) as WaliKelasClassApiItem[];
+      const classIds = classItems.map((c) => c.id);
+      const classNameMap: Record<string, string> = {};
+      classItems.forEach((c) => {
         classNameMap[c.id] = c.name || 'N/A';
       });
 
@@ -246,49 +234,35 @@ export default function PenilaianPage() {
       
       for (const classId of classIds) {
         try {
-          const approvalResponse = await fetch(
-            `/api/wali-kelas/nilai-approve?classId=${classId}&limit=1000`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            }
+          const approvalResponse = await apiFetch(
+            `/api/wali-kelas/nilai-approve?classId=${classId}&limit=1000`
           );
 
           if (approvalResponse.ok) {
             const approvalData = await approvalResponse.json();
-            const approvals = approvalData.data?.data || []; // Get the nested array
-            console.log(`[fetchGrades] Class approval status: ${approvals.length} records`);
+            const approvals = (approvalData.data?.data || []) as ApprovalApiItem[];
             
-            approvals.forEach((approval: any) => {
+            approvals.forEach((approval) => {
               // Create a key to identify approved grades: studentId-subjectId
               const key = `${approval.studentId}-${approval.subjectId}`;
               approvalSet.add(key);
             });
           }
-        } catch (err) {
-          console.log('Failed to fetch approval data for class:', classId);
+        } catch {
         }
       }
-
-      setApprovedGrades(approvalSet);
 
       // Fetch grades for all classes
       const gradesList: Grade[] = [];
 
       for (const classId of classIds) {
-        const gradesResponse = await fetch(
-          `/api/teacher/grades?classId=${classId}&limit=1000`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
+        const gradesResponse = await apiFetch(
+          `/api/teacher/grades?classId=${classId}&limit=1000`
         );
 
         if (gradesResponse.ok) {
           const gradesData = await gradesResponse.json();
-          const mappedGrades = (gradesData.data || []).map((grade: any) => {
+          const mappedGrades = ((gradesData.data || []) as TeacherGradeApiItem[]).map((grade) => {
             const key = `${grade.studentId}-${grade.subjectId}`;
             return {
               id: grade.id,
@@ -307,33 +281,28 @@ export default function PenilaianPage() {
               nazofah: '', // Will be extracted from grades with subjectName 'NAZOFAH' in createSummary()
             };
           });
-          console.log(`[fetchGrades] Mapped ${mappedGrades.length} grades for class "${classNameMap[classId]}"`);
           if (mappedGrades.length > 0) {
-            console.log('[fetchGrades] First mapped grade:', mappedGrades[0]);
           }
           gradesList.push(...mappedGrades);
         }
       }
-
-      console.log(`[fetchGrades] Total grades fetched: ${gradesList.length}`);
       setGrades(gradesList);
       // Create reverse mapping: className -> classId
-      const reverseMap: { [key: string]: string } = {};
+      const reverseMap: Record<string, string> = {};
       Object.entries(classNameMap).forEach(([classId, className]) => {
         reverseMap[className] = classId;
       });
-      console.log(`[fetchGrades] Class mapping: ${JSON.stringify(reverseMap)}`);
       setClassNameToIdMap(reverseMap);
       setIsLoading(false);
-    } catch (err) {
-      console.error('Error fetching grades:', err);
+    } catch (error) {
+      devError('Error fetching grades:', error);
       setError('Gagal memuat data penilaian');
       setIsLoading(false);
     }
-  }
+  }, []);
 
   const translateAssessmentType = (type: string) => {
-    const translations: { [key: string]: string } = {
+    const translations: Record<string, string> = {
       UTS_1: 'Ujian Tengah Semester 1 (UTS 1)',
       UAS_1: 'Ujian Akhir Semester 1 (UAS 1)',
       UTS_2: 'Ujian Tengah Semester 2 (UTS 2)',
@@ -344,8 +313,19 @@ export default function PenilaianPage() {
     return translations[type] || type;
   };
 
-  // Convert detailed grades to pivot summary - include all students and subjects
-  const createSummary = () => {
+  const getAssessmentTypeLabel = (type: string): string => {
+    const translations: Record<string, string> = {
+      UTS_1: 'Ujian Tengah Semester 1 (UTS 1)',
+      UAS_1: 'Ujian Akhir Semester 1 (UAS 1)',
+      UTS_2: 'Ujian Tengah Semester 2 (UTS 2)',
+      UAS_2: 'Ujian Akhir Semester 2 (UAS 2)',
+      FINAL_EXAM_1: 'Ujian Akhir Siswa Akhir Gel 1',
+      FINAL_EXAM_2: 'Ujian Akhir Siswa Gel 2',
+    };
+    return translations[type] || type;
+  };
+
+  const createSummary = useCallback(() => {
     const summaryMap: { [key: string]: GradesSummary } = {};
 
     // Determine which students to show
@@ -422,9 +402,7 @@ export default function PenilaianPage() {
                            sulukGrades.find(g => g.subjectName?.includes('SULUK'));
         if (sulukGrade) {
           student.suluk = sulukGrade.score;
-          console.log(`[createSummary] ✅ SULUK ${student.studentNo}: ${sulukGrade.score} (${sulukGrade.subjectName})`);
         } else {
-          console.log(`[createSummary] ⚠️  No SULUK for ${student.studentNo}`);
         }
       }
 
@@ -435,7 +413,6 @@ export default function PenilaianPage() {
                               muazobahGrades.find(g => g.subjectName?.includes('MUAZOBAH'));
         if (muazobahGrade) {
           student.muazobah = muazobahGrade.score;
-          console.log(`[createSummary] ✅ MUAZOBAH ${student.studentNo}: ${muazobahGrade.score} (${muazobahGrade.subjectName})`);
         }
       }
 
@@ -446,13 +423,11 @@ export default function PenilaianPage() {
                             nazfahGrades.find(g => g.subjectName?.includes('NAZOFAH'));
         if (nazfahGrade) {
           student.nazofah = nazfahGrade.score;
-          console.log(`[createSummary] ✅ NAZOFAH ${student.studentNo}: ${nazfahGrade.score} (${nazfahGrade.subjectName})`);
         }
       }
     });
 
     const result = Object.values(summaryMap).sort((a, b) => {
-      // Sort by nomor urut first, null values at the end
       if (a.studentNourut && b.studentNourut) {
         return a.studentNourut - b.studentNourut;
       }
@@ -460,22 +435,27 @@ export default function PenilaianPage() {
       if (b.studentNourut) return 1;
       return a.studentNo.localeCompare(b.studentNo);
     });
-
-    console.log(`[createSummary] studentsToShow: ${studentsToShow.length}, subjectsToShow: ${subjectsToShow.length}, filteredGrades: ${filteredGrades.length}, selectedStudent: ${selectedStudent}, selectedSubject: ${selectedSubject}, selectedAssessmentType: ${selectedAssessmentType}`);
     return result;
-  };
+  }, [classStudents, classSubjects, filteredGrades, grades, selectedAssessmentType, selectedClass, selectedStudent, selectedSubject]);
 
-  const getAssessmentTypeLabel = (type: string): string => {
-    const translations: { [key: string]: string } = {
-      UTS_1: 'Ujian Tengah Semester 1 (UTS 1)',
-      UAS_1: 'Ujian Akhir Semester 1 (UAS 1)',
-      UTS_2: 'Ujian Tengah Semester 2 (UTS 2)',
-      UAS_2: 'Ujian Akhir Semester 2 (UAS 2)',
-      FINAL_EXAM_1: 'Ujian Akhir Siswa Akhir Gel 1',
-      FINAL_EXAM_2: 'Ujian Akhir Siswa Gel 2',
-    };
-    return translations[type] || type;
-  };
+  useEffect(() => {
+    void fetchGrades();
+  }, [fetchGrades]);
+
+  useEffect(() => {
+    setGradesSummary(createSummary());
+  }, [createSummary]);
+
+  useEffect(() => {
+    if (!selectedClass) {
+      setClassStudents([]);
+      setClassSubjects([]);
+      return;
+    }
+
+    void fetchStudentsForClass();
+    void fetchClassSubjects();
+  }, [fetchClassSubjects, fetchStudentsForClass, selectedClass]);
 
   // Get all unique column names (assessment types)
   const getAllColumns = (): string[] => {
@@ -767,7 +747,7 @@ export default function PenilaianPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {gradesSummary.map((row, idx) => {
+                  {gradesSummary.map((row) => {
                     // Check if all grades for this student are approved
                     const studentGrades = filteredGrades.filter((g) => g.studentNo === row.studentNo);
                     const allApproved = studentGrades.length > 0 && studentGrades.every((g) => g.isApproved);
@@ -941,7 +921,7 @@ export default function PenilaianPage() {
 
               {/* Mobile Card View */}
               <div className="block md:hidden space-y-4 p-4">
-                {gradesSummary.map((row, idx) => {
+                {gradesSummary.map((row) => {
                   const studentGrades = filteredGrades.filter((g) => g.studentNo === row.studentNo);
                   const allApproved = studentGrades.length > 0 && studentGrades.every((g) => g.isApproved);
                   

@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/db';
+import { requireTeacherWaliAdminPrincipal } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const token = request.headers.get('Authorization')?.split(' ')[1];
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const user = verifyAccessToken(token);
+    const user = await requireTeacherWaliAdminPrincipal(request);
     if (!user) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
@@ -36,7 +32,7 @@ export async function GET(
     }
 
     // Get attendance data
-    let whereClause: any = {
+    const whereClause: Record<string, unknown> = {
       studentId: studentId,
     };
 
@@ -76,7 +72,7 @@ export async function GET(
       },
     });
   } catch (error) {
-    console.error('Error fetching attendance:', error);
+    serverError('Error fetching attendance:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

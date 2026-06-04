@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, Users, Eye, EyeOff, Download, Upload } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, Eye, EyeOff, Download, Upload } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface School {
   id: string;
@@ -16,6 +17,7 @@ interface User {
   role: 'ADMIN' | 'TEACHER' | 'PRINCIPAL' | 'WALI_KELAS';
   schoolId: string;
   isActive: boolean;
+  bagian: string[];
   createdAt: string;
   school: School;
 }
@@ -26,10 +28,25 @@ interface PaginatedResponse {
   page: number;
   limit: number;
   total: number;
+  pagination?: { total?: number };
+}
+
+interface SchoolListResponse {
+  data?: School[];
+}
+
+interface ImportResultState {
+  imported?: number;
+  updated?: number;
+  skipped?: number;
+  errors?: string[];
+}
+
+interface ValidationDetail {
+  message?: string;
 }
 
 export default function UsersPage() {
-  const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [schools, setSchools] = useState<School[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,7 +57,7 @@ export default function UsersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [importResult, setImportResult] = useState<any>(null);
+  const [importResult, setImportResult] = useState<ImportResultState | null>(null);
   const [showImportResult, setShowImportResult] = useState(false);
   const [formData, setFormData] = useState<{
     email: string;
@@ -49,6 +66,7 @@ export default function UsersPage() {
     role: 'ADMIN' | 'TEACHER' | 'PRINCIPAL' | 'WALI_KELAS';
     schoolId: string;
     isActive: boolean;
+    bagian: string[];
   }>({
     email: '',
     name: '',
@@ -56,16 +74,12 @@ export default function UsersPage() {
     role: 'TEACHER',
     schoolId: '',
     isActive: true,
+    bagian: [],
   });
 
   const limit = 10;
 
-  useEffect(() => {
-    fetchUsers();
-    fetchSchools();
-  }, [page, search]);
-
-  async function fetchUsers() {
+  const fetchUsers = useCallback(async () => {
     try {
       setIsLoading(true);
       const queryParams = new URLSearchParams({
@@ -74,38 +88,33 @@ export default function UsersPage() {
         ...(search && { search }),
       });
 
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/users?${queryParams}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch(`/api/admin/users?${queryParams}`);
 
-      const data: any = await response.json();
+      const data: PaginatedResponse = await response.json();
       setUsers(data.data || []);
       setTotal(data.pagination?.total || 0);
     } catch (error) {
-      console.error('Failed to fetch users:', error);
+      devError('Failed to fetch users:', error);
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [limit, page, search]);
 
-  async function fetchSchools() {
+  const fetchSchools = useCallback(async () => {
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch('/api/admin/schools?limit=100', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch('/api/admin/schools?limit=100');
 
-      const data: any = await response.json();
+      const data: SchoolListResponse = await response.json();
       setSchools(data.data || []);
     } catch (error) {
-      console.error('Failed to fetch schools:', error);
+      devError('Failed to fetch schools:', error);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    void fetchUsers();
+    void fetchSchools();
+  }, [fetchSchools, fetchUsers]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -126,22 +135,15 @@ export default function UsersPage() {
     }
 
     try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) {
-        alert('❌ Token tidak ditemukan. Silakan login terlebih dahulu.');
-        return;
-      }
-
       const url = editingId ? `/api/admin/users/${editingId}` : '/api/admin/users';
       const submitData = editingId
         ? { ...formData, ...(formData.password ? { password: formData.password } : {}) }
         : formData;
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: editingId ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(submitData),
       });
@@ -159,20 +161,21 @@ export default function UsersPage() {
           role: 'TEACHER',
           schoolId: '',
           isActive: true,
+          bagian: [],
         });
         setShowPassword(false);
-        fetchUsers();
+        void fetchUsers();
       } else {
         let errorMsg = 'Gagal menyimpan data';
         if (result.error) {
           errorMsg = result.error;
         } else if (result.details && Array.isArray(result.details)) {
-          errorMsg = result.details.map((d: any) => d.message || d).join(', ');
+          errorMsg = (result.details as ValidationDetail[]).map((d) => d.message || JSON.stringify(d)).join(', ');
         }
         alert(`❌ ${errorMsg}`);
       }
     } catch (error) {
-      console.error('Failed to save user:', error);
+      devError('Failed to save user:', error);
       alert(`❌ Gagal menyimpan data. Silakan coba lagi.\n${error instanceof Error ? error.message : ''}`);
     }
   }
@@ -181,35 +184,26 @@ export default function UsersPage() {
     if (!confirm('Apakah Anda yakin ingin menghapus user ini?')) return;
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/users/${id}`, {
+      const response = await apiFetch(`/api/admin/users/${id}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       if (response.ok) {
         alert('✅ User berhasil dihapus!');
-        fetchUsers();
+        void fetchUsers();
       } else {
         const result = await response.json();
         alert(`❌ ${result.error || 'Gagal menghapus user'}`);
       }
     } catch (error) {
-      console.error('Failed to delete user:', error);
+      devError('Failed to delete user:', error);
       alert('❌ Gagal menghapus user');
     }
   }
 
   async function handleDownloadTemplate() {
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch('/api/admin/users/template', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch('/api/admin/users/template');
 
       if (!response.ok) {
         alert('❌ Gagal mengunduh template');
@@ -227,19 +221,14 @@ export default function UsersPage() {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (error) {
-      console.error('Download template error:', error);
+      devError('Download template error:', error);
       alert('❌ Gagal mengunduh template');
     }
   }
 
   async function handleExport() {
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch('/api/admin/users/export', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch('/api/admin/users/export');
 
       if (!response.ok) {
         alert('❌ Gagal mengekspor data');
@@ -257,7 +246,7 @@ export default function UsersPage() {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (error) {
-      console.error('Export error:', error);
+      devError('Export error:', error);
       alert('❌ Gagal mengekspor data');
     }
   }
@@ -265,16 +254,12 @@ export default function UsersPage() {
   async function handleImport(file: File) {
     try {
       setIsImporting(true);
-      const token = localStorage.getItem('accessToken');
 
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('/api/admin/users/import', {
+      const response = await apiFetch('/api/admin/users/import', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
         body: formData,
       });
 
@@ -283,13 +268,13 @@ export default function UsersPage() {
       if (response.ok) {
         setImportResult(data.data);
         setShowImportResult(true);
-        fetchUsers();
+        void fetchUsers();
         alert(`✅ ${data.data.imported + data.data.updated} user berhasil diimpor/diperbarui`);
       } else {
         alert(`❌ ${data.error || 'Gagal mengimpor data'}`);
       }
     } catch (error) {
-      console.error('Import error:', error);
+      devError('Import error:', error);
       alert('❌ Gagal mengimpor data');
     } finally {
       setIsImporting(false);
@@ -304,6 +289,7 @@ export default function UsersPage() {
       role: user.role,
       schoolId: user.schoolId,
       isActive: user.isActive,
+      bagian: user.bagian || [],
     });
     setEditingId(user.id);
     setShowForm(true);
@@ -317,6 +303,15 @@ export default function UsersPage() {
     TEACHER: 'Guru',
     PRINCIPAL: 'Kepala Sekolah',
     WALI_KELAS: 'Wali Kelas',
+  };
+
+  const bagianOptions = ['PENGASUHAN', 'MABIKORI', 'PUSDAC', 'LAC', 'EKSKUL'];
+  const bagianLabels: Record<string, string> = {
+    PENGASUHAN: 'Pengasuhan',
+    MABIKORI: 'Mabikori',
+    PUSDAC: 'PUSDAC',
+    LAC: 'LAC',
+    EKSKUL: 'Ekskul',
   };
 
   return (
@@ -338,6 +333,7 @@ export default function UsersPage() {
                 role: 'TEACHER',
                 schoolId: '',
                 isActive: true,
+                bagian: [],
               });
               setShowForm(true);
               setShowPassword(false);
@@ -446,7 +442,7 @@ export default function UsersPage() {
                 </label>
                 <select
                   value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value as User['role'] })}
                   className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-lg text-gray-900 text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-300 focus:outline-none transition-all"
                   required
                 >
@@ -516,6 +512,32 @@ export default function UsersPage() {
               </div>
             </div>
 
+            {/* Bagian Multi-Select */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Bagian <span className="text-gray-500 text-xs">(Opsional - bisa pilih lebih dari satu)</span>
+              </label>
+              <div className="flex flex-wrap gap-3">
+                {bagianOptions.map((b) => (
+                  <label key={b} className="flex items-center gap-2 px-3 py-2 border-2 border-gray-200 rounded-lg hover:border-blue-300 cursor-pointer transition-all">
+                    <input
+                      type="checkbox"
+                      checked={formData.bagian.includes(b)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setFormData({ ...formData, bagian: [...formData.bagian, b] });
+                        } else {
+                          setFormData({ ...formData, bagian: formData.bagian.filter((x) => x !== b) });
+                        }
+                      }}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">{bagianLabels[b]}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
             {/* Buttons */}
             <div className="flex gap-3 pt-6">
               <button
@@ -536,6 +558,7 @@ export default function UsersPage() {
                     role: 'TEACHER',
                     schoolId: '',
                     isActive: true,
+                    bagian: [],
                   });
                   setShowPassword(false);
                 }}
@@ -557,6 +580,7 @@ export default function UsersPage() {
               <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Email</th>
               <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Role</th>
               <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Sekolah</th>
+              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Bagian</th>
               <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Status</th>
               <th className="px-6 py-4 text-center text-sm font-semibold text-gray-900">Aksi</th>
             </tr>
@@ -564,13 +588,13 @@ export default function UsersPage() {
           <tbody className="divide-y divide-gray-200">
             {isLoading ? (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                   Loading...
                 </td>
               </tr>
             ) : users.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                   Tidak ada pengguna ditemukan
                 </td>
               </tr>
@@ -585,6 +609,19 @@ export default function UsersPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-600">{user.school?.name || '-'}</td>
+                  <td className="px-6 py-4 text-sm">
+                    {user.bagian && user.bagian.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {user.bagian.map((b) => (
+                          <span key={b} className="inline-block px-2 py-0.5 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">
+                            {bagianLabels[b] || b}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
                   <td className="px-6 py-4 text-sm">
                     {user.isActive ? (
                       <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">

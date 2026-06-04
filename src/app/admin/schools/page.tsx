@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, Building2 } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface School {
   id: string;
@@ -23,10 +24,14 @@ interface PaginatedResponse {
   page: number;
   limit: number;
   total: number;
+  pagination?: { total?: number };
+}
+
+interface ValidationDetail {
+  message?: string;
 }
 
 export default function SchoolsPage() {
-  const router = useRouter();
   const [schools, setSchools] = useState<School[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -44,11 +49,7 @@ export default function SchoolsPage() {
 
   const limit = 10;
 
-  useEffect(() => {
-    fetchSchools();
-  }, [page, search]);
-
-  async function fetchSchools() {
+  const fetchSchools = useCallback(async () => {
     try {
       setIsLoading(true);
       const queryParams = new URLSearchParams({
@@ -57,22 +58,21 @@ export default function SchoolsPage() {
         ...(search && { search }),
       });
 
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/schools?${queryParams}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch(`/api/admin/schools?${queryParams}`);
 
-      const data: any = await response.json();
+      const data: PaginatedResponse = await response.json();
       setSchools(data.data || []);
       setTotal(data.pagination?.total || 0);
     } catch (error) {
-      console.error('Failed to fetch schools:', error);
+      devError('Failed to fetch schools:', error);
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [limit, page, search]);
+
+  useEffect(() => {
+    void fetchSchools();
+  }, [fetchSchools]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -88,33 +88,22 @@ export default function SchoolsPage() {
     }
 
     try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) {
-        alert('❌ Token tidak ditemukan. Silakan login terlebih dahulu.');
-        return;
-      }
-
       const url = editingId
         ? `/api/admin/schools/${editingId}`
         : '/api/admin/schools';
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: editingId ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(formData),
       });
 
-      console.log(`[${editingId ? 'UPDATE' : 'CREATE'}] Response status:`, response.status);
-
       if (!response.ok) {
-        console.log('Response is not ok, attempting to parse error...');
       }
 
       const result = await response.json();
-      console.log('API Response:', result);
 
       if (response.ok) {
         alert(editingId ? '✅ Sekolah berhasil diperbarui!' : '✅ Sekolah berhasil ditambahkan!');
@@ -127,20 +116,20 @@ export default function SchoolsPage() {
           email: '',
           npsn: '',
         });
-        fetchSchools();
+        void fetchSchools();
       } else {
         // Handle different error types
         let errorMsg = 'Gagal menyimpan data';
         if (result.error) {
           errorMsg = result.error;
         } else if (result.details && Array.isArray(result.details)) {
-          errorMsg = result.details.map((d: any) => d.message || d).join(', ');
+          errorMsg = (result.details as ValidationDetail[]).map((d) => d.message || JSON.stringify(d)).join(', ');
         }
         alert(`❌ ${errorMsg}`);
-        console.error('Save error:', result);
+        devError('Save error:', result);
       }
     } catch (error) {
-      console.error('Failed to save school:', error);
+      devError('Failed to save school:', error);
       alert(`❌ Gagal menyimpan data. Silakan coba lagi.\n${error instanceof Error ? error.message : ''}`);
     }
   }
@@ -149,19 +138,15 @@ export default function SchoolsPage() {
     if (!confirm('Are you sure you want to delete this school?')) return;
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/schools/${id}`, {
+      const response = await apiFetch(`/api/admin/schools/${id}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       if (response.ok) {
-        fetchSchools();
+        void fetchSchools();
       }
     } catch (error) {
-      console.error('Failed to delete school:', error);
+      devError('Failed to delete school:', error);
     }
   }
 
@@ -334,7 +319,7 @@ export default function SchoolsPage() {
           <div className="p-6 sm:p-12 text-center">
             <Building2 size={48} className="mx-auto text-gray-300 mb-4" />
             <p className="text-gray-600 font-medium text-sm sm:text-base">Tidak ada data sekolah</p>
-            <p className="text-gray-500 text-xs sm:text-sm mt-1">Silakan klik tombol "Tambah Sekolah" untuk membuat data baru</p>
+            <p className="text-gray-500 text-xs sm:text-sm mt-1">Silakan klik tombol &quot;Tambah Sekolah&quot; untuk membuat data baru</p>
           </div>
         ) : (
           <>

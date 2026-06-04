@@ -1,9 +1,11 @@
 'use client';
 
-import { Fragment, useState, useEffect } from 'react';
+import { Fragment, useCallback, useState, useEffect } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Users, PenTool, X, AlertCircle, CheckCircle, ChevronDown, Edit2, Trash2, ChevronLeft, ChevronRight, Upload, Download } from 'lucide-react';
+import { ArrowLeft, Users, X, AlertCircle, CheckCircle, ChevronDown, Edit2, Trash2, ChevronLeft, ChevronRight, Upload, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface Student {
   id: string;
@@ -36,12 +38,6 @@ interface Grade {
   isApproved?: boolean;
 }
 
-interface ApiResponse {
-  success: boolean;
-  data?: Student[];
-  message?: string;
-}
-
 interface CompetenciesResponse {
   success: boolean;
   competencies?: Competency[];
@@ -57,6 +53,38 @@ interface ImportGradeRow {
   notes?: string;
   rowIndex: number;
   errors?: string[];
+}
+
+interface StudentListResponse {
+  success: boolean;
+  data?: Student[];
+  total?: number;
+  pagination?: { total?: number };
+  message?: string;
+}
+
+interface ApprovedGradeResponseItem {
+  competencyId?: string | null;
+  assessmentType: string;
+}
+
+interface ErrorDetailItem {
+  field: string;
+  message: string;
+}
+
+interface ErrorResponse {
+  error?: string;
+  details?: ErrorDetailItem[];
+}
+
+interface ImportSheetRow {
+  'Nomor Siswa'?: string;
+  'Nama Siswa'?: string;
+  'Nama Kompetensi'?: string;
+  'Nilai (1-10)'?: string | number;
+  'Jenis Penilaian'?: string;
+  'Catatan'?: string;
 }
 
 export default function TeacherStudentsPage() {
@@ -134,91 +162,27 @@ export default function TeacherStudentsPage() {
   const [importSuccess, setImportSuccess] = useState('');
   const [importSubmitting, setImportSubmitting] = useState(false);
 
-  // Auto-refresh data when tab becomes visible
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        fetchClassStudents();
-        fetchClassInfo();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [classId, currentPage]);
-
-  // Clear grade form when subject changes
-  useEffect(() => {
-    setGradeFormData({
-      competencyId: '',
-      score: '',
-      assessmentType: 'UTS_1',
-      notes: '',
-    });
-    setGradeError('');
-    setGradeSuccess('');
-    setGrades({});
-  }, [subjectId]);
-
-  // Auto-select first student when page loads and student changes
-  useEffect(() => {
-    if (students.length > 0 && selectedStudent && !students.find(s => s.id === selectedStudent.id)) {
-      // Current selected student is not on this page, select first student instead
-      const firstStudent = students[0];
-      setSelectedStudent(firstStudent);
-      setEditingGradeId(null);
-      setGradeFormData({
-        competencyId: '',
-        score: '',
-        assessmentType: 'UTS_1',
-        notes: '',
-      });
-      setGradeError('');
-      fetchCompetencies(firstStudent.id);
-    }
-  }, [students]);
-
-  // Auto-load grades for all students
-  useEffect(() => {
-    if (students.length > 0) {
-      students.forEach((student) => {
-        if (!grades[student.id]) {
-          fetchStudentGrades(student.id);
-        }
-      });
-    }
-  }, [students]);
-
-  async function fetchClassInfo() {
+  const fetchClassInfo = useCallback(async () => {
     try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) return;
-
-      // Get class name
-      const classResponse = await fetch(`/api/admin/classes/${classId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const classResponse = await apiFetch(`/api/admin/classes/${classId}`);
       const classData = await classResponse.json();
       if (classData.data?.name) {
         setClassName(classData.data.name);
       }
 
-      // Get subject name
       if (subjectId) {
-        const subjectResponse = await fetch(`/api/admin/subjects/${subjectId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const subjectResponse = await apiFetch(`/api/admin/subjects/${subjectId}`);
         const subjectData = await subjectResponse.json();
         if (subjectData.data?.name) {
           setSubjectName(subjectData.data.name);
         }
       }
     } catch (error) {
-      console.error('Error fetching info:', error);
+      devError('Error fetching info:', error);
     }
-  }
+  }, [classId, subjectId]);
 
-  async function fetchClassStudents() {
+  const fetchClassStudents = useCallback(async () => {
     try {
       if (!classId || classId.trim() === '') {
         setError('ID Kelas tidak valid');
@@ -228,24 +192,10 @@ export default function TeacherStudentsPage() {
 
       setIsLoading(true);
       setError('');
-      const token = localStorage.getItem('accessToken');
 
-      if (!token) {
-        setError('Token tidak ditemukan. Silakan login kembali');
-        setIsLoading(false);
-        return;
-      }
-      
-      const skip = (currentPage - 1) * itemsPerPage;
-      const response = await fetch(`/api/admin/classes/${classId}/students?page=${currentPage}&limit=${itemsPerPage}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch(`/api/admin/classes/${classId}/students?page=${currentPage}&limit=${itemsPerPage}`);
 
-      const data: any = await response.json();
-
-      console.log('Students fetched:', data);
+      const data: StudentListResponse = await response.json();
 
       if (response.status === 401) {
         setError('Anda tidak terautentikasi. Silakan login kembali');
@@ -264,7 +214,6 @@ export default function TeacherStudentsPage() {
       
       if (data.success && data.data) {
         setStudents(data.data);
-        // Get total pages from pagination info
         const total = data.pagination?.total || 0;
         setTotalStudents(total);
         setTotalPages(Math.ceil(total / itemsPerPage));
@@ -272,92 +221,130 @@ export default function TeacherStudentsPage() {
         setStudents([]);
       }
     } catch (err) {
-      console.error('Error fetching students:', err);
+      devError('Error fetching students:', err);
       setError('Gagal memuat data siswa');
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [classId, currentPage]);
 
-  async function fetchCompetencies(studentId: string) {
+  const fetchCompetencies = useCallback(async (studentId?: string) => {
+    void studentId;
     try {
       setCompetenciesLoading(true);
-      const token = localStorage.getItem('accessToken');
-      if (!token) return;
 
-      const response = await fetch(`/api/teacher/competencies?subjectId=${subjectId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await apiFetch(`/api/teacher/competencies?subjectId=${subjectId}`);
 
       const data: CompetenciesResponse = await response.json();
-      console.log('Competencies fetched:', data);
       if (data.success && data.competencies) {
         setCompetencies(data.competencies);
       }
     } catch (error) {
-      console.error('Error fetching competencies:', error);
+      devError('Error fetching competencies:', error);
       setGradeError('Gagal memuat kompetensi');
     } finally {
       setCompetenciesLoading(false);
     }
-  }
+  }, [subjectId]);
 
-  async function fetchStudentGrades(studentId: string) {
+  const fetchApprovedGrades = useCallback(async (studentId: string) => {
     try {
-      setLoadingGrades((prev) => ({ ...prev, [studentId]: true }));
-      const token = localStorage.getItem('accessToken');
-      if (!token) return;
-
-      const response = await fetch(
-        `/api/teacher/grades?studentId=${studentId}&subjectId=${subjectId}&classId=${classId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      const data = await response.json();
-      console.log('Grades fetched for student:', studentId, data);
-      if (data.success) {
-        console.log(`Setting ${data.data?.length || 0} grades for student ${studentId}`);
-        setGrades((prev) => {
-          const updated = {
-            ...prev,
-            [studentId]: data.data || [],
-          };
-          console.log('Grades state updated, new state:', updated);
-          return updated;
-        });
-        // Fetch approved grades for this student
-        await fetchApprovedGrades(studentId);
-      }
-    } catch (error) {
-      console.error('Error fetching grades:', error);
-    } finally {
-      setLoadingGrades((prev) => ({ ...prev, [studentId]: false }));
-    }
-  }
-
-  async function fetchApprovedGrades(studentId: string) {
-    try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) return;
-
-      const response = await fetch(
-        `/api/teacher/approved-grades?studentId=${studentId}&subjectId=${subjectId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+      const response = await apiFetch(
+        `/api/teacher/approved-grades?studentId=${studentId}&subjectId=${subjectId}`
       );
 
       const data = await response.json();
       if (data.success && data.data) {
-        // Create a Set of approved grade IDs for this student
-        const approvedIds = new Set<string>(data.data.map((grade: any) => `${grade.competencyId}-${grade.assessmentType}`));
+        const approvedIds = new Set<string>((data.data as ApprovedGradeResponseItem[]).map((grade) => `${grade.competencyId}-${grade.assessmentType}`));
         setApprovedGrades((prev) => ({
           ...prev,
           [studentId]: approvedIds,
         }));
       }
     } catch (error) {
-      console.error('Error fetching approved grades:', error);
+      devError('Error fetching approved grades:', error);
     }
-  }
+  }, [subjectId]);
+
+  const fetchStudentGrades = useCallback(async (studentId: string) => {
+    try {
+      setLoadingGrades((prev) => ({ ...prev, [studentId]: true }));
+
+      const response = await apiFetch(
+        `/api/teacher/grades?studentId=${studentId}&subjectId=${subjectId}&classId=${classId}`
+      );
+
+      const data = await response.json();
+      if (data.success) {
+        setGrades((prev) => {
+          const updated = {
+            ...prev,
+            [studentId]: data.data || [],
+          };
+          return updated;
+        });
+        await fetchApprovedGrades(studentId);
+      }
+    } catch (error) {
+      devError('Error fetching grades:', error);
+    } finally {
+      setLoadingGrades((prev) => ({ ...prev, [studentId]: false }));
+    }
+  }, [classId, fetchApprovedGrades, subjectId]);
+
+  // Auto-refresh data when tab becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        void fetchClassStudents();
+        void fetchClassInfo();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [fetchClassInfo, fetchClassStudents]);
+
+  // Clear grade form when subject changes
+  useEffect(() => {
+    setGradeFormData({
+      competencyId: '',
+      score: '',
+      assessmentType: 'UTS_1',
+      notes: '',
+    });
+    setGradeError('');
+    setGradeSuccess('');
+    setGrades({});
+  }, [subjectId]);
+
+  // Auto-select first student when page loads and student changes
+  useEffect(() => {
+    if (students.length > 0 && selectedStudent && !students.find((s) => s.id === selectedStudent.id)) {
+      const firstStudent = students[0];
+      setSelectedStudent(firstStudent);
+      setEditingGradeId(null);
+      setGradeFormData({
+        competencyId: '',
+        score: '',
+        assessmentType: 'UTS_1',
+        notes: '',
+      });
+      setGradeError('');
+      void fetchCompetencies(firstStudent.id);
+    }
+  }, [fetchCompetencies, selectedStudent, students]);
+
+  // Auto-load grades for all students
+  useEffect(() => {
+    if (students.length > 0) {
+      students.forEach((student) => {
+        if (!grades[student.id]) {
+          void fetchStudentGrades(student.id);
+        }
+      });
+    }
+  }, [fetchStudentGrades, grades, students]);
 
   const handleOpenGradeModal = async (student: Student) => {
     setSelectedStudent(student);
@@ -389,10 +376,9 @@ export default function TeacherStudentsPage() {
     try {
       setIsSubmitting(true);
       setGradeError('');
-      const token = localStorage.getItem('accessToken');
 
-      if (!token || !selectedStudent) {
-        setGradeError('Token atau data siswa tidak valid');
+      if (!selectedStudent) {
+        setGradeError('Data siswa tidak valid');
         return;
       }
 
@@ -405,23 +391,19 @@ export default function TeacherStudentsPage() {
         notes: gradeFormData.notes,
       };
 
-      console.log('Submitting grade payload:', payload);
-
       let response;
       if (editingGradeId) {
-        response = await fetch(`/api/teacher/grades/${editingGradeId}`, {
+        response = await apiFetch(`/api/teacher/grades/${editingGradeId}`, {
           method: 'PUT',
           headers: {
-            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(payload),
         });
       } else {
-        response = await fetch('/api/teacher/grades', {
+        response = await apiFetch('/api/teacher/grades', {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(payload),
@@ -429,7 +411,6 @@ export default function TeacherStudentsPage() {
       }
 
       if (response.ok) {
-        console.log('Grade saved successfully, response status:', response.status);
         setGradeSuccess(editingGradeId ? 'Nilai berhasil diperbarui' : 'Nilai berhasil ditambahkan');
         setEditingGradeId(null);
         setGradeFormData({
@@ -443,26 +424,23 @@ export default function TeacherStudentsPage() {
           setGradeSuccess('');
         }, 3000);
         // Fetch latest grades and ensure the list is expanded to show them
-        console.log('Fetching grades for student:', selectedStudent.id);
         await fetchStudentGrades(selectedStudent.id);
         // Ensure grades are expanded to show the new data
-        console.log('Current expandedStudentId:', expandedStudentId, 'selected student id:', selectedStudent.id);
         if (expandedStudentId !== selectedStudent.id) {
-          console.log('Setting expandedStudentId to:', selectedStudent.id);
           setExpandedStudentId(selectedStudent.id);
         }
       } else {
-        let errorResponse: any = {};
+        let errorResponse: ErrorResponse = {};
         try {
           const text = await response.text();
           if (text) {
             errorResponse = JSON.parse(text);
           }
         } catch (parseError) {
-          console.error('Failed to parse error response:', parseError);
+          devError('Failed to parse error response:', parseError);
         }
         
-        console.error('Grade submission error:', errorResponse, 'Status:', response.status);
+        devError('Grade submission error:', errorResponse, response.status);
         
         // Handle 409 Conflict - grade has been approved
         if (response.status === 409) {
@@ -484,7 +462,7 @@ export default function TeacherStudentsPage() {
         // Handle field errors from validation
         if (errorResponse.details && Array.isArray(errorResponse.details)) {
           const fieldErrorMessages = errorResponse.details
-            .map((err: any) => `${err.field}: ${err.message}`)
+            .map((err: ErrorDetailItem) => `${err.field}: ${err.message}`)
             .join(', ');
           setGradeError(`${errorResponse.error}: ${fieldErrorMessages}`);
         } else {
@@ -492,7 +470,7 @@ export default function TeacherStudentsPage() {
         }
       }
     } catch (error) {
-      console.error('Error submitting grade:', error);
+      devError('Error submitting grade:', error);
       setGradeError('Terjadi kesalahan saat menyimpan nilai');
     } finally {
       setIsSubmitting(false);
@@ -517,7 +495,7 @@ export default function TeacherStudentsPage() {
     });
     // Fetch competencies if not already loaded
     if (competencies.length === 0) {
-      fetchCompetencies(student.id);
+      void fetchCompetencies(student.id);
     }
   };
 
@@ -525,12 +503,8 @@ export default function TeacherStudentsPage() {
     if (!confirm('Hapus nilai ini?')) return;
 
     try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) return;
-
-      const response = await fetch(`/api/teacher/grades/${gradeId}`, {
+      const response = await apiFetch(`/api/teacher/grades/${gradeId}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (response.ok) {
@@ -540,7 +514,7 @@ export default function TeacherStudentsPage() {
         setGradeError('Gagal menghapus nilai');
       }
     } catch (error) {
-      console.error('Error deleting grade:', error);
+      devError('Error deleting grade:', error);
       setGradeError('Terjadi kesalahan saat menghapus nilai');
     }
   };
@@ -575,7 +549,7 @@ export default function TeacherStudentsPage() {
     const currentIndex = getCurrentStudentIndex();
     if (currentIndex === -1) return;
 
-    let nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
+    const nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
     
     // Check boundary
     if (nextIndex < 0 || nextIndex >= students.length) return;
@@ -634,7 +608,7 @@ export default function TeacherStudentsPage() {
       const arrayBuffer = await file.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
+      const jsonData = XLSX.utils.sheet_to_json<ImportSheetRow>(worksheet);
 
       if (jsonData.length === 0) {
         setImportError('File kosong atau tidak memiliki data');
@@ -650,8 +624,9 @@ export default function TeacherStudentsPage() {
         if (!row['Nama Siswa']) errors.push('Nama Siswa kosong');
         // Kompetensi adalah opsional, jadi tidak perlu validasi
         if (!score || isNaN(score) || score < 1 || score > 10) errors.push('Nilai harus 1-10');
-        if (!row['Jenis Penilaian']) errors.push('Jenis Penilaian kosong');
-        if (!Object.keys(assessmentTypeLabels).includes(row['Jenis Penilaian'])) {
+        const assessmentType = row['Jenis Penilaian'] ? String(row['Jenis Penilaian']).trim() : '';
+        if (!assessmentType) errors.push('Jenis Penilaian kosong');
+        if (assessmentType && !Object.keys(assessmentTypeLabels).includes(assessmentType)) {
           errors.push(`Jenis Penilaian tidak valid: ${row['Jenis Penilaian']}`);
         }
 
@@ -669,7 +644,7 @@ export default function TeacherStudentsPage() {
 
       setImportedRows(parsedRows);
     } catch (error) {
-      console.error('Error parsing file:', error);
+      devError('Error parsing file:', error);
       setImportError('Error membaca file. Pastikan file adalah Excel (.xlsx)');
     } finally {
       setImportLoading(false);
@@ -692,12 +667,6 @@ export default function TeacherStudentsPage() {
     try {
       setImportSubmitting(true);
       setImportError('');
-      const token = localStorage.getItem('accessToken');
-
-      if (!token) {
-        setImportError('Token tidak ditemukan');
-        return;
-      }
 
       // Create grade objects for submission
       const gradesToSubmit = importedRows.map((row) => ({
@@ -709,10 +678,9 @@ export default function TeacherStudentsPage() {
       }));
 
       // Send to API
-      const response = await fetch(`/api/teacher/grades/import?subjectId=${subjectId}&classId=${classId}`, {
+      const response = await apiFetch(`/api/teacher/grades/import?subjectId=${subjectId}&classId=${classId}`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(gradesToSubmit),
@@ -741,16 +709,16 @@ export default function TeacherStudentsPage() {
           setImportError('');
         }, 2000);
         // Refresh data
-        fetchClassStudents();
+        void fetchClassStudents();
         // Reload grades for all students
         students.forEach((student) => {
-          fetchStudentGrades(student.id);
+          void fetchStudentGrades(student.id);
         });
       } else {
         setImportError(data.error || 'Gagal mengimport nilai');
       }
     } catch (error) {
-      console.error('Error submitting import:', error);
+      devError('Error submitting import:', error);
       setImportError('Terjadi kesalahan saat mengimport nilai');
     } finally {
       setImportSubmitting(false);
@@ -1307,6 +1275,9 @@ export default function TeacherStudentsPage() {
                     <label className="block text-sm font-semibold text-gray-900 mb-2">
                       Upload File Excel (.xlsx)
                     </label>
+                    {importFile && (
+                      <p className="text-sm text-gray-600 mb-2">File dipilih: {importFile.name}</p>
+                    )}
                     <input
                       type="file"
                       accept=".xlsx,.xls"

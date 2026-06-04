@@ -3,10 +3,21 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, Users, Download, Eye, Upload, FileSpreadsheet, FileDown } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface Santri {
   id: string;
-  [key: string]: any;
+  studentNo?: string;
+  nisn?: string;
+  name?: string;
+  gender?: string;
+  birthPlace?: string | null;
+  birthDate?: string | null;
+  phone?: string;
+  parentPhoneNo?: string;
+  asalSekolah?: string;
+  alamatKK?: string;
 }
 
 interface PaginatedResponse {
@@ -46,36 +57,32 @@ export default function SantriPage() {
         page: page.toString(), limit: limit.toString(),
         ...(debouncedSearch && { search: debouncedSearch }),
       });
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/santri?${queryParams}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await apiFetch(`/api/admin/santri?${queryParams}`);
       const data: PaginatedResponse = await response.json();
       setSantriList(data.data || []);
       setTotal(data.pagination?.total || 0);
     } catch (error) {
-      console.error('Failed to fetch santri:', error);
+      devError('Failed to fetch santri:', error);
     } finally {
       setIsLoading(false);
     }
   }, [page, debouncedSearch]);
 
-  useEffect(() => { fetchSantri(); }, [fetchSantri]);
+  useEffect(() => { void fetchSantri(); }, [fetchSantri]);
 
   const handleImportFromStudents = async () => {
     if (!confirm('Import data dari tabel Student ke Santri?\nData yang sudah ada (berdasarkan No Stambuk) akan di-skip.')) return;
     try {
       setIsImporting(true);
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch('/api/admin/santri/import-from-students', {
-        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      const response = await apiFetch('/api/admin/santri/import-from-students', {
+        method: 'POST',
       });
       const data = await response.json();
       if (!response.ok) { alert(data.message || 'Gagal import data'); return; }
       alert(`Import selesai!\n- Berhasil diimport: ${data.data.imported} santri\n- Sudah ada (di-skip): ${data.data.skipped} santri`);
-      fetchSantri();
+      void fetchSantri();
     } catch (error) {
-      console.error('Error importing:', error);
+      devError('Error importing:', error);
       alert('Terjadi kesalahan saat import');
     } finally {
       setIsImporting(false);
@@ -84,10 +91,7 @@ export default function SantriPage() {
 
   const handleDownloadTemplate = async () => {
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch('/api/admin/santri/template', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await apiFetch('/api/admin/santri/template');
       if (!response.ok) { alert('Gagal mengunduh template'); return; }
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -99,7 +103,7 @@ export default function SantriPage() {
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Error downloading template:', error);
+      devError('Error downloading template:', error);
       alert('Terjadi kesalahan saat mengunduh template');
     }
   };
@@ -107,10 +111,7 @@ export default function SantriPage() {
   const handleExportExcel = async () => {
     try {
       setIsExporting(true);
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch('/api/admin/santri/export', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await apiFetch('/api/admin/santri/export');
       if (!response.ok) { alert('Gagal mengekspor data'); return; }
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -122,7 +123,7 @@ export default function SantriPage() {
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Error exporting:', error);
+      devError('Error exporting:', error);
       alert('Terjadi kesalahan saat ekspor');
     } finally {
       setIsExporting(false);
@@ -136,12 +137,10 @@ export default function SantriPage() {
 
     try {
       setIsImportingExcel(true);
-      const token = localStorage.getItem('accessToken');
       const formData = new FormData();
       formData.append('file', file);
-      const response = await fetch('/api/admin/santri/import', {
+      const response = await apiFetch('/api/admin/santri/import', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
       const data = await response.json();
@@ -153,9 +152,9 @@ export default function SantriPage() {
         if (r.errors.length > 10) msg += `\n... dan ${r.errors.length - 10} error lainnya`;
       }
       alert(msg);
-      fetchSantri();
+      void fetchSantri();
     } catch (error) {
-      console.error('Error importing Excel:', error);
+      devError('Error importing Excel:', error);
       alert('Terjadi kesalahan saat import');
     } finally {
       setIsImportingExcel(false);
@@ -165,14 +164,13 @@ export default function SantriPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Yakin ingin menghapus data santri ini?')) return;
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/santri/${id}`, {
-        method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
+      const response = await apiFetch(`/api/admin/santri/${id}`, {
+        method: 'DELETE',
       });
       if (!response.ok) { alert('Gagal menghapus data santri'); return; }
-      fetchSantri();
+      void fetchSantri();
     } catch (error) {
-      console.error('Error deleting:', error);
+      devError('Error deleting:', error);
       alert('Terjadi kesalahan');
     }
   };
@@ -280,7 +278,7 @@ export default function SantriPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
-                        {s.birthPlace ? `${s.birthPlace}, ` : ''}{formatDate(s.birthDate)}
+                        {s.birthPlace ? `${s.birthPlace}, ` : ''}{formatDate(s.birthDate ?? null)}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">{s.phone || s.parentPhoneNo || '-'}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{s.asalSekolah || '-'}</td>

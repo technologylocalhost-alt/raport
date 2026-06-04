@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, Mail, Building2, Shield, Calendar, Save, Lock, Eye, EyeOff } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { getCurrentUser, setCurrentUser } from '@/lib/auth/client';
+import { devError } from '@/lib/dev-log';
 
 interface UserProfile {
   id: string;
@@ -39,23 +42,14 @@ export default function AdminProfilePage() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
-
-  async function fetchProfile() {
+  const fetchProfile = useCallback(async () => {
     try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) {
+      if (!getCurrentUser()) {
         router.push('/login');
         return;
       }
 
-      const response = await fetch('/api/profile', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch('/api/profile');
 
       if (!response.ok) {
         if (response.status === 401) {
@@ -70,12 +64,16 @@ export default function AdminProfilePage() {
       setName(data.data.name);
       setEmail(data.data.email);
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      devError('Error fetching profile:', error);
       setError('Gagal memuat profil');
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [router]);
+
+  useEffect(() => {
+    void fetchProfile();
+  }, [fetchProfile]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -84,13 +82,12 @@ export default function AdminProfilePage() {
     setIsSaving(true);
 
     try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) {
+      if (!getCurrentUser()) {
         router.push('/login');
         return;
       }
 
-      const updateData: any = {};
+      const updateData: Record<string, string> = {};
       
       if (name !== profile?.name) {
         updateData.name = name;
@@ -110,10 +107,9 @@ export default function AdminProfilePage() {
         updateData.newPassword = newPassword;
       }
 
-      const response = await fetch('/api/profile', {
+      const response = await apiFetch('/api/profile', {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(updateData),
@@ -130,13 +126,13 @@ export default function AdminProfilePage() {
       setCurrentPassword('');
       setNewPassword('');
 
-      // Update localStorage if name or email changed
-      const storedUser = localStorage.getItem('user');
-      if (storedUser) {
-        const userData = JSON.parse(storedUser);
-        userData.name = data.data.name;
-        userData.email = data.data.email;
-        localStorage.setItem('user', JSON.stringify(userData));
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        setCurrentUser({
+          ...currentUser,
+          name: data.data.name,
+          email: data.data.email,
+        });
       }
 
       // Reload after 1.5 seconds to reflect changes
@@ -144,7 +140,7 @@ export default function AdminProfilePage() {
         window.location.reload();
       }, 1500);
     } catch (error) {
-      console.error('Error updating profile:', error);
+      devError('Error updating profile:', error);
       setError(error instanceof Error ? error.message : 'Gagal memperbarui profil');
     } finally {
       setIsSaving(false);

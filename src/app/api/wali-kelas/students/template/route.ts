@@ -1,29 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireWaliKelasAdminPrincipal } from '@/lib/auth/role-access';
 import * as XLSX from 'xlsx';
+import { serverError } from '@/lib/server-log';
 
 async function verifyWaliKelas(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (user && (user.role === 'WALI_KELAS' || user.role === 'ADMIN' || user.role === 'PRINCIPAL')) {
-    return user;
-  }
-  return null;
+  return requireWaliKelasAdminPrincipal(req);
 }
 
 export async function GET(request: NextRequest) {
@@ -93,7 +74,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Template export error:', error);
+    serverError('Template export error:', error);
     return NextResponse.json(
       {
         error: 'Terjadi kesalahan saat mengekspor template',

@@ -1,23 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/db';
+import { requireTeacherOnly } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const token = request.headers.get('Authorization')?.replace('Bearer ', '');
-
-    if (!token) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    const decoded = verifyAccessToken(token);
-    if (!decoded || !decoded.userId) {
+    const teacher = await requireTeacherOnly(request);
+    if (!teacher) {
       return NextResponse.json(
         { success: false, message: 'Invalid token' },
         { status: 401 }
@@ -50,7 +42,7 @@ export async function PUT(
       );
     }
 
-    if (competency.teacherId !== decoded.userId) {
+    if (competency.teacherId !== teacher.id) {
       return NextResponse.json(
         { success: false, message: 'Anda tidak authorized untuk kompetensi ini' },
         { status: 403 }
@@ -87,7 +79,7 @@ export async function PUT(
       },
     });
   } catch (error) {
-    console.error('Error updating competency:', error);
+    serverError('Error updating competency:', error);
     return NextResponse.json(
       { success: false, message: 'Gagal memperbarui kompetensi' },
       { status: 500 }
@@ -100,17 +92,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const token = request.headers.get('Authorization')?.replace('Bearer ', '');
-
-    if (!token) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    const decoded = verifyAccessToken(token);
-    if (!decoded || !decoded.userId) {
+    const teacher = await requireTeacherOnly(request);
+    if (!teacher) {
       return NextResponse.json(
         { success: false, message: 'Invalid token' },
         { status: 401 }
@@ -134,7 +117,7 @@ export async function DELETE(
       );
     }
 
-    if (competency.teacherId !== decoded.userId) {
+    if (competency.teacherId !== teacher.id) {
       return NextResponse.json(
         { success: false, message: 'Anda tidak authorized untuk kompetensi ini' },
         { status: 403 }
@@ -151,7 +134,7 @@ export async function DELETE(
       message: 'Kompetensi berhasil dihapus',
     });
   } catch (error) {
-    console.error('Error deleting competency:', error);
+    serverError('Error deleting competency:', error);
     return NextResponse.json(
       { success: false, message: 'Gagal menghapus kompetensi' },
       { status: 500 }

@@ -3,26 +3,31 @@ import { verifyRefreshToken } from '@/lib/auth/jwt';
 import { generateTokens } from '@/lib/auth/jwt';
 import { extractRefreshTokenFromCookies } from '@/lib/auth/utils';
 import { prisma } from '@/lib/db';
+import { clearAuthCookies, setAccessTokenCookie, setNoStoreHeaders } from '@/lib/auth/cookies';
+import { rateLimit, rateLimitPresets } from '@/middleware/rateLimit';
+import { serverError } from '@/lib/server-log';
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('[Refresh] Token refresh requested');
-    
+    const rateLimitResponse = await rateLimit({
+      ...rateLimitPresets.strict,
+      maxRequests: 10,
+      windowMs: 5 * 60 * 1000,
+      message: 'Terlalu banyak percobaan refresh token. Silakan coba lagi beberapa menit lagi.',
+    })(request);
+    if (rateLimitResponse) return rateLimitResponse;
+
     // Get refresh token from cookies
     const refreshToken = extractRefreshTokenFromCookies(request);
 
     if (!refreshToken) {
-      console.warn('[Refresh] Missing refresh token');
-      
       // Clear any existing cookies
       const response = NextResponse.json(
         { success: false, error: 'Missing refresh token', shouldLogout: true },
         { status: 401 }
       );
-      
-      response.cookies.delete('accessToken');
-      response.cookies.delete('refreshToken');
-      
+      clearAuthCookies(response);
+      setNoStoreHeaders(response);
       return response;
     }
 
@@ -30,17 +35,13 @@ export async function POST(request: NextRequest) {
     const payload = verifyRefreshToken(refreshToken);
 
     if (!payload) {
-      console.warn('[Refresh] Invalid or expired refresh token');
-      
       // Clear cookies
       const response = NextResponse.json(
         { success: false, error: 'Invalid or expired refresh token', shouldLogout: true },
         { status: 401 }
       );
-      
-      response.cookies.delete('accessToken');
-      response.cookies.delete('refreshToken');
-      
+      clearAuthCookies(response);
+      setNoStoreHeaders(response);
       return response;
     }
 
@@ -50,23 +51,19 @@ export async function POST(request: NextRequest) {
     });
 
     if (!storedToken || new Date() > storedToken.expiresAt) {
-      console.warn('[Refresh] Refresh token expired or not found in database');
-      
       // Clear cookies and revoke token if exists
       if (storedToken) {
         await prisma.refreshToken.delete({
           where: { token: refreshToken },
-        }).catch(err => console.error('[Refresh] Failed to delete token:', err));
+        }).catch((error) => serverError('[Refresh] Failed to delete token:', error));
       }
       
       const response = NextResponse.json(
         { success: false, error: 'Refresh token expired or revoked', shouldLogout: true },
         { status: 401 }
       );
-      
-      response.cookies.delete('accessToken');
-      response.cookies.delete('refreshToken');
-      
+      clearAuthCookies(response);
+      setNoStoreHeaders(response);
       return response;
     }
 
@@ -76,16 +73,12 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user || !user.isActive) {
-      console.warn('[Refresh] User not found or inactive');
-      
       const response = NextResponse.json(
         { success: false, error: 'User not found or inactive', shouldLogout: true },
         { status: 401 }
       );
-      
-      response.cookies.delete('accessToken');
-      response.cookies.delete('refreshToken');
-      
+      clearAuthCookies(response);
+      setNoStoreHeaders(response);
       return response;
     }
 
@@ -96,40 +89,25 @@ export async function POST(request: NextRequest) {
       role: user.role,
     });
 
-    console.log('[Refresh] Access token refreshed successfully for user:', user.id);
 
     const response = NextResponse.json({
       success: true,
       accessToken: newAccessToken,
     });
 
-    // Set new access token cookie
-    response.cookies.set('accessToken', newAccessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 36000, // 10 hours
-      path: '/',
-    });
-
-    // Add cache control headers to prevent caching
-    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    response.headers.set('Pragma', 'no-cache');
-    response.headers.set('Expires', '0');
+    setAccessTokenCookie(response, newAccessToken, 36000);
+    setNoStoreHeaders(response);
 
     return response;
   } catch (error) {
-    console.error('[Refresh] Token refresh error:', error);
+    serverError('[Refresh] Token refresh error:', error);
     
     const response = NextResponse.json(
       { success: false, error: 'Internal server error', shouldLogout: true },
       { status: 500 }
     );
-    
-    // Clear cookies on error
-    response.cookies.delete('accessToken');
-    response.cookies.delete('refreshToken');
-    
+    clearAuthCookies(response);
+    setNoStoreHeaders(response);
     return response;
   }
 }

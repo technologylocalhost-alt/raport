@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Search, ChevronLeft, ChevronRight, BookOpen, AlertCircle, CheckCircle } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface Grade {
   id: string;
@@ -60,25 +62,10 @@ export default function GradesPage() {
   const limit = 10;
   const totalPages = Math.ceil(total / limit);
 
-  useEffect(() => {
-    fetchGrades();
-  }, [page, search, filterClass, filterSubject, filterAssessmentType]);
-
-  useEffect(() => {
-    if (showForm && students.length === 0) {
-      fetchOptions();
-    }
-  }, [showForm]);
-
-  useEffect(() => {
-    fetchFilterOptions();
-  }, []);
-
-  async function fetchGrades() {
+  const fetchGrades = useCallback(async () => {
     try {
       setLoading(true);
       setErrorMessage('');
-      const token = localStorage.getItem('accessToken');
       const params = new URLSearchParams({
         page: page.toString(),
         limit: '10',
@@ -88,11 +75,7 @@ export default function GradesPage() {
         ...(filterAssessmentType && { assessmentType: filterAssessmentType }),
       });
 
-      const response = await fetch(`/api/teacher/grades?${params}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch(`/api/teacher/grades?${params}`);
 
       const data = await response.json();
       if (data.success) {
@@ -102,22 +85,17 @@ export default function GradesPage() {
         setErrorMessage(data.message || 'Gagal memuat data nilai');
       }
     } catch (error) {
-      console.error('Error fetching grades:', error);
+      devError('Error fetching grades:', error);
       setErrorMessage('Terjadi kesalahan saat memuat data');
     } finally {
       setLoading(false);
     }
-  }
+  }, [filterAssessmentType, filterClass, filterSubject, page, search]);
 
-  async function fetchOptions() {
+  const fetchOptions = useCallback(async () => {
     try {
       setOptionsLoading(true);
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch('/api/teacher/grades/options', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch('/api/teacher/grades/options');
 
       const data = await response.json();
       if (data.success) {
@@ -125,24 +103,17 @@ export default function GradesPage() {
         setCompetencies(data.competencies);
       }
     } catch (error) {
-      console.error('Error fetching options:', error);
+      devError('Error fetching options:', error);
       setErrorMessage('Gagal memuat data siswa dan kompetensi');
     } finally {
       setOptionsLoading(false);
     }
-  }
+  }, []);
 
-  async function fetchFilterOptions() {
+  const fetchFilterOptions = useCallback(async () => {
     try {
       setFilterLoading(true);
-      const token = localStorage.getItem('accessToken');
-
-      // Fetch classes and subjects filter options
-      const response = await fetch('/api/teacher/grades/filter-options', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch('/api/teacher/grades/filter-options');
 
       const data = await response.json();
       if (data.success) {
@@ -150,11 +121,25 @@ export default function GradesPage() {
         setAvailableSubjects(data.subjects || []);
       }
     } catch (error) {
-      console.error('Error fetching filter options:', error);
+      devError('Error fetching filter options:', error);
     } finally {
       setFilterLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    void fetchGrades();
+  }, [fetchGrades]);
+
+  useEffect(() => {
+    if (showForm && students.length === 0) {
+      void fetchOptions();
+    }
+  }, [fetchOptions, showForm, students.length]);
+
+  useEffect(() => {
+    void fetchFilterOptions();
+  }, [fetchFilterOptions]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -174,15 +159,13 @@ export default function GradesPage() {
     }
 
     try {
-      const token = localStorage.getItem('accessToken');
       const url = editingId ? `/api/teacher/grades/${editingId}` : '/api/teacher/grades';
       const method = editingId ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           ...formData,
@@ -200,68 +183,17 @@ export default function GradesPage() {
           setFormData({ studentId: '', competencyId: '', score: '', assessmentType: 'UTS_1', notes: '' });
           setSuccessMessage('');
           setPage(1);
-          fetchGrades();
+          void fetchGrades();
         }, 1500);
       } else {
         setErrorMessage(data.message || 'Gagal menyimpan data');
       }
     } catch (error) {
-      console.error('Error saving grade:', error);
+      devError('Error saving grade:', error);
       setErrorMessage('Terjadi kesalahan saat menyimpan data');
     }
   };
 
-  const handleEdit = async (grade: Grade) => {
-    // Set form data first
-    setFormData({
-      studentId: grade.studentId,
-      competencyId: grade.competencyId,
-      score: grade.score.toString(),
-      assessmentType: grade.assessmentType,
-      notes: grade.notes,
-    });
-    
-    // Fetch options if not already loaded
-    if (students.length === 0 || competencies.length === 0) {
-      await fetchOptions();
-    }
-    
-    setEditingId(grade.id);
-    setShowForm(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('Yakin ingin menghapus nilai ini?')) return;
-
-    setErrorMessage('');
-    setSuccessMessage('');
-
-    try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/teacher/grades/${id}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        setSuccessMessage('Nilai berhasil dihapus');
-        setTimeout(() => {
-          setSuccessMessage('');
-          fetchGrades();
-        }, 1500);
-      } else {
-        setErrorMessage(data.message || 'Gagal menghapus nilai');
-      }
-    } catch (error) {
-      console.error('Error deleting grade:', error);
-      setErrorMessage('Terjadi kesalahan saat menghapus data');
-    }
-  };
 
   const handleCancel = () => {
     setShowForm(false);

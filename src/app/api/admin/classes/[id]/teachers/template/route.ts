@@ -1,30 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { ensureClassOwnedByWaliKelasOrAllowed, requireClassSubjectAccess } from '@/lib/auth/class-access';
 import * as XLSX from 'xlsx';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL' || user.role === 'WALI_KELAS')) {
-    return user;
-  }
-  return null;
-}
 
 /**
  * GET /api/admin/classes/[id]/teachers/template
@@ -35,26 +14,18 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await verifyAdmin(request);
+    const user = await requireClassSubjectAccess(request);
     if (!user) {
       return new NextResponse('Unauthorized', { status: 401 });
     }
 
     const { id } = await params;
+    const access = await ensureClassOwnedByWaliKelasOrAllowed(user, id);
 
-    // Verify the class exists
-    const classData = await prisma.class.findUnique({
-      where: { id },
-      select: { id: true, waliKelasId: true, name: true },
-    });
-
-    if (!classData) {
-      return new NextResponse('Class not found', { status: 404 });
-    }
-
-    // If user is WALI_KELAS, verify they own this class
-    if (user.role === 'WALI_KELAS' && classData.waliKelasId !== user.id) {
-      return new NextResponse('Unauthorized', { status: 403 });
+    if (!access.ok) {
+      return new NextResponse(access.reason === 'NOT_FOUND' ? 'Class not found' : 'Unauthorized', {
+        status: access.reason === 'NOT_FOUND' ? 404 : 403,
+      });
     }
 
     // Get example teachers and subjects
@@ -148,8 +119,8 @@ export async function GET(
         'Content-Disposition': `attachment; filename="${fileName}"`,
       },
     });
-  } catch (error: any) {
-    console.error('Download teachers template error:', error);
+  } catch (error: unknown) {
+    serverError('Download teachers template error:', error);
     return new NextResponse('Failed to download template', { status: 500 });
   }
 }

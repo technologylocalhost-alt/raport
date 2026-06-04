@@ -1,25 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/db';
+import { requireTeacherOnly } from '@/lib/auth/role-access';
+import { serverError } from '@/lib/server-log';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ subjectId: string }> }
 ) {
   try {
-    // Validation: Check token
-    const token = request.headers.get('Authorization')?.replace('Bearer ', '');
-
-    if (!token) {
-      return NextResponse.json(
-        { success: false, message: 'Token tidak ditemukan' },
-        { status: 401 }
-      );
-    }
-
-    // Validation: Verify token validity
-    const decoded = verifyAccessToken(token);
-    if (!decoded || !decoded.userId) {
+    const teacher = await requireTeacherOnly(request);
+    if (!teacher) {
       return NextResponse.json(
         { success: false, message: 'Token tidak valid atau expired' },
         { status: 401 }
@@ -51,7 +41,7 @@ export async function GET(
     // Validation: Verify that the teacher teaches this subject
     const teacherSubject = await prisma.classTeacher.findFirst({
       where: {
-        teacherId: decoded.userId,
+        teacherId: teacher.id,
         subjectId: subjectId,
       },
     });
@@ -93,7 +83,7 @@ export async function GET(
       })),
     });
   } catch (error) {
-    console.error('Error fetching competencies:', error);
+    serverError('Error fetching competencies:', error);
     return NextResponse.json(
       { success: false, message: 'Gagal memuat data kompetensi. Silakan coba lagi' },
       { status: 500 }

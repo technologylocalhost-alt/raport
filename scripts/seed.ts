@@ -54,7 +54,7 @@ async function main() {
   const teacherPassword = await hashPassword('password123');
 
   // Create Admin
-  const admin = await prisma.user.create({
+  await prisma.user.create({
     data: {
       email: 'admin@sekolah.id',
       name: 'Administrator',
@@ -66,7 +66,7 @@ async function main() {
   });
 
   // Create Teachers
-  const teachers = await Promise.all([
+  await Promise.all([
     prisma.user.create({
       data: {
         email: 'guru1@sekolah.id',
@@ -90,7 +90,7 @@ async function main() {
   ]);
 
   // Create Wali Kelas Users
-  const waliKelasUsers = await Promise.all([
+  await Promise.all([
     prisma.user.create({
       data: {
         email: 'walikelas1@sekolah.id',

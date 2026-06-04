@@ -1,5 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { serverError } from '@/lib/server-log';
 
 export async function GET(request: NextRequest) {
   try {
@@ -172,7 +174,7 @@ export async function GET(request: NextRequest) {
       total: finalData.length,
     });
   } catch (error) {
-    console.error('Error fetching approved grades:', error);
+    serverError('Error fetching approved grades:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to fetch approved grades' },
       { status: 500 }

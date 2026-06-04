@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, BookOpen, Upload, X, Download } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface Subject {
   id: string;
@@ -17,9 +18,20 @@ interface Subject {
   };
 }
 
-interface PaginatedResponse {
+interface SubjectPaginatedResponse {
   success: boolean;
   data: Subject[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
+interface LevelPaginatedResponse {
+  success: boolean;
+  data: Level[];
   pagination: {
     total: number;
     page: number;
@@ -33,8 +45,27 @@ interface Level {
   name: string;
 }
 
+interface ValidationDetail {
+  message?: string;
+  row?: number;
+}
+
+interface ImportResultData {
+  success: number;
+  failed: number;
+  duplicates: number;
+  errors: ValidationDetail[];
+}
+
+interface ImportResultState {
+  success?: boolean;
+  error?: string;
+  details?: ValidationDetail[];
+  message?: string;
+  data?: ImportResultData;
+}
+
 export default function SubjectsPage() {
-  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [levels, setLevels] = useState<Level[]>([]);
@@ -46,7 +77,7 @@ export default function SubjectsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [importResult, setImportResult] = useState<any>(null);
+  const [importResult, setImportResult] = useState<ImportResultState | null>(null);
   const [formData, setFormData] = useState({
     levelId: '',
     code: '',
@@ -58,10 +89,52 @@ export default function SubjectsPage() {
 
   const limit = 10;
 
-  useEffect(() => {
-    fetchLevels();
-    fetchSubjects();
+  const fetchLevels = useCallback(async () => {
+    try {
+      const response = await apiFetch('/api/admin/levels?limit=100');
+
+      if (response.status === 401) {
+        window.location.href = '/login';
+        return;
+      }
+
+      const data: LevelPaginatedResponse = await response.json();
+      setLevels(data.data || []);
+    } catch (error) {
+      devError('Failed to fetch levels:', error);
+    }
+  }, []);
+
+  const fetchSubjects = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const queryParams = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+        ...(search && { search }),
+      });
+
+      const response = await apiFetch(`/api/admin/subjects?${queryParams}`);
+
+      if (response.status === 401) {
+        window.location.href = '/login';
+        return;
+      }
+
+      const data: SubjectPaginatedResponse = await response.json();
+      setSubjects(data.data || []);
+      setTotal(data.pagination?.total || 0);
+    } catch (error) {
+      devError('Failed to fetch subjects:', error);
+    } finally {
+      setIsLoading(false);
+    }
   }, [page, search]);
+
+  useEffect(() => {
+    void fetchLevels();
+    void fetchSubjects();
+  }, [fetchLevels, fetchSubjects]);
 
   // Reset form when it closes
   useEffect(() => {
@@ -78,69 +151,6 @@ export default function SubjectsPage() {
     }
   }, [showForm]);
 
-  async function fetchLevels() {
-    try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) {
-        console.warn('[fetchLevels] No token found');
-        return;
-      }
-
-      const response = await fetch('/api/admin/levels?limit=100', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.status === 401) {
-        console.warn('[fetchLevels] 401 Unauthorized - redirecting to login');
-        window.location.href = '/login';
-        return;
-      }
-
-      const data: PaginatedResponse = await response.json();
-      setLevels(data.data || []);
-    } catch (error) {
-      console.error('Failed to fetch levels:', error);
-    }
-  }
-
-  async function fetchSubjects() {
-    try {
-      setIsLoading(true);
-      const queryParams = new URLSearchParams({
-        page: page.toString(),
-        limit: limit.toString(),
-        ...(search && { search }),
-      });
-
-      const token = localStorage.getItem('accessToken');
-      if (!token) {
-        console.warn('[fetchSubjects] No token found');
-        return;
-      }
-
-      const response = await fetch(`/api/admin/subjects?${queryParams}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.status === 401) {
-        console.warn('[fetchSubjects] 401 Unauthorized - redirecting to login');
-        window.location.href = '/login';
-        return;
-      }
-
-      const data: PaginatedResponse = await response.json();
-      setSubjects(data.data || []);
-      setTotal(data.pagination?.total || 0);
-    } catch (error) {
-      console.error('Failed to fetch subjects:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -152,7 +162,6 @@ export default function SubjectsPage() {
     }
     
     try {
-      const token = localStorage.getItem('accessToken');
       const url = editingId ? `/api/admin/subjects/${editingId}` : '/api/admin/subjects';
 
       const submitData = {
@@ -160,11 +169,10 @@ export default function SubjectsPage() {
         creditHours: formData.creditHours ? parseInt(formData.creditHours) : undefined,
       };
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: editingId ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(submitData),
       });
@@ -181,20 +189,20 @@ export default function SubjectsPage() {
           description: '',
           creditHours: '',
         });
-        fetchSubjects();
+        void fetchSubjects();
       } else {
         const errorData = await response.json();
         let errorMsg = 'Gagal menyimpan mata pelajaran';
         if (errorData.error) {
           errorMsg = errorData.error;
         } else if (errorData.details && Array.isArray(errorData.details)) {
-          errorMsg = errorData.details.map((d: any) => d.message || d).join(', ');
+          errorMsg = (errorData.details as ValidationDetail[]).map((d) => d.message || JSON.stringify(d)).join(', ');
         }
         alert(`❌ ${errorMsg}`);
-        console.error('Save error:', errorData);
+        devError('Save error:', errorData);
       }
     } catch (error) {
-      console.error('Failed to save subject:', error);
+      devError('Failed to save subject:', error);
       alert('❌ Gagal menyimpan mata pelajaran. Silakan coba lagi.');
     }
   }
@@ -203,19 +211,15 @@ export default function SubjectsPage() {
     if (!confirm('Are you sure you want to delete this subject?')) return;
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/subjects/${id}`, {
+      const response = await apiFetch(`/api/admin/subjects/${id}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       if (response.ok) {
-        fetchSubjects();
+        void fetchSubjects();
       }
     } catch (error) {
-      console.error('Failed to delete subject:', error);
+      devError('Failed to delete subject:', error);
     }
   }
 
@@ -229,28 +233,14 @@ export default function SubjectsPage() {
     }
 
     try {
-      let token = localStorage.getItem('accessToken');
-      
-      if (!token) {
-        alert('❌ Token tidak ditemukan. Silakan login kembali.');
-        return;
-      }
-
       setIsImporting(true);
       const formData = new FormData();
       formData.append('file', file);
 
-      console.log('[Import] Token exists, uploading file...');
-
-      const response = await fetch('/api/admin/subjects/import', {
+      const response = await apiFetch('/api/admin/subjects/import', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
         body: formData,
       });
-
-      console.log('[Import] Response status:', response.status);
 
       if (response.status === 401) {
         setImportResult({
@@ -288,10 +278,10 @@ export default function SubjectsPage() {
 
       // Refresh data after 2 seconds
       setTimeout(() => {
-        fetchSubjects();
+        void fetchSubjects();
       }, 2000);
     } catch (error) {
-      console.error('Import error:', error);
+      devError('Import error:', error);
       setImportResult({
         success: false,
         error: 'Terjadi kesalahan saat mengimpor',
@@ -303,24 +293,12 @@ export default function SubjectsPage() {
 
   async function handleExport() {
     try {
-      let token = localStorage.getItem('accessToken');
-      
-      if (!token) {
-        alert('❌ Token tidak ditemukan. Silakan login kembali.');
-        return;
-      }
-
-      console.log('[Export] Token exists:', token.substring(0, 20) + '...');
-
-      const response = await fetch('/api/admin/subjects/export', {
+      const response = await apiFetch('/api/admin/subjects/export', {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       });
-
-      console.log('[Export] Response status:', response.status);
 
       if (response.status === 401) {
         alert('❌ Session expired. Silakan login kembali.');
@@ -358,7 +336,7 @@ export default function SubjectsPage() {
 
       alert('✅ File berhasil diunduh!');
     } catch (error) {
-      console.error('Export error:', error);
+      devError('Export error:', error);
       alert('❌ Gagal mengekspor file');
     }
   }
@@ -717,12 +695,8 @@ export default function SubjectsPage() {
                       type="button"
                       onClick={async () => {
                         try {
-                          const token = localStorage.getItem('accessToken');
-                          const response = await fetch('/api/admin/subjects/template', {
+                          const response = await apiFetch('/api/admin/subjects/template', {
                             method: 'GET',
-                            headers: {
-                              Authorization: `Bearer ${token}`,
-                            },
                           });
 
                           if (!response.ok) {
@@ -749,7 +723,7 @@ export default function SubjectsPage() {
                           document.body.removeChild(link);
                           window.URL.revokeObjectURL(url);
                         } catch (error) {
-                          console.error('Template download error:', error);
+                          devError('Template download error:', error);
                           alert('❌ Gagal mengunduh template');
                         }
                       }}
@@ -802,8 +776,12 @@ export default function SubjectsPage() {
                     <p className="text-sm text-gray-700 mt-2">
                       {importResult.message || importResult.error}
                     </p>
-                    {importResult.details && (
-                      <p className="text-xs text-gray-600 mt-1">{importResult.details}</p>
+                    {importResult.details && importResult.details.length > 0 && (
+                      <div className="text-xs text-gray-600 mt-1 space-y-1">
+                        {importResult.details.map((detail, index) => (
+                          <p key={index}>{detail.message || JSON.stringify(detail)}</p>
+                        ))}
+                      </div>
                     )}
                   </div>
 
@@ -826,7 +804,7 @@ export default function SubjectsPage() {
                         <div className="mt-3 max-h-48 overflow-y-auto">
                           <p className="text-xs font-semibold text-gray-700 mb-1">Error Details:</p>
                           <ul className="space-y-1 text-xs text-red-600">
-                            {importResult.data.errors.slice(0, 10).map((err: any, idx: number) => (
+                            {importResult.data.errors.slice(0, 10).map((err: ValidationDetail, idx: number) => (
                               <li key={idx}>
                                 Row {err.row}: {err.message}
                               </li>

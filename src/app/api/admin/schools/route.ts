@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
 const schoolSchema = z.object({
   name: z.string().min(1, 'School name is required'),
@@ -16,27 +17,8 @@ const schoolSchema = z.object({
 /**
  * Verify admin authorization
  */
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-  
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL')) {
-    return user;
-  }
-  return null;
+async function requireSchoolAccess(req: NextRequest) {
+  return requireAdminOrPrincipal(req);
 }
 
 /**
@@ -82,7 +64,7 @@ export async function GET(request: NextRequest) {
 
     return paginatedResponse(schools, total, page, limit);
   } catch (error) {
-    console.error('Get schools error:', error);
+    serverError('Get schools error:', error);
     return errorResponse('Failed to fetch schools', 500);
   }
 }
@@ -93,7 +75,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const admin = await verifyAdmin(request);
+    const admin = await requireSchoolAccess(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
@@ -134,10 +116,10 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return errorResponse('Validation error', 400, error.issues);
     }
-    console.error('Create school error:', error);
+    serverError('Create school error:', error);
     
     // Log failed school creation
-    const admin = await verifyAdmin(request);
+    const admin = await requireSchoolAccess(request);
     if (admin) {
       await logActivity({
         userId: admin.id,

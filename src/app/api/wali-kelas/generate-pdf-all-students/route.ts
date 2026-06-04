@@ -1,9 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import { NextRequest, NextResponse } from 'next/server';
 import puppeteer from 'puppeteer';
 import chromium from '@sparticuz/chromium';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { prisma } from '@/lib/db';
+import { serverError } from '@/lib/server-log';
 
 export async function POST(request: NextRequest) {
   let browser = null;
@@ -155,16 +157,14 @@ export async function POST(request: NextRequest) {
       const imagePath = join(publicPath, 'namapondok.png');
       const imageBuffer = readFileSync(imagePath);
       logoBase64 = imageBuffer.toString('base64');
-    } catch (err) {
-      console.log('Logo not found');
+    } catch {
     }
 
     try {
       const ttdImagePath = join(publicPath, 'ttd.png');
       const ttdImageBuffer = readFileSync(ttdImagePath);
       ttdBase64 = ttdImageBuffer.toString('base64');
-    } catch (err) {
-      console.log('TTD image not found');
+    } catch {
     }
 
     // Generate HTML with all students
@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
 
     for (const student of students) {
       // Fetch NilaiApprove data for this student
-      let nilaiApproves = await prisma.nilaiApprove.findMany({
+      const nilaiApproves = await prisma.nilaiApprove.findMany({
         where: {
           studentId: student.id,
           classId: classId,
@@ -589,12 +589,12 @@ export async function POST(request: NextRequest) {
       fileName: fileName,
     });
   } catch (error) {
-    console.error('Error generating all students PDF:', error);
+    serverError('Error generating all students PDF:', error);
     if (browser) {
       try {
         await browser.close();
       } catch (closeErr) {
-        console.error('Error closing browser:', closeErr);
+        serverError('Error closing browser:', closeErr);
       }
     }
     return NextResponse.json(

@@ -1,31 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
+import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { requireClassReadUser } from '@/lib/auth/class-admin-access';
 import { z } from 'zod';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-  
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL' || user.role === 'WALI_KELAS' || user.role === 'TEACHER')) {
-    return user;
-  }
-  return null;
+async function requireStudentAccess(req: NextRequest) {
+  return requireClassReadUser(req);
 }
 
 const studentSchema = z.object({
@@ -53,7 +36,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await verifyAdmin(request);
+    const user = await requireStudentAccess(request);
     if (!user) {
       return errorResponse('Token tidak valid atau expired', 401);
     }
@@ -122,7 +105,7 @@ export async function GET(
     }
     // ADMIN and PRINCIPAL have access to all classes (no additional check needed)
 
-    const where: any = {
+    const where: Prisma.StudentWhereInput = {
       classId: id,
     };
 
@@ -194,7 +177,7 @@ export async function GET(
 
     return paginatedResponse(studentsWithRaportNo, total, page, limit);
   } catch (error) {
-    console.error('Get class students error:', error);
+    serverError('Get class students error:', error);
     return errorResponse('Gagal memuat data siswa', 500);
   }
 }
@@ -209,7 +192,7 @@ export async function POST(
 ) {
   let user;
   try {
-    user = await verifyAdmin(request);
+    user = await requireStudentAccess(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
@@ -343,8 +326,8 @@ export async function POST(
     });
 
     return successResponse(newStudent, 'Student created successfully', 201);
-  } catch (error: any) {
-    console.error('Create student error:', error);
+  } catch (error: unknown) {
+    serverError('Create student error:', error);
     if (user) {
       await logActivity({
         userId: user.id,
@@ -352,13 +335,18 @@ export async function POST(
         resourceType: 'Student',
         resourceId: '',
         description: `Failed to create/update student`,
-        errorMessage: error?.message || 'Unknown error',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
         ipAddress: getClientIp(request),
         userAgent: getUserAgent(request),
         status: 'FAILED',
       });
     }
-    if (error.code === 'P2002') {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 'P2002'
+    ) {
       return errorResponse('Siswa dengan nomor yang sama sudah ada di kelas ini', 400);
     }
     return errorResponse('Failed to create/update student', 500);

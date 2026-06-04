@@ -4,11 +4,19 @@ import { extractAccessToken } from '@/lib/auth/token-extractor';
 import { verifyAccessToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/db';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { clearAuthCookies, setNoStoreHeaders } from '@/lib/auth/cookies';
+import { rateLimit, rateLimitPresets } from '@/middleware/rateLimit';
+import { serverError } from '@/lib/server-log';
 
 export async function POST(request: NextRequest) {
-  console.log('[Logout Route] POST request received');
-  
   try {
+    const rateLimitResponse = await rateLimit({
+      ...rateLimitPresets.moderate,
+      maxRequests: 20,
+      windowMs: 5 * 60 * 1000,
+      message: 'Terlalu banyak permintaan logout. Silakan coba lagi beberapa menit lagi.',
+    })(request);
+    if (rateLimitResponse) return rateLimitResponse;
     // Extract user from token for activity logging
     let userId: string | null = null;
     try {
@@ -17,13 +25,11 @@ export async function POST(request: NextRequest) {
         const payload = verifyAccessToken(accessToken);
         userId = payload?.userId || null;
       }
-    } catch (error) {
-      console.log('[Logout Route] Could not extract user from token');
+    } catch {
     }
 
     // Get refresh token from cookies
     const refreshToken = extractRefreshTokenFromCookies(request);
-    console.log('[Logout Route] Refresh token from cookies:', !!refreshToken);
 
     // Create response FIRST (don't wait for DB)
     const response = NextResponse.json({
@@ -31,24 +37,8 @@ export async function POST(request: NextRequest) {
       message: 'Logged out successfully',
     });
 
-    // Clear BOTH cookies (accessToken and refreshToken)
-    response.cookies.set('accessToken', '', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production' && !process.env.NEXTAUTH_URL?.includes('localhost'),
-      sameSite: 'lax',
-      maxAge: 0,
-      path: '/',
-    });
-
-    response.cookies.set('refreshToken', '', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production' && !process.env.NEXTAUTH_URL?.includes('localhost'),
-      sameSite: 'lax',
-      maxAge: 0,
-      path: '/',
-    });
-
-    console.log('[Logout Route] Cookies cleared, returning response');
+    clearAuthCookies(response);
+    setNoStoreHeaders(response);
 
     // Log logout activity if we have userId
     if (userId) {
@@ -68,19 +58,20 @@ export async function POST(request: NextRequest) {
     if (refreshToken) {
       prisma.refreshToken.deleteMany({
         where: { token: refreshToken },
-      }).then(() => {
-        console.log('[Logout Route] Refresh token deleted from DB');
       }).catch((error) => {
-        console.error('[Logout Route] Failed to delete refresh token:', error);
+        serverError('[Logout Route] Failed to delete refresh token:', error);
       });
     }
 
     return response;
   } catch (error) {
-    console.error('[Logout Route] Error:', error);
-    return NextResponse.json(
+    serverError('[Logout Route] Error:', error);
+    const response = NextResponse.json(
       { success: true, message: 'Logged out' },
       { status: 200 }
     );
+    clearAuthCookies(response);
+    setNoStoreHeaders(response);
+    return response;
   }
 }

@@ -3,10 +3,13 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { 
-  AlertCircle, ArrowRight, BarChart3, BookOpen, CheckCircle, 
-  Clock, Users, TrendingUp
+import {
+  AlertCircle, BarChart3, BookOpen, CheckCircle,
+  Clock, Users
 } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { clearAuthData, getCurrentUser } from '@/lib/auth/client';
+import { devError } from '@/lib/dev-log';
 
 interface User {
   id: string;
@@ -210,13 +213,11 @@ export default function TeacherDashboard() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const storedUser = localStorage.getItem('user');
-        if (!storedUser) {
+        const userData = getCurrentUser();
+        if (!userData) {
           router.push('/login');
           return;
         }
-
-        const userData = JSON.parse(storedUser);
         if (userData.role !== 'TEACHER') {
           router.push('/admin/dashboard');
           return;
@@ -225,14 +226,8 @@ export default function TeacherDashboard() {
         setUser(userData);
 
         // Fetch dashboard stats from API
-        const token = localStorage.getItem('accessToken');
-        if (token) {
-          try {
-            const response = await fetch('/api/teacher/dashboard', {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-              },
-            });
+        try {
+          const response = await apiFetch('/api/teacher/dashboard');
 
             if (response.ok) {
               const result = await response.json();
@@ -240,21 +235,17 @@ export default function TeacherDashboard() {
                 setStats(result.data);
               }
             } else if (response.status === 401) {
-              console.error('Unauthorized: Token may be invalid or expired');
-              localStorage.removeItem('accessToken');
-              localStorage.removeItem('user');
+              clearAuthData();
               router.push('/login');
             } else {
-              console.error('Failed to fetch dashboard stats:', response.statusText);
+              devError('Failed to fetch dashboard stats:', response.statusText as unknown);
             }
-          } catch (fetchError) {
-            console.error('Error fetching dashboard stats:', fetchError);
-          }
-        } else {
-          console.warn('No access token found in localStorage');
+        } catch (fetchError) {
+          devError('Error fetching dashboard stats:', fetchError);
         }
       } catch (error) {
-        console.error('Error parsing user data:', error);
+        devError('Error parsing user data:', error);
+        clearAuthData();
         setHasError(true);
         setTimeout(() => router.push('/login'), 1000);
       } finally {

@@ -4,7 +4,6 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { TooManyRequestsError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 
 interface RateLimitConfig {
@@ -43,7 +42,6 @@ setInterval(cleanupExpiredEntries, 60 * 1000);
  */
 function getIdentifier(request: NextRequest): string {
   // Prioritas: User ID > IP Address
-  const userAgent = request.headers.get('user-agent') || '';
   const forwarded = request.headers.get('x-forwarded-for');
   const realIp = request.headers.get('x-real-ip');
   

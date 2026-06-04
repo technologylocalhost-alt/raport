@@ -1,31 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken } from '@/lib/auth/jwt';
+import { AuthenticatedUser } from '@/lib/auth/access';
+import { ensureClassOwnedByWaliKelasOrAllowed, requireClassSubjectAccess } from '@/lib/auth/class-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
-async function verifyAdmin(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-  
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-  
-  if (user && (user.role === 'ADMIN' || user.role === 'PRINCIPAL' || user.role === 'WALI_KELAS')) {
-    return user;
-  }
-  return null;
-}
 
 /**
  * GET /api/admin/classes/[id]/subjects/[subjectId]
@@ -36,26 +16,16 @@ export async function GET(
   { params }: { params: Promise<{ id: string; subjectId: string }> }
 ) {
   try {
-    const user = await verifyAdmin(request);
+    const user = await requireClassSubjectAccess(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
 
     const { id, subjectId } = await params;
+    const access = await ensureClassOwnedByWaliKelasOrAllowed(user, id);
 
-    // Verify the class exists
-    const classData = await prisma.class.findUnique({
-      where: { id },
-      select: { id: true, waliKelasId: true },
-    });
-
-    if (!classData) {
-      return errorResponse('Class not found', 404);
-    }
-
-    // If user is WALI_KELAS, verify they own this class
-    if (user.role === 'WALI_KELAS' && classData.waliKelasId !== user.id) {
-      return errorResponse('Unauthorized', 403);
+    if (!access.ok) {
+      return errorResponse(access.reason === 'NOT_FOUND' ? 'Class not found' : 'Unauthorized', access.reason === 'NOT_FOUND' ? 404 : 403);
     }
 
     const classSubject = await prisma.classSubject.findUnique({
@@ -84,8 +54,8 @@ export async function GET(
     }
 
     return successResponse(classSubject, 'Subject retrieved successfully');
-  } catch (error: any) {
-    console.error('Get class subject error:', error);
+  } catch (error: unknown) {
+    serverError('Get class subject error:', error);
     return errorResponse('Failed to retrieve subject', 500);
   }
 }
@@ -98,11 +68,11 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; subjectId: string }> }
 ) {
-  let user;
+  let user: AuthenticatedUser | null = null;
   let id = '';
   let subjectId = '';
   try {
-    user = await verifyAdmin(request);
+    user = await requireClassSubjectAccess(request);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
@@ -110,23 +80,11 @@ export async function DELETE(
     const result = await params;
     id = result.id;
     subjectId = result.subjectId;
-    console.log('[DELETE ClassSubject] Params:', { id, subjectId, userId: user.id, userRole: user.role });
 
-    // Verify the class exists
-    const classData = await prisma.class.findUnique({
-      where: { id },
-      select: { id: true, waliKelasId: true },
-    });
+    const access = await ensureClassOwnedByWaliKelasOrAllowed(user, id);
 
-    if (!classData) {
-      console.log('[DELETE ClassSubject] Class not found:', id);
-      return errorResponse('Class not found', 404);
-    }
-
-    // If user is WALI_KELAS, verify they own this class
-    if (user.role === 'WALI_KELAS' && classData.waliKelasId !== user.id) {
-      console.log('[DELETE ClassSubject] Unauthorized WALI_KELAS:', { userId: user.id, classWaliKelasId: classData.waliKelasId });
-      return errorResponse('Unauthorized', 403);
+    if (!access.ok) {
+      return errorResponse(access.reason === 'NOT_FOUND' ? 'Class not found' : 'Unauthorized', access.reason === 'NOT_FOUND' ? 404 : 403);
     }
 
     // Check if the ClassSubject exists first
@@ -140,7 +98,6 @@ export async function DELETE(
     });
 
     if (!existingClassSubject) {
-      console.log('[DELETE ClassSubject] ClassSubject not found:', { classId: id, subjectId });
       return errorResponse('Subject not found in this class', 404);
     }
 
@@ -157,7 +114,6 @@ export async function DELETE(
       },
     });
 
-    console.log('[DELETE ClassSubject] Successfully deleted:', { classId: id, subjectId });
 
     await logActivity({
       userId: user.id,
@@ -173,8 +129,8 @@ export async function DELETE(
     });
 
     return successResponse(deleted, 'Subject removed from class');
-  } catch (error: any) {
-    console.error('Delete subject from class error:', error);
+  } catch (error: unknown) {
+    serverError('Delete subject from class error:', error);
     if (user) {
       await logActivity({
         userId: user.id,
@@ -182,13 +138,13 @@ export async function DELETE(
         resourceType: 'ClassSubject',
         resourceId: subjectId,
         description: `Failed to remove subject from class`,
-        errorMessage: error?.message || 'Unknown error',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
         ipAddress: getClientIp(request),
         userAgent: getUserAgent(request),
         status: 'FAILED',
       });
     }
-    if (error.code === 'P2025') {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2025') {
       return errorResponse('Subject not found in this class', 404);
     }
     return errorResponse('Failed to remove subject from class', 500);

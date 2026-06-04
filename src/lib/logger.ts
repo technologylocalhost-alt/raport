@@ -9,7 +9,7 @@ interface LogEntry {
   level: LogLevel;
   message: string;
   timestamp: string;
-  context?: Record<string, any>;
+  context?: Record<string, unknown>;
   error?: {
     message: string;
     stack?: string;
@@ -42,7 +42,7 @@ class Logger {
     return JSON.stringify(entry);
   }
 
-  private log(level: LogLevel, message: string, context?: Record<string, any>, error?: Error) {
+  private log(level: LogLevel, message: string, context?: Record<string, unknown>, error?: Error) {
     const entry: LogEntry = {
       level,
       message,
@@ -83,24 +83,24 @@ class Logger {
     }
   }
 
-  debug(message: string, context?: Record<string, any>) {
+  debug(message: string, context?: Record<string, unknown>) {
     this.log('debug', message, context);
   }
 
-  info(message: string, context?: Record<string, any>) {
+  info(message: string, context?: Record<string, unknown>) {
     this.log('info', message, context);
   }
 
-  warn(message: string, context?: Record<string, any>) {
+  warn(message: string, context?: Record<string, unknown>) {
     this.log('warn', message, context);
   }
 
-  error(message: string, error?: Error, context?: Record<string, any>) {
+  error(message: string, error?: Error, context?: Record<string, unknown>) {
     this.log('error', message, context, error);
   }
 
   // Specialized logging methods
-  apiRequest(method: string, path: string, context?: Record<string, any>) {
+  apiRequest(method: string, path: string, context?: Record<string, unknown>) {
     this.info(`API Request: ${method} ${path}`, context);
   }
 
@@ -108,7 +108,7 @@ class Logger {
     this.info(`API Response: ${method} ${path}`, { statusCode, duration });
   }
 
-  apiError(method: string, path: string, error: Error, context?: Record<string, any>) {
+  apiError(method: string, path: string, error: Error, context?: Record<string, unknown>) {
     this.error(`API Error: ${method} ${path}`, error, context);
   }
 
@@ -118,7 +118,7 @@ class Logger {
     }
   }
 
-  authEvent(event: string, userId?: string, context?: Record<string, any>) {
+  authEvent(event: string, userId?: string, context?: Record<string, unknown>) {
     this.info(`Auth Event: ${event}`, { userId, ...context });
   }
 }

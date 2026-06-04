@@ -1,11 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
-  AlertCircle, BarChart3, BookOpen, CheckCircle, 
+import {
+  AlertCircle, BarChart3, BookOpen, CheckCircle,
   Clock, Users, TrendingUp, Loader, GraduationCap
 } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { clearAuthData, getCurrentUser } from '@/lib/auth/client';
+import { devError } from '@/lib/dev-log';
 
 interface User {
   id: string;
@@ -145,6 +148,18 @@ function StatsSection({ stats }: { stats: DashboardStats }) {
   );
 }
 
+function getRelativeActivityTime(timestamp: string) {
+  const diff = new Date().getTime() - new Date(timestamp).getTime();
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (minutes < 1) return 'Baru saja';
+  if (minutes < 60) return `${minutes}m yang lalu`;
+  if (hours < 24) return `${hours}h yang lalu`;
+  return `${days}d yang lalu`;
+}
+
 function ActivityItemComponent({ activity }: { activity: ActivityItem }) {
   const iconMap = {
     info: <BarChart3 size={20} className="text-blue-600" />,
@@ -165,19 +180,7 @@ function ActivityItemComponent({ activity }: { activity: ActivityItem }) {
         <div className="flex-1 min-w-0">
           <p className="font-medium text-gray-900 text-sm">{activity.title}</p>
           <p className="text-gray-600 text-xs mt-1">{activity.description}</p>
-          <p className="text-gray-500 text-xs mt-1">
-            {(() => {
-              const diff = Date.now() - new Date(activity.timestamp).getTime();
-              const minutes = Math.floor(diff / 60000);
-              const hours = Math.floor(minutes / 60);
-              const days = Math.floor(hours / 24);
-              
-              if (minutes < 1) return 'Baru saja';
-              if (minutes < 60) return `${minutes}m yang lalu`;
-              if (hours < 24) return `${hours}h yang lalu`;
-              return `${days}d yang lalu`;
-            })()}
-          </p>
+          <p className="text-gray-500 text-xs mt-1">{getRelativeActivityTime(activity.timestamp)}</p>
         </div>
       </div>
     </div>
@@ -247,39 +250,18 @@ export default function WaliKelasDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
 
-  useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (!userData) {
-      router.push('/login');
-      return;
-    }
-
-    const parsedUser = JSON.parse(userData) as User;
-    if (parsedUser.role !== 'WALI_KELAS') {
-      router.push('/admin/dashboard');
-      return;
-    }
-
-    setUser(parsedUser);
-    fetchStats();
-  }, [router]);
-
-  async function fetchStats() {
+  const fetchStats = useCallback(async () => {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('accessToken');
-      if (!token) {
+      if (!getCurrentUser()) {
         router.push('/login');
         return;
       }
 
-      const res = await fetch('/api/wali-kelas/dashboard', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await apiFetch('/api/wali-kelas/dashboard');
 
       if (res.status === 401) {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('user');
+        clearAuthData();
         router.push('/login');
         return;
       }
@@ -289,11 +271,26 @@ export default function WaliKelasDashboard() {
         setStats(data.data);
       }
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      devError('Error fetching stats:', error);
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [router]);
+
+  useEffect(() => {
+    const parsedUser = getCurrentUser() as User | null;
+    if (!parsedUser) {
+      router.push('/login');
+      return;
+    }
+    if (parsedUser.role !== 'WALI_KELAS') {
+      router.push('/admin/dashboard');
+      return;
+    }
+
+    setUser(parsedUser);
+    void fetchStats();
+  }, [fetchStats, router]);
 
   if (isLoading || !stats) {
     return <LoadingSpinner />;

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, GraduationCap } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
+import { devError } from '@/lib/dev-log';
 
 interface Level {
   id: string;
@@ -21,12 +22,17 @@ interface Level {
   };
 }
 
-interface PaginatedResponse {
-  success: boolean;
-  data: Level[];
-  page: number;
-  limit: number;
-  total: number;
+interface LevelsResponse {
+  data?: Level[];
+  pagination?: { total?: number };
+}
+
+interface SchoolsResponse {
+  data?: School[];
+}
+
+interface ValidationErrorDetail {
+  message?: string;
 }
 
 interface School {
@@ -35,7 +41,6 @@ interface School {
 }
 
 export default function LevelsPage() {
-  const router = useRouter();
   const [levels, setLevels] = useState<Level[]>([]);
   const [schools, setSchools] = useState<School[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -55,28 +60,18 @@ export default function LevelsPage() {
 
   const limit = 10;
 
-  useEffect(() => {
-    fetchSchools();
-    fetchLevels();
-  }, [page, search]);
-
-  async function fetchSchools() {
+  const fetchSchools = useCallback(async () => {
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch('/api/admin/schools?limit=100', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch('/api/admin/schools?limit=100');
 
-      const data: PaginatedResponse = await response.json();
+      const data: SchoolsResponse = await response.json();
       setSchools(data.data || []);
     } catch (error) {
-      console.error('Failed to fetch schools:', error);
+      devError('Failed to fetch schools:', error);
     }
-  }
+  }, []);
 
-  async function fetchLevels() {
+  const fetchLevels = useCallback(async () => {
     try {
       setIsLoading(true);
       const queryParams = new URLSearchParams({
@@ -85,22 +80,22 @@ export default function LevelsPage() {
         ...(search && { search }),
       });
 
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/levels?${queryParams}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch(`/api/admin/levels?${queryParams}`);
 
-      const data: any = await response.json();
+      const data: LevelsResponse = await response.json();
       setLevels(data.data || []);
       setTotal(data.pagination?.total || 0);
     } catch (error) {
-      console.error('Failed to fetch levels:', error);
+      devError('Failed to fetch levels:', error);
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [limit, page, search]);
+
+  useEffect(() => {
+    void fetchSchools();
+    void fetchLevels();
+  }, [fetchLevels, fetchSchools]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -112,14 +107,12 @@ export default function LevelsPage() {
     }
     
     try {
-      const token = localStorage.getItem('accessToken');
       const url = editingId ? `/api/admin/levels/${editingId}` : '/api/admin/levels';
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: editingId ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(formData),
       });
@@ -136,7 +129,7 @@ export default function LevelsPage() {
           levelCount: 0,
           description: '',
         });
-        fetchLevels();
+        void fetchLevels();
       } else {
         let errorMsg = 'Gagal menyimpan jenjang';
         try {
@@ -148,11 +141,11 @@ export default function LevelsPage() {
           if (errorData.error) {
             errorMsg = errorData.error;
           } else if (errorData.details && Array.isArray(errorData.details)) {
-            errorMsg = errorData.details.map((d: any) => d.message || JSON.stringify(d)).join(', ');
+            errorMsg = (errorData.details as ValidationErrorDetail[]).map((d) => d.message || JSON.stringify(d)).join(', ');
           }
-          console.error('API Error Response:', { status: response.status, data: errorData });
+          devError('API Error Response:', { status: response.status, data: errorData });
         } catch (parseError) {
-          console.error('Failed to parse error response:', { 
+          devError('Failed to parse error response:', { 
             status: response.status, 
             statusText: response.statusText,
             parseError 
@@ -162,7 +155,7 @@ export default function LevelsPage() {
         alert(`❌ ${errorMsg}`);
       }
     } catch (error) {
-      console.error('Failed to save level:', error);
+      devError('Failed to save level:', error);
       alert('❌ Gagal menyimpan jenjang. Silakan coba lagi.');
     }
   }
@@ -171,19 +164,15 @@ export default function LevelsPage() {
     if (!confirm('Are you sure you want to delete this level?')) return;
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`/api/admin/levels/${id}`, {
+      const response = await apiFetch(`/api/admin/levels/${id}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       if (response.ok) {
-        fetchLevels();
+        void fetchLevels();
       }
     } catch (error) {
-      console.error('Failed to delete level:', error);
+      devError('Failed to delete level:', error);
     }
   }
 
@@ -382,7 +371,7 @@ export default function LevelsPage() {
           <div className="p-12 text-center">
             <GraduationCap size={48} className="mx-auto text-gray-300 mb-4" />
             <p className="text-gray-600 font-medium">Tidak ada data jenjang</p>
-            <p className="text-gray-500 text-sm mt-1">Silakan klik tombol "Tambah Jenjang" untuk membuat data baru</p>
+            <p className="text-gray-500 text-sm mt-1">Silakan klik tombol &quot;Tambah Jenjang&quot; untuk membuat data baru</p>
           </div>
         ) : (
           <>

@@ -2,8 +2,9 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { verifyAccessToken } from '@/lib/auth/jwt';
-import { logActivity, logBulkActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { requireWaliKelasOnly } from '@/lib/auth/role-access';
+import { logBulkActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
+import { serverError } from '@/lib/server-log';
 
 const approveGradesSchema = z.object({
   subjectId: z.string().min(1, 'Subject ID is required'),
@@ -11,29 +12,8 @@ const approveGradesSchema = z.object({
   nomorRaport: z.string().optional(),
 });
 
-type ApproveGradesInput = z.infer<typeof approveGradesSchema>;
-
-async function getUser(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
-
-  if (!payload) {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-  });
-
-  if (user?.role === 'WALI_KELAS') {
-    return user;
-  }
-  return null;
+async function requireApproveGradesAccess(req: NextRequest) {
+  return requireWaliKelasOnly(req);
 }
 
 /**
@@ -42,20 +22,16 @@ async function getUser(req: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    console.log('[ApproveGrades] === START APPROVAL REQUEST ===');
     
-    const user = await getUser(request);
-    console.log('[ApproveGrades] User auth check:', user ? `User ID: ${user.id}, Role: ${user.role}` : 'NOT AUTHENTICATED');
+    const user = await requireApproveGradesAccess(request);
     
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }
 
     const body = await request.json();
-    console.log('[ApproveGrades] Request body:', JSON.stringify(body, null, 2));
     
     const validatedData = approveGradesSchema.parse(body);
-    console.log('[ApproveGrades] Validated data:', validatedData);
 
     // Verify that the wali-kelas owns this class
     const classData = await prisma.class.findFirst({
@@ -65,8 +41,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    console.log('[ApproveGrades] Class check:', classData ? `Found class: ${classData.name}` : 'CLASS NOT FOUND');
-    
     if (!classData) {
       return errorResponse('Class not found or unauthorized', 404);
     }
@@ -96,27 +70,12 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    console.log('[ApproveGrades] Grade query executed');
-    console.log('[ApproveGrades] Query criteria - classId:', validatedData.classId, 'subjectId:', validatedData.subjectId);
-    console.log('[ApproveGrades] Grades returned from query:', grades.length);
-    
-    if (grades.length > 0) {
-      console.log('[ApproveGrades] First grade details:', {
-        id: grades[0].id,
-        studentId: grades[0].studentId,
-        subjectId: grades[0].subjectId,
-        assessmentType: grades[0].assessmentType,
-        score: grades[0].score,
-      });
-    }
-    
     if (grades.length === 0) {
       return errorResponse('No grades found for this subject and class', 404);
     }
 
     // Get unique assessmentTypes from the grades being approved
     const assessmentTypes = [...new Set(grades.map(g => g.assessmentType))];
-    console.log('[ApproveGrades] Assessment types found:', assessmentTypes);
 
     // Check if this subject+class+assessmentType combination has already been approved
     const existingApprovals = await prisma.nilaiApprove.findMany({
@@ -139,21 +98,17 @@ export async function POST(request: NextRequest) {
       take: 1,
     });
 
-    console.log('[ApproveGrades] Existing approvals check:', existingApprovals.length > 0 ? 'FOUND - DUPLICATE' : 'NOT FOUND - OK');
-
     if (existingApprovals.length > 0) {
       const firstApproval = existingApprovals[0];
       const msg = `Penilaian ${firstApproval.assessmentType} untuk mata pelajaran ini sudah pernah disetujui pada ${new Date(
         firstApproval.updatedAt || firstApproval.createdAt
       ).toLocaleString('id-ID')}. Tidak dapat disetujui ulang.`;
-      console.log('[ApproveGrades] 409 Conflict:', msg);
       return errorResponse(msg, 409);
     }
 
     // Get level and semester info from first grade
     const levelId = grades[0].levelId || '';
     const schoolYear = grades[0].student.class.schoolYear;
-    const semester = grades[0].student.class.semester;
     
     // Helper function to translate assessmentType to Indonesian code
     const getAssessmentTypeCode = (type: string): string => {
@@ -226,7 +181,6 @@ export async function POST(request: NextRequest) {
         const maxNumber = extractNomorFromRaport(maxExisting?.nomorRaport);
         genderCounters[counterKey] = maxNumber + 1;
 
-        console.log(`[ApproveGrades] Counter ${counterKey}: starting from ${genderCounters[counterKey]} (max existing was ${maxNumber})`);
       }
     }
 
@@ -238,7 +192,6 @@ export async function POST(request: NextRequest) {
       
       // Skip if student has no grades in this subject
       if (studentGrades.length === 0) {
-        console.log(`[ApproveGrades] Skipping nomorRaport assignment for student ${student.id} (no grades in this subject)`);
         continue;
       }
       
@@ -263,10 +216,7 @@ export async function POST(request: NextRequest) {
 
     // Copy to nilai_approve table
     const createdApprovals = [];
-    const skippedGrades = [];
     const failedGrades = [];
-
-    console.log('[ApproveGrades] Starting to create approvals - Total grades to process:', grades.length);
 
     for (let i = 0; i < grades.length; i++) {
       const grade = grades[i];
@@ -306,13 +256,11 @@ export async function POST(request: NextRequest) {
         if (existingNomorRaportForAssessment?.nomorRaport) {
           // Reuse existing nomorRaport from same assessment type (different subject OK)
           finalNomorRaport = existingNomorRaportForAssessment.nomorRaport;
-          console.log(`[ApproveGrades] Reusing nomorRaport for student ${grade.studentId} (assessment ${grade.assessmentType}): ${finalNomorRaport}`);
         } else {
           // Generate new nomorRaport only if no approval for this assessmentType exists
           const mapKey = `${grade.assessmentType}-${grade.studentId}`;
           const autoGeneratedNomorRaport = nomorRaportMap[mapKey] || '';
           finalNomorRaport = validatedData.nomorRaport || autoGeneratedNomorRaport;
-          console.log(`[ApproveGrades] Generated new nomorRaport for student ${grade.studentId}: ${finalNomorRaport}`);
         }
 
         // If this exact subject+student combo was already approved, delete old record
@@ -320,7 +268,6 @@ export async function POST(request: NextRequest) {
           await prisma.nilaiApprove.delete({
             where: { id: existingForThisSubject.id },
           });
-          console.log(`[ApproveGrades] Deleted old approval record for student ${grade.studentId} (subject: ${validatedData.subjectId})`);
         }
 
         // Calculate averageStudent - rata-rata nilai siswa across all subjects
@@ -399,16 +346,15 @@ export async function POST(request: NextRequest) {
         });
 
         createdApprovals.push(approval);
-      } catch (err: any) {
-        console.error(`[ApproveGrades] Error for student ${grade.studentId}:`, err.message);
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        serverError(`[ApproveGrades] Error for student ${grade.studentId}:`, errorMessage);
         failedGrades.push({
           studentId: grade.studentId,
-          error: err.message,
+          error: errorMessage,
         });
       }
     }
-
-    console.log(`[ApproveGrades] Completed - Created: ${createdApprovals.length}, Skipped: ${skippedGrades.length}, Failed: ${failedGrades.length}`);
 
     // Log bulk approval activity (background task - doesn't block response)
     const userId = user.id; // Save for background task
@@ -428,7 +374,7 @@ export async function POST(request: NextRequest) {
           getUserAgent(request)
         );
       } catch (err) {
-        console.error('Error logging approval activity:', err);
+        serverError('Error logging approval activity:', err);
       }
     })();
 
@@ -438,9 +384,6 @@ export async function POST(request: NextRequest) {
       totalGrades: grades.length,
     };
     
-    console.log('[ApproveGrades] === SUCCESS ===');
-    console.log('[ApproveGrades] Response:', JSON.stringify(responseData, null, 2));
-
     return successResponse(responseData, 201);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -448,10 +391,10 @@ export async function POST(request: NextRequest) {
         field: e.path.join('.'),
         message: e.message,
       }));
-      console.error('[ApproveGrades] Validation error:', fieldErrors);
+      serverError('[ApproveGrades] Validation error:', fieldErrors);
       return errorResponse('Validation error', 400, fieldErrors);
     }
-    console.error('[ApproveGrades] === ERROR ===:', error);
+    serverError('[ApproveGrades] === ERROR ===:', error);
     return errorResponse('Failed to approve grades', 500);
   }
 }
