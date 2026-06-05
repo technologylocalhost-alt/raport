@@ -95,17 +95,7 @@ export default function WaliKelasStudentsPage() {
   const classId = params.classId as string;
   const subjectId = searchParams.get('subjectId');
 
-  // Validate required parameters
-  useEffect(() => {
-    if (!classId) {
-      setError('ID Kelas tidak valid');
-      return;
-    }
-    if (!subjectId) {
-      setError('ID Mata Pelajaran diperlukan');
-      return;
-    }
-  }, [classId, subjectId]);
+  const hasValidParams = Boolean(classId) && Boolean(subjectId);
   
   // Mapping assessment type to Indonesian labels
   const assessmentTypeLabels: { [key: string]: string } = {
@@ -180,6 +170,12 @@ export default function WaliKelasStudentsPage() {
 
   const fetchClassStudents = useCallback(async () => {
     try {
+      if (!hasValidParams) {
+        setError('ID Kelas/Mata Pelajaran tidak valid');
+        setIsLoading(false);
+        return;
+      }
+
       if (!classId || classId.trim() === '') {
         setError('ID Kelas tidak valid');
         setIsLoading(false);
@@ -239,6 +235,15 @@ export default function WaliKelasStudentsPage() {
       setIsLoading(false);
     }
   }, [classId]);
+
+  const fetchMetadata = useCallback(async () => {
+    if (!hasValidParams) {
+      setError('ID Kelas/Mata Pelajaran tidak valid');
+      return;
+    }
+
+    await Promise.all([fetchClassStudents(), fetchClassInfo()]);
+  }, [fetchClassInfo, fetchClassStudents, hasValidParams]);
 
   const fetchCompetencies = useCallback(async (studentId?: string) => {
     void studentId;
@@ -312,14 +317,13 @@ export default function WaliKelasStudentsPage() {
   }, [classId, fetchApprovedGrades, subjectId]);
 
   useEffect(() => {
-    void fetchClassStudents();
-    void fetchClassInfo();
+    void fetchMetadata();
+  }, [fetchMetadata]);
 
+  useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && students.length > 0) {
-        students.forEach((student) => {
-          void fetchStudentGrades(student.id);
-        });
+      if (document.visibilityState === 'visible') {
+        void fetchMetadata();
       }
     };
 
@@ -327,8 +331,23 @@ export default function WaliKelasStudentsPage() {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [fetchClassInfo, fetchClassStudents, fetchStudentGrades, students]);
+  }, [fetchMetadata]);
 
+  // Validate required parameters
+  useEffect(() => {
+    if (!classId) {
+      setError('ID Kelas tidak valid');
+      return;
+    }
+    if (!subjectId) {
+      setError('ID Mata Pelajaran diperlukan');
+      return;
+    }
+    if (error === 'ID Kelas tidak valid' || error === 'ID Mata Pelajaran diperlukan' || error === 'ID Kelas/Mata Pelajaran tidak valid') {
+      setError('');
+    }
+  }, [classId, subjectId, error]);
+  
   // Auto-select first student when page loads and student changes
   useEffect(() => {
     if (students.length > 0 && selectedStudent && !students.find((s) => s.id === selectedStudent.id)) {

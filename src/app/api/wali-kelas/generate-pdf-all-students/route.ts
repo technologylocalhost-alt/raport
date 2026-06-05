@@ -529,25 +529,36 @@ export async function POST(request: NextRequest) {
     }
     
     const launchArgs = [
+      ...chromium.args,
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-gpu',
       '--disable-dev-shm-usage',
       '--disable-software-rasterizer',
       '--disable-extensions',
-      '--single-process',
     ];
 
-    browser = await puppeteer.launch({
+    const launchTimeout = 120000;
+    
+    const launchOptions = {
       args: launchArgs,
       defaultViewport: chromium.defaultViewport,
       executablePath,
-      headless: true,
-      timeout: 60000,
-      protocolTimeout: 60000,
+      headless: true as const,
+      timeout: launchTimeout,
+      protocolTimeout: launchTimeout,
+      ignoreHTTPSErrors: true,
+    };
+
+    browser = await puppeteer.launch(launchOptions).catch((launchErr) => {
+      serverError('Puppeteer launch failed in generate-all-pdf:', launchErr);
+      throw launchErr;
     });
 
     const page = await browser.newPage();
+    const pageTimeout = launchTimeout;
+    page.setDefaultTimeout(pageTimeout);
+    page.setDefaultNavigationTimeout(pageTimeout);
 
     await page.setViewport({
       width: 825,
@@ -555,7 +566,10 @@ export async function POST(request: NextRequest) {
       deviceScaleFactor: 1,
     });
 
-    await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 60000 });
+    await page.setContent(htmlContent, {
+      waitUntil: 'domcontentloaded',
+      timeout: pageTimeout,
+    });
 
     const pdfBuffer = await page.pdf({
       width: '215mm',

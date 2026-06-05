@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Read Excel file
-    const buffer = await file.arrayBuffer();
+    const buffer = Buffer.from(await file.arrayBuffer());
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     const data = XLSX.utils.sheet_to_json(worksheet);

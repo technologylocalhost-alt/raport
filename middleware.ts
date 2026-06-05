@@ -10,6 +10,7 @@ export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const accessToken = request.cookies.get('accessToken')?.value;
   const refreshToken = request.cookies.get('refreshToken')?.value;
+  const hasBearerToken = Boolean(request.headers.get('authorization')?.startsWith('Bearer '));
 
   // Skip middleware for static files and Next.js internals
   if (pathname.startsWith('/_next') || pathname.startsWith('/static') || pathname.startsWith('/public')) {
@@ -36,7 +37,7 @@ export function middleware(request: NextRequest) {
   const isProtectedRoute = protectedPrefixes.some(prefix => pathname.startsWith(prefix));
 
   // Redirect to login if accessing protected route without tokens
-  if (isProtectedRoute && !accessToken && !refreshToken) {
+  if (isProtectedRoute && !accessToken && !refreshToken && !hasBearerToken) {
     console.log('[Middleware] No tokens found, redirecting to login:', pathname);
     
     // Don't redirect API calls - just return 401

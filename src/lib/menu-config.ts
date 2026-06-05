@@ -1,5 +1,6 @@
 import { getRoleBasePath, toCanonicalPath, toRoleScopedPath } from '@/lib/menu-alias';
 import { allMenuSections, getFlatMenuItems, type MenuItemConfig, type MenuSectionConfig } from '@/lib/menu-registry';
+import { isCataloguedSystemRoute } from '@/lib/system-routes';
 import { isAlwaysAllowedRoute } from '@/lib/system-routes';
 
 export { allMenuSections } from '@/lib/menu-registry';
@@ -10,6 +11,7 @@ export function isPathAllowed(
   currentRole?: string | null
 ) {
   if (isAlwaysAllowedRoute(pathname, currentRole)) return true;
+  if (isCataloguedSystemRoute(pathname, currentRole)) return true;
   if (allowedPaths === null) return true;
 
   const canonicalPath = toCanonicalPath(pathname, currentRole);

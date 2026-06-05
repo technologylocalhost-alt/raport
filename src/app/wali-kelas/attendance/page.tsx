@@ -25,7 +25,11 @@ interface Class {
   semesterNumber?: number;
   capacity: number;
   schoolYearId: string;
-  schoolYear?: string;
+  schoolYear?: string | {
+    id: string;
+    year: string;
+    isActive?: boolean;
+  };
   waliKelasId: string;
   _count?: {
     students?: number;
@@ -37,6 +41,12 @@ interface FormData {
   date: string;
   status: 'HADIR' | 'SAKIT' | 'IZIN' | 'ALFA';
   notes: string;
+}
+
+function normalizeSchoolYear(value: Class['schoolYear']) {
+  if (!value) return '-';
+  if (typeof value === 'string') return value;
+  return value?.year || '-';
 }
 
 interface StudentOption {
@@ -114,7 +124,7 @@ function AttendancePageContent() {
         const transformedClasses = ((data.data || []) as ClassApiItem[]).map((c) => ({
           ...c,
           levelName: c.level?.name || '-',
-          schoolYear: c.schoolYearData?.year || c.schoolYear || '-',
+          schoolYear: normalizeSchoolYear(c.schoolYearData?.year || c.schoolYear),
         }));
         setClasses(transformedClasses);
       } else {
@@ -312,7 +322,7 @@ function AttendancePageContent() {
                 <p className="text-sm text-gray-500 mt-1">
                   {classItem.levelName}
                 </p>
-                <p className="text-xs text-gray-400 mt-2">{classItem.schoolYear}</p>
+                <p className="text-xs text-gray-400 mt-2">{normalizeSchoolYear(classItem.schoolYear)}</p>
                 <div className="mt-4 text-emerald-600 group-hover:translate-x-1 transition-transform">
                   Klik untuk kelola absensi →
                 </div>
@@ -586,4 +596,3 @@ function AttendancePageContent() {
     </div>
   );
 }
-

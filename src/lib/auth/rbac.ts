@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import { UserRole } from '@prisma/client';
 
 /**
  * Check if a user can access a specific menu path based on MenuPermission records.
@@ -25,8 +26,12 @@ export async function canAccessMenu(
     if (!allowedRoles.includes(userRole)) return false;
   }
 
+  const bypassBagianCheck =
+    userRole === UserRole.ADMIN ||
+    userRole === UserRole.PRINCIPAL;
+
   // Check bagian (if restriction is set)
-  if (permission.bagian) {
+  if (permission.bagian && !bypassBagianCheck) {
     const requiredBagian = permission.bagian.split(',').map((b) => b.trim());
     // User must have at least one matching bagian
     const hasMatch = requiredBagian.some((b) => userBagian.includes(b));
@@ -66,6 +71,10 @@ export async function getAllowedMenuPaths(
   for (const perm of permissions) {
     if (!perm.isActive) continue;
 
+    const bypassBagianCheck =
+      userRole === UserRole.ADMIN ||
+      userRole === UserRole.PRINCIPAL;
+
     // Check role
     if (perm.roles !== 'ALL') {
       const allowedRoles = perm.roles.split(',').map((r) => r.trim());
@@ -73,7 +82,7 @@ export async function getAllowedMenuPaths(
     }
 
     // Check bagian
-    if (perm.bagian) {
+    if (perm.bagian && !bypassBagianCheck) {
       const requiredBagian = perm.bagian.split(',').map((b) => b.trim());
       const hasMatch = requiredBagian.some((b) => userBagian.includes(b));
       if (!hasMatch) continue;

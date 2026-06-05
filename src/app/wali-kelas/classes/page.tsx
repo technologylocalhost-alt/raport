@@ -17,7 +17,11 @@ interface Class {
   semesterNumber?: number | string;
   capacity: number;
   schoolYearId: string;
-  schoolYear?: string;
+  schoolYear?: string | {
+    id: string;
+    year: string;
+    isActive?: boolean;
+  };
   waliKelasId: string;
   isActive?: boolean;
   level?: { name?: string; code?: string };
@@ -40,7 +44,13 @@ interface Class {
       name: string;
       code: string;
     };
-  }>;
+    }>;
+}
+
+function normalizeSchoolYear(value: Class['schoolYear']) {
+  if (!value) return '-';
+  if (typeof value === 'string') return value;
+  return value?.year || '-';
 }
 
 export default function WaliKelasClassesPage() {
@@ -71,7 +81,7 @@ export default function WaliKelasClassesPage() {
           levelName: c.level?.name || '-',
           levelCode: c.level?.code || '-',
           semesterNumber: c.semester?.number || '-',
-          schoolYear: c.schoolYearData?.year || c.schoolYear || '-',
+          schoolYear: normalizeSchoolYear(c.schoolYearData?.year || c.schoolYear),
         }));
         setClasses(transformedClasses);
       }
@@ -186,7 +196,7 @@ export default function WaliKelasClassesPage() {
                   </div>
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-700">{classItem.levelName}</td>
-                <td className="px-6 py-4 text-sm text-gray-700">{classItem.schoolYear}</td>
+                <td className="px-6 py-4 text-sm text-gray-700">{normalizeSchoolYear(classItem.schoolYear)}</td>
                 <td className="px-6 py-4 text-center">
                   <div className="flex items-center justify-center gap-2">
                     <Users size={16} className="text-blue-600" />
@@ -245,7 +255,7 @@ export default function WaliKelasClassesPage() {
                   </span>
                 )}
               </div>
-              <p className="text-xs text-gray-500">Semester {classItem.semesterNumber} • {classItem.schoolYear}</p>
+              <p className="text-xs text-gray-500">Semester {classItem.semesterNumber} • {normalizeSchoolYear(classItem.schoolYear)}</p>
             </div>
 
             {/* Level Info */}

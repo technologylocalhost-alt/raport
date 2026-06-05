@@ -26,7 +26,19 @@ interface RefreshTokenCreateError {
 
 export async function POST(request: NextRequest) {
   try {
-    const rateLimitResponse = await rateLimit(rateLimitPresets.strict)(request);
+    const isProduction = process.env.NODE_ENV === 'production';
+    const rawLoginMax = process.env.AUTH_LOGIN_RATE_LIMIT_MAX;
+    const rawLoginWindow = process.env.AUTH_LOGIN_RATE_LIMIT_WINDOW_MS;
+    const parsedLoginMax = Number.parseInt(rawLoginMax || '', 10);
+    const parsedLoginWindow = Number.parseInt(rawLoginWindow || '', 10);
+    const rateLimitResponse = await rateLimit({
+      ...rateLimitPresets.strict,
+      maxRequests: Number.isFinite(parsedLoginMax) && parsedLoginMax > 0 ? parsedLoginMax : isProduction ? 5 : 20,
+      windowMs:
+        Number.isFinite(parsedLoginWindow) && parsedLoginWindow > 0
+          ? parsedLoginWindow
+          : rateLimitPresets.strict.windowMs,
+    })(request);
     if (rateLimitResponse) return rateLimitResponse;
 
     const body = await request.json();

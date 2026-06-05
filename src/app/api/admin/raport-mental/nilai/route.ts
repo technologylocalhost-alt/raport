@@ -72,9 +72,17 @@ export async function POST(request: NextRequest) {
       return errorResponse('items harus berupa array', 400);
     }
 
-    // Validasi santri ada
+    // Validasi santri ada.
+    // Catatan: beberapa sekolah menyimpan data siswa aktif di tabel Student, sementara
+    // data master registrasi ada di Santri. Jika data tidak ada di Santri,
+    // fallback ke Student agar penyimpanan tidak terblokir untuk siswa kelas aktif.
     const santri = await prisma.santri.findUnique({ where: { studentNo } });
-    if (!santri) return errorResponse('Data santri tidak ditemukan', 404);
+    if (!santri) {
+      const studentData = await prisma.student.findFirst({ where: { studentNo } });
+      if (!studentData) {
+        return errorResponse('Data santri tidak ditemukan', 404);
+      }
+    }
 
     // Validasi schoolYear dan semester
     const schoolYear = await prisma.schoolYear.findUnique({ where: { id: schoolYearId } });

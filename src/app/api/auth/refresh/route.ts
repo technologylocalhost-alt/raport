@@ -9,10 +9,18 @@ import { serverError } from '@/lib/server-log';
 
 export async function POST(request: NextRequest) {
   try {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const rawRefreshMax = process.env.AUTH_REFRESH_RATE_LIMIT_MAX;
+    const rawRefreshWindow = process.env.AUTH_REFRESH_RATE_LIMIT_WINDOW_MS;
+    const parsedRefreshMax = Number.parseInt(rawRefreshMax || '', 10);
+    const parsedRefreshWindow = Number.parseInt(rawRefreshWindow || '', 10);
     const rateLimitResponse = await rateLimit({
       ...rateLimitPresets.strict,
-      maxRequests: 10,
-      windowMs: 5 * 60 * 1000,
+      maxRequests: Number.isFinite(parsedRefreshMax) && parsedRefreshMax > 0 ? parsedRefreshMax : isProduction ? 10 : 25,
+      windowMs:
+        Number.isFinite(parsedRefreshWindow) && parsedRefreshWindow > 0
+          ? parsedRefreshWindow
+          : 5 * 60 * 1000,
       message: 'Terlalu banyak percobaan refresh token. Silakan coba lagi beberapa menit lagi.',
     })(request);
     if (rateLimitResponse) return rateLimitResponse;
@@ -111,4 +119,3 @@ export async function POST(request: NextRequest) {
     return response;
   }
 }
-

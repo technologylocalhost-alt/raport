@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Save, Trash2, X } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
@@ -59,6 +59,24 @@ interface KamarItem {
   smt1: string;
   smt2: string;
 }
+
+type StudentNoCheckStatus = 'idle' | 'checking' | 'available' | 'duplicate' | 'error';
+
+type StudentNoCheckSource = 'none' | 'student' | 'santri';
+
+type StudentNoCheckState = {
+  status: StudentNoCheckStatus;
+  message: string;
+  matchedName?: string;
+  source?: StudentNoCheckSource;
+  prefill?: {
+    name?: string;
+    birthDate?: string;
+    phone?: string;
+    address?: string;
+    parentPhoneNo?: string;
+  };
+};
 
 interface ClassHistoryItem {
   schoolYear?: string;
@@ -224,16 +242,43 @@ const PENDIDIKAN_OPTIONS = [
 
 // === TAB CONTENT RENDERER ===
 
-export function renderTabContent(activeTab: string, formData: Record<string, string>, onChange: (name: string, val: string) => void, classHistory?: ClassHistoryItem[]) {
+export function renderTabContent(
+  activeTab: string,
+  formData: Record<string, string>,
+  onChange: (name: string, val: string) => void,
+  classHistory?: ClassHistoryItem[],
+  studentNoCheck?: StudentNoCheckState,
+) {
   const F = formData;
   const C = onChange;
+  const getStudentNoMessageClass = (status: StudentNoCheckStatus) => {
+    switch (status) {
+      case 'checking':
+        return 'text-blue-600 text-sm';
+      case 'available':
+        return 'text-emerald-600 text-sm';
+      case 'duplicate':
+        return 'text-red-600 text-sm';
+      case 'error':
+        return 'text-orange-600 text-sm';
+      default:
+        return 'text-gray-500 text-sm';
+    }
+  };
 
   switch (activeTab) {
     case 'identitas':
       return (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <InputField label="Nama Lengkap" name="name" value={F.name} onChange={C} required />
-          <InputField label="No Stambuk" name="studentNo" value={F.studentNo} onChange={C} required />
+          <div>
+            <InputField label="No Stambuk" name="studentNo" value={F.studentNo} onChange={C} required />
+            {studentNoCheck?.message && studentNoCheck.status !== 'idle' && (
+              <p className={`mt-1 ${getStudentNoMessageClass(studentNoCheck.status)}`}>
+                {studentNoCheck.message}
+              </p>
+            )}
+          </div>
           <InputField label="Nama Panggilan" name="namaPanggilan" value={F.namaPanggilan} onChange={C} />
           <SelectField label="Jenis Kelamin" name="gender" value={F.gender} onChange={C}
             options={[{ value: 'MALE', label: 'Putra' }, { value: 'FEMALE', label: 'Putri' }]} />
@@ -539,6 +584,13 @@ export function SantriFormPage({ id }: { id?: string }) {
   const [activeTab, setActiveTab] = useState('identitas');
   const [isLoading, setIsLoading] = useState(!!id);
   const [isSaving, setIsSaving] = useState(false);
+  const [initialStudentNo, setInitialStudentNo] = useState('');
+  const [studentNoCheck, setStudentNoCheck] = useState<StudentNoCheckState>({
+    status: 'idle',
+    message: '',
+  });
+  const studentNoCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const studentNoCheckRequestRef = useRef(0);
 
   const isEdit = !!id;
 
@@ -561,6 +613,12 @@ export function SantriFormPage({ id }: { id?: string }) {
           }
         }
         setFormData(newForm);
+        setInitialStudentNo(newForm.studentNo || '');
+        setStudentNoCheck(
+          newForm.studentNo
+            ? { status: 'available', message: 'No Stambuk saat ini', matchedName: undefined }
+            : { status: 'idle', message: '', matchedName: undefined }
+        );
         if (d.classHistory) setClassHistory(d.classHistory);
       })
       .catch(() => { alert('Gagal memuat data'); router.push('/admin/santri'); })
@@ -571,10 +629,151 @@ export function SantriFormPage({ id }: { id?: string }) {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const formatDateInputValue = (value?: string | null) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return '';
+    return date.toISOString().split('T')[0];
+  };
+
+  useEffect(() => {
+    if (studentNoCheckTimerRef.current) {
+      clearTimeout(studentNoCheckTimerRef.current);
+    }
+
+    const currentStudentNo = (formData.studentNo || '').trim();
+
+    if (!currentStudentNo) {
+      setStudentNoCheck({ status: 'idle', message: '', matchedName: undefined, source: 'none', prefill: undefined });
+      return;
+    }
+
+    if (isEdit && currentStudentNo === initialStudentNo) {
+      setStudentNoCheck({ status: 'available', message: 'No Stambuk saat ini', matchedName: undefined, source: 'santri' });
+      return;
+    }
+
+    const requestId = ++studentNoCheckRequestRef.current;
+    setStudentNoCheck({ status: 'checking', message: 'Memeriksa no stambuk...', matchedName: undefined });
+
+    studentNoCheckTimerRef.current = setTimeout(async () => {
+      try {
+        const queryParams = new URLSearchParams({ studentNo: currentStudentNo });
+        if (isEdit && id) {
+          queryParams.set('excludeId', id);
+        }
+
+        const response = await apiFetch(`/api/admin/santri/check-student-no?${queryParams.toString()}`);
+        if (requestId !== studentNoCheckRequestRef.current) return;
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({ error: 'Gagal mengecek no stambuk' }));
+          if (requestId !== studentNoCheckRequestRef.current) return;
+          setStudentNoCheck({
+            status: 'error',
+            message: err.error || 'Gagal mengecek no stambuk',
+            matchedName: undefined,
+            source: 'none',
+            prefill: undefined,
+          });
+          return;
+        }
+
+        const result = await response.json();
+        if (requestId !== studentNoCheckRequestRef.current) return;
+
+        if (!result.success || !result.data) {
+          setStudentNoCheck({
+            status: 'error',
+            message: result.error || 'Gagal membaca respons pengecekan',
+            matchedName: undefined,
+            source: 'none',
+            prefill: undefined,
+          });
+          return;
+        }
+
+        const duplicateName = result.data.santri?.name || result.data.student?.name || '';
+        const fromSantri = result.data.source === 'santri';
+        const sourceStudent = result.data.source === 'student';
+        const prefillData = sourceStudent && result.data.student
+          ? {
+              name: result.data.student.name || '',
+              birthDate: result.data.student.birthDate || '',
+              phone: result.data.student.phone || '',
+              address: result.data.student.address || '',
+              parentPhoneNo: result.data.student.parentPhoneNo || '',
+            }
+          : undefined;
+
+        setStudentNoCheck({
+          status: fromSantri ? 'duplicate' : 'available',
+          message: fromSantri
+              ? `No Stambuk sudah terdaftar${duplicateName ? ` (${duplicateName})` : ''}`
+              : sourceStudent
+                ? 'No Stambuk ditemukan di tabel Student, data dasar telah diisi otomatis'
+                : 'No Stambuk tersedia',
+          source: result.data.source || 'none',
+          matchedName: duplicateName || undefined,
+          prefill: prefillData,
+        });
+
+        if (!fromSantri && prefillData) {
+          setFormData(prev => {
+            const next = { ...prev };
+            if (!next.name && prefillData.name) next.name = prefillData.name;
+            if (!next.birthDate) {
+              const v = formatDateInputValue(prefillData.birthDate);
+              if (v) next.birthDate = v;
+            }
+            if (!next.phone && prefillData.phone) next.phone = prefillData.phone;
+            if (!next.address && prefillData.address) next.address = prefillData.address;
+            if (!next.parentPhoneNo && prefillData.parentPhoneNo) next.parentPhoneNo = prefillData.parentPhoneNo;
+            return next;
+          });
+        }
+
+        if (fromSantri && duplicateName) {
+          setFormData(prev => {
+            if (prev.name === duplicateName) return prev;
+            return { ...prev, name: duplicateName };
+          });
+        }
+
+      } catch (error) {
+        devError('Error checking studentNo:', error);
+        if (requestId !== studentNoCheckRequestRef.current) return;
+        setStudentNoCheck({
+          status: 'error',
+          message: 'Terjadi masalah koneksi saat mengecek no stambuk',
+          matchedName: undefined,
+          source: 'none',
+          prefill: undefined,
+        });
+      }
+    }, 450);
+
+    return () => {
+      if (studentNoCheckTimerRef.current) {
+        clearTimeout(studentNoCheckTimerRef.current);
+      }
+    };
+  }, [formData.studentNo, id, initialStudentNo, isEdit]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.studentNo) {
       alert('Nama Lengkap dan No Stambuk wajib diisi');
+      setActiveTab('identitas');
+      return;
+    }
+    if (studentNoCheck.status === 'checking') {
+      alert('Tunggu hingga pengecekan No Stambuk selesai');
+      setActiveTab('identitas');
+      return;
+    }
+    if (studentNoCheck.status === 'duplicate') {
+      alert('No Stambuk sudah terdaftar');
       setActiveTab('identitas');
       return;
     }
@@ -653,7 +852,7 @@ export function SantriFormPage({ id }: { id?: string }) {
         {/* Form Content */}
         <form onSubmit={handleSubmit}>
           <div className="p-6">
-            {renderTabContent(activeTab, formData, handleFieldChange, classHistory)}
+            {renderTabContent(activeTab, formData, handleFieldChange, classHistory, studentNoCheck)}
           </div>
 
           {/* Footer */}
@@ -662,7 +861,9 @@ export function SantriFormPage({ id }: { id?: string }) {
               className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 font-medium text-sm">
               <X size={16} /> Batal
             </button>
-            <button type="submit" disabled={isSaving}
+            <button
+              type="submit"
+              disabled={isSaving || studentNoCheck.status === 'checking' || studentNoCheck.status === 'duplicate'}
               className="flex items-center gap-2 px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium text-sm disabled:opacity-50">
               <Save size={16} /> {isSaving ? 'Menyimpan...' : (isEdit ? 'Simpan Perubahan' : 'Tambah Santri')}
             </button>

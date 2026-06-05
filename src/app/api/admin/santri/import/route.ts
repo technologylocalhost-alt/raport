@@ -223,7 +223,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    const buffer = await file.arrayBuffer();
+    const buffer = Buffer.from(await file.arrayBuffer());
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     const rawData = XLSX.utils.sheet_to_json(worksheet);
