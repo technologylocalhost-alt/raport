@@ -70,6 +70,8 @@ export async function GET(request: NextRequest) {
 
     // Build where clause with validation
     const where: Prisma.ClassWhereInput = {};
+    const schoolYearWhere: Prisma.SchoolYearWhereInput = {};
+    const levelWhere: Prisma.LevelWhereInput = {};
     
     // By default, only show active classes unless explicitly requested otherwise
     if (!includeInactive) {
@@ -81,9 +83,7 @@ export async function GET(request: NextRequest) {
         // Also filter by active school years - BUT only if not explicitly filtering by a specific schoolYearId
         // If user explicitly selects a schoolYearId (active or inactive), show classes from that year
         if (!schoolYearId || schoolYearId.trim() === '') {
-          where.schoolYear = {
-            isActive: true,
-          };
+          schoolYearWhere.isActive = true;
         }
       }
     }
@@ -118,6 +118,12 @@ export async function GET(request: NextRequest) {
     
     if (search && search.trim() !== '') {
       where.name = { contains: search, mode: 'insensitive' as const };
+    }
+    if (Object.keys(schoolYearWhere).length > 0) {
+      where.schoolYear = schoolYearWhere;
+    }
+    if (Object.keys(levelWhere).length > 0) {
+      where.level = levelWhere;
     }
 
     const [classes, total] = await Promise.all([
