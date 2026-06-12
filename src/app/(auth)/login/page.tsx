@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { UserRole } from '@prisma/client';
 import { apiFetch } from '@/lib/api-client';
 import {
   clearAuthData,
@@ -20,7 +21,7 @@ interface LoginResponse {
     id: string;
     email: string;
     name: string;
-    role: string;
+    role: UserRole;
     schoolId: string;
     isActive?: boolean;
     bagian?: string[];
@@ -135,17 +136,19 @@ export default function LoginPage() {
       setAccessToken(data.accessToken || null);
 
       if (data.user) {
+        const userRole = data.user.role;
         setCurrentUser({
           ...data.user,
           isActive: data.user.isActive ?? true,
           bagian: data.user.bagian ?? [],
+          role: userRole,
         });
       } else {
         setCurrentUser(null);
       }
 
       await new Promise((resolve) => setTimeout(resolve, 100));
-      await redirectAfterLogin(data.user?.role || 'ADMIN');
+      await redirectAfterLogin(data.user?.role || UserRole.ADMIN);
     } catch (error) {
       clearAuthData();
       setError(error instanceof Error ? error.message : 'An error occurred');
