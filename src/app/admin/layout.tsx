@@ -18,7 +18,7 @@ import {
   resolveMenuHref,
 } from '@/lib/menu-config';
 import { toCanonicalPath } from '@/lib/menu-alias';
-import { getCurrentUser } from '@/lib/auth/client';
+import { fetchCurrentUser } from '@/lib/auth/client';
 import { fetchAllowedMenuPaths } from '@/lib/rbac-client';
 import { devError } from '@/lib/dev-log';
 
@@ -53,25 +53,35 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   // Auth guard + user info
   useEffect(() => {
-    const parsedUser = getCurrentUser();
-    if (!parsedUser) {
-      router.replace('/login');
-      return;
-    }
+    let active = true;
 
-    try {
+    async function bootstrapSession() {
+      try {
+        const sessionUser = await fetchCurrentUser();
 
-      const timer = window.setTimeout(() => {
-        setUserName(parsedUser.name || 'User');
-        setUserRole(parsedUser.role || 'ADMIN');
+        if (!active) return;
+
+        if (!sessionUser) {
+          router.replace('/login');
+          return;
+        }
+
+        setUserName(sessionUser.name || 'User');
+        setUserRole(sessionUser.role || 'ADMIN');
         setIsRoleAuthorized(true);
-      }, 0);
-
-      return () => window.clearTimeout(timer);
-    } catch (e) {
-      devError('Error parsing user:', e);
-      router.replace('/login');
+      } catch (error) {
+        devError('Error fetching session user:', error);
+        if (active) {
+          router.replace('/login');
+        }
+      }
     }
+
+    void bootstrapSession();
+
+    return () => {
+      active = false;
+    };
   }, [router]);
 
   // Fetch allowed menu paths for RBAC
@@ -81,7 +91,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     async function fetchAllowedMenus() {
       try {
         const { allowedPaths, hasRestrictions } = await fetchAllowedMenuPaths('admin');
-        setAllowedPaths(hasRestrictions ? allowedPaths : null);
+        setAllowedPaths(hasRestrictions ? allowedPaths : []);
       } catch {
         // Fail closed on RBAC API error
         setAllowedPaths([]);
@@ -92,8 +102,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   useEffect(() => {
     if (!isRoleAuthorized || allowedPaths === undefined) return;
-    if (allowedPaths !== null && !isPathAllowed(pathname, allowedPaths, userRole)) {
-      router.replace(resolveMenuHref(allowedPaths[0] || '/login', userRole));
+    if (!isPathAllowed(pathname, allowedPaths, userRole)) {
+      const fallback = allowedPaths && allowedPaths.length > 0
+        ? resolveMenuHref(allowedPaths[0]!, userRole)
+        : '/access-denied';
+      router.replace(fallback);
     }
   }, [allowedPaths, isRoleAuthorized, pathname, router, userRole]);
 
@@ -123,6 +136,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-100">
         <div className="text-gray-600 text-sm">Memverifikasi akses...</div>
+      </div>
+    );
+  }
+
+  if (Array.isArray(allowedPaths) && allowedPaths.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+        <div className="text-gray-600 text-sm">Tidak ada menu yang diizinkan untuk akun ini.</div>
       </div>
     );
   }

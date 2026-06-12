@@ -7,7 +7,7 @@ import {
   Clock, Users, TrendingUp, Loader, GraduationCap
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
-import { clearAuthData, getCurrentUser } from '@/lib/auth/client';
+import { clearAuthData, fetchCurrentUser } from '@/lib/auth/client';
 import { devError } from '@/lib/dev-log';
 
 interface User {
@@ -253,7 +253,8 @@ export default function WaliKelasDashboard() {
   const fetchStats = useCallback(async () => {
     try {
       setIsLoading(true);
-      if (!getCurrentUser()) {
+      const sessionUser = await fetchCurrentUser();
+      if (!sessionUser) {
         router.push('/login');
         return;
       }
@@ -278,18 +279,32 @@ export default function WaliKelasDashboard() {
   }, [router]);
 
   useEffect(() => {
-    const parsedUser = getCurrentUser() as User | null;
-    if (!parsedUser) {
-      router.push('/login');
-      return;
-    }
-    if (parsedUser.role !== 'WALI_KELAS') {
-      router.push('/admin/dashboard');
-      return;
+    let active = true;
+
+    async function bootstrapSession() {
+      const parsedUser = await fetchCurrentUser();
+
+      if (!active) return;
+
+      if (!parsedUser) {
+        router.push('/login');
+        return;
+      }
+
+      if (parsedUser.role !== 'WALI_KELAS') {
+        router.push('/admin/dashboard');
+        return;
+      }
+
+      setUser(parsedUser);
+      void fetchStats();
     }
 
-    setUser(parsedUser);
-    void fetchStats();
+    void bootstrapSession();
+
+    return () => {
+      active = false;
+    };
   }, [fetchStats, router]);
 
   if (isLoading || !stats) {

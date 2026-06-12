@@ -1,6 +1,6 @@
 # Sistem Raport Sekolah - Multi-Jenjang (SD, SMP, SMA, Aliyah)
 
-Sistem manajemen raport berbasis web yang komprehensif untuk mengakomodasi kebutuhan sekolah dari jenjang SD hingga Aliyah. Dibangun dengan teknologi modern: **Next.js 15**, **TypeScript**, **Bun**, **Prisma**, dan **PostgreSQL**.
+Sistem manajemen raport berbasis web yang komprehensif untuk mengakomodasi kebutuhan sekolah dari jenjang SD hingga Aliyah. Dibangun dengan teknologi modern: **Next.js 16**, **TypeScript**, **Bun**, **Prisma**, dan **PostgreSQL**.
 
 ## 🎯 Fitur Utama
 
@@ -11,7 +11,7 @@ Sistem manajemen raport berbasis web yang komprehensif untuk mengakomodasi kebut
   - Guru, siswa, mata pelajaran
   - Kompetensi (pengetahuan, keterampilan, sikap)
   - Nilai dan kehadiran siswa
-- ✅ **Role-Based Access Control**: Admin, Guru, Kepala Sekolah
+- ✅ **Role-Based Access Control**: Admin, Guru, Kepala Sekolah, Wali Kelas
 - ✅ **Input Nilai Fleksibel**: Mendukung berbagai sistem penilaian (1-4, 0-100, A-D, E-A)
 - ✅ **Laporan & Analytics**: Dashboard dengan statistik
 - ✅ **API RESTful**: Endpoint lengkap untuk integrasi
@@ -21,7 +21,7 @@ Sistem manajemen raport berbasis web yang komprehensif untuk mengakomodasi kebut
 | Layer | Technology |
 |-------|-----------|
 | **Runtime** | Bun |
-| **Frontend** | Next.js 15 + React 19 + TypeScript |
+| **Frontend** | Next.js 16 + React 19 + TypeScript |
 | **Styling** | Tailwind CSS |
 | **Database** | PostgreSQL + Prisma ORM |
 | **Auth** | JWT (jsonwebtoken) + bcryptjs |
@@ -107,7 +107,7 @@ bun run seed
 bun run dev
 ```
 
-Server akan berjalan di `http://localhost:3000`
+Server akan berjalan di `http://localhost:9876`
 
 ## 📝 Test Credentials (Setelah Seed)
 
@@ -155,19 +155,48 @@ raport/
 1. User mengirim email + password ke `/api/auth/login`
 2. Server memvalidasi credentials
 3. Server generate **access token** (15 menit) + **refresh token** (7 hari)
-4. Access token dikembalikan ke client (disimpan di localStorage)
-5. Refresh token disimpan di HttpOnly secure cookie
+4. Refresh token disimpan di HttpOnly secure cookie
+5. Client bootstrap session dari `/api/profile` dan menyimpan cache UI lokal hanya sebagai cadangan
+6. Redirect setelah login mengikuti role dan RBAC menu yang tersedia
 
 ### Token Refresh Flow
 1. Sebelum access token expired, client call `/api/auth/refresh`
 2. Server verify refresh token dari cookie
 3. Server generate access token baru
-4. Client update localStorage dengan token baru
+4. Request lanjutan tetap memakai cookie session, bukan `localStorage`
 
 ### Logout Flow
-1. Client call `/api/auth/logout` dengan access token
+1. Client call `/api/auth/logout`
 2. Server delete refresh token dari database
-3. Server clear refresh token cookie
+3. Server clear cookie session dan redirect ke `/login`
+
+## 🔐 RBAC
+
+RBAC di aplikasi ini memakai dua lapisan:
+
+1. Role check untuk membatasi domain umum, seperti `ADMIN`, `TEACHER`, `PRINCIPAL`, dan `WALI_KELAS`
+2. `MenuPermission` sebagai sumber utama untuk menu dan route yang sudah dikatalogkan
+
+Aturan penting:
+
+- Jika `MenuPermission` tidak ada, akses ditolak.
+- Jika permission tidak aktif, akses ditolak.
+- Jika role atau `bagian` tidak cocok, akses ditolak.
+- Client sidebar hanya untuk UX. Proteksi utama tetap ada di server API.
+
+Kalau sesi valid tapi user tidak punya menu yang diizinkan, aplikasi mengarah ke `/access-denied`.
+
+## 🧭 RBAC Maintenance
+
+Gunakan script berikut untuk menjaga sinkronisasi menu:
+
+```bash
+bun run seed-menu-permissions
+bun run check-menu-integrity
+```
+
+- `seed-menu-permissions` mengisi/menyelaraskan data `MenuPermission` dari registry menu.
+- `check-menu-integrity` memeriksa duplikasi path, page yang belum punya seed, dan halaman yang belum dikatalogkan.
 
 ## 🗄️ Database Schema
 
@@ -236,6 +265,8 @@ bun run prisma:generate  # Generate Prisma Client
 bun run prisma:migrate   # Run migrations
 bun run prisma:studio    # Open Prisma Studio GUI
 bun run seed             # Seed database dengan test data
+bun run seed-menu-permissions  # Sync MenuPermission records
+bun run check-menu-integrity   # Check menu/page catalog consistency
 
 # Linting
 bun run lint             # Run ESLint

@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { getAuthenticatedUser } from '@/lib/auth/access';
+import { requireEditableClassByPeriod } from '@/lib/auth/class-access';
 import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import { serverError } from '@/lib/server-log';
@@ -99,8 +100,20 @@ export async function PUT(
       return errorResponse('Siswa tidak ditemukan', 404);
     }
 
+    const currentClassWritable = await requireEditableClassByPeriod(student.classId);
+    if (!currentClassWritable.ok) {
+      return errorResponse('Kelas semester lampau hanya dapat dibaca', 403);
+    }
+
     const body = await request.json();
     const { name, studentNo, nourut, email, phone, address, birthDate, classId, parentPhoneNo } = body;
+
+    if (classId && classId !== student.classId) {
+      const targetClassWritable = await requireEditableClassByPeriod(classId);
+      if (!targetClassWritable.ok) {
+        return errorResponse('Kelas semester lampau hanya dapat dibaca', 403);
+      }
+    }
 
     const updatedStudent = await prisma.student.update({
       where: { id },
@@ -193,6 +206,11 @@ export async function DELETE(
 
     if (!student) {
       return errorResponse('Siswa tidak ditemukan', 404);
+    }
+
+    const currentClassWritable = await requireEditableClassByPeriod(student.classId);
+    if (!currentClassWritable.ok) {
+      return errorResponse('Kelas semester lampau hanya dapat dibaca', 403);
     }
 
     await prisma.student.delete({

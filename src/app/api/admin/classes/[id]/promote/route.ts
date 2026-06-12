@@ -4,7 +4,14 @@ import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { AuthenticatedUser } from '@/lib/auth/access';
-import { parseClassName, calculateNextClass } from '@/lib/class-promotion';
+import {
+  parseClassName,
+  calculateNextClass,
+  buildClassName,
+  matchesClassIdentity,
+} from '@/lib/class-promotion';
+import { getNextSchoolYearForPromotion, getSemesterByNumber } from '@/lib/promotion-period';
+import { requireEditableClassByPeriod } from '@/lib/auth/class-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import { serverError } from '@/lib/server-log';
 
@@ -79,6 +86,13 @@ export async function POST(
       include: {
         level: true,
         semester: true,
+        schoolYear: {
+          select: {
+            id: true,
+            year: true,
+            startDate: true,
+          },
+        },
         students: { select: { id: true, name: true } },
         subjects: {
           include: { subject: { select: { id: true, name: true } } },
@@ -87,6 +101,11 @@ export async function POST(
     });
 
     if (!sourceClass) return errorResponse('Source class not found', 404);
+
+    const writableClass = await requireEditableClassByPeriod(sourceClassId);
+    if (!writableClass.ok) {
+      return errorResponse('Kelas semester lampau hanya dapat dibaca', 403);
+    }
 
     // Ambil data kelas tujuan
     const uniqueTargetIds = isNewFormat && studentAssignments
@@ -112,6 +131,12 @@ export async function POST(
         include: {
           level: true,
           semester: true,
+          schoolYear: {
+            select: {
+              id: true,
+              year: true,
+            },
+          },
           _count: { select: { students: true } },
         },
       });
@@ -132,6 +157,12 @@ export async function POST(
         include: {
           level: true,
           semester: true,
+          schoolYear: {
+            select: {
+              id: true,
+              year: true,
+            },
+          },
           _count: { select: { students: true } },
         },
       });
@@ -155,37 +186,81 @@ export async function POST(
       sourceParsed.levelCode = sourceClass.level.code;
     }
 
+    const totalSems = await prisma.semester.count({
+      where: { schoolYearId: sourceClass.schoolYearId },
+    });
+
+    const currentSemesterNumber = sourceClass.semester.number;
+    const isSemesterProgression = currentSemesterNumber < totalSems;
+
+    const nextLevel = await prisma.level.findFirst({
+      where: {
+        schoolId: sourceClass.level.schoolId,
+        order: sourceClass.level.order + 1,
+      },
+      select: { id: true, name: true, code: true, order: true, levelCount: true },
+    });
+
+    const nextClassInfo = calculateNextClass(
+      sourceParsed,
+      {
+        code: sourceClass.level.code,
+        levelCount: sourceClass.level.levelCount || 0,
+        order: sourceClass.level.order,
+      },
+      nextLevel
+    );
+
     // Use first target class for validation purposes
     const targetClass = targetClasses[0];
     if (!targetClass) {
       return errorResponse('Target class not found', 404);
     }
-    
-    // Deteksi tipe promosi berdasarkan target (semester atau level)
-    const targetParsed = parseClassName(targetClass.name);
-    if (targetParsed && !targetParsed.levelCode) {
-      targetParsed.levelCode = targetClass.level.code;
+
+    if (isNewFormat && targetClasses.length > 1) {
+      const uniqueSchoolYearIds = new Set(targetClasses.map((c) => c.schoolYearId));
+      const uniqueSemesterIds = new Set(targetClasses.map((c) => c.semesterId));
+      if (uniqueSchoolYearIds.size > 1 || uniqueSemesterIds.size > 1) {
+        return errorResponse('Semua kelas tujuan harus berada pada periode yang sama', 400);
+      }
     }
 
-    const isSemesterProgression = 
-      targetParsed &&
-      targetParsed.levelCode === sourceParsed.levelCode &&
-      targetParsed.levelNumber === sourceParsed.levelNumber &&
-      targetClass.semesterId !== sourceClass.semesterId;
+    if (isSemesterProgression) {
+      const nextSemester = await getSemesterByNumber(sourceClass.schoolYearId, currentSemesterNumber + 1);
+      if (!nextSemester) {
+        return errorResponse(
+          `Semester berikutnya untuk tahun ajaran ${sourceClass.schoolYear.year} belum tersedia`,
+          400
+        );
+      }
 
-    const isLevelProgression =
-      targetParsed &&
-      (targetParsed.levelCode !== sourceParsed.levelCode ||
-       targetParsed.levelNumber !== sourceParsed.levelNumber);
+      if (targetClasses.some((c) =>
+        c.schoolYearId !== sourceClass.schoolYearId ||
+        c.semesterId !== nextSemester.id ||
+        c.levelId !== sourceClass.levelId ||
+        c.name !== sourceClass.name
+      )) {
+        return errorResponse(
+          `Kelas tujuan harus sama persis dengan kelas asal untuk lanjutan semester berikutnya: "${sourceClass.name}" semester ${currentSemesterNumber + 1}.`,
+          400
+        );
+      }
+    } else {
+      const nextSchoolYear = await getNextSchoolYearForPromotion(
+        sourceClass.level.schoolId,
+        sourceClass.schoolYear.startDate
+      );
+      if (!nextSchoolYear) {
+        return errorResponse('Tahun ajaran berikutnya belum tersedia', 400);
+      }
 
-    // Calculate next class yang seharusnya (untuk level progression)
-    let nextClassInfo = null;
-    if (!isSemesterProgression) {
-      nextClassInfo = calculateNextClass(sourceParsed, {
-        code: sourceClass.level.code,
-        levelCount: sourceClass.level.levelCount || 0,
-        order: sourceClass.level.order,
-      });
+      const nextSemester = await getSemesterByNumber(nextSchoolYear.id, 1);
+      if (!nextSemester) {
+        return errorResponse(
+          `Semester 1 untuk tahun ajaran ${nextSchoolYear.year} belum tersedia`,
+          400
+        );
+      }
 
       if (!nextClassInfo) {
         return errorResponse(
@@ -193,51 +268,26 @@ export async function POST(
           400
         );
       }
-    }
 
-    // Validasi bahwa target class sesuai dengan promotion rules
-    if (!targetParsed) {
-      return errorResponse(
-        `Nama kelas tujuan "${targetClass.name}" tidak sesuai format (harus: "NUMBERCHAR", contoh: "1B")`,
-        400
-      );
-    }
-    
-    if (!isSemesterProgression && !isLevelProgression) {
-      return errorResponse(
-        `Kelas tujuan "${targetClass.name}" tidak sesuai. Target harus berupa: \n1) Kelas yang sama tapi semester berbeda (promotion dalam level), atau \n2) Kelas yang berbeda sesuai sistem naik kelas.`,
-        400
-      );
-    }
-    
-    // Validasi Level Progression: hanya dari semester akhir
-    if (isLevelProgression) {
-      // Get total semesters per year
-      const totalSems = await prisma.semester.count({
-        where: { schoolYearId: sourceClass.schoolYearId }
-      });
-      if (sourceClass.semester.number !== totalSems) {
-        return errorResponse(
-          `Naik ke kelas berbeda hanya bisa dilakukan dari semester akhir. Saat ini siswa berada di semester ${sourceClass.semester.number}. Lanjutkan ke semester ${totalSems} terlebih dahulu.`,
-          400
-        );
+      if (!targetClass) {
+        return errorResponse('Target class not found', 404);
       }
-      
-      // Validasi level progression sesuai calculated next class
-      if (!nextClassInfo) {
-        return errorResponse(
-          `Siswa di kelas "${sourceClass.name}" sudah mencapai level tertinggi dan tidak bisa naik kelas`,
-          400
-        );
-      }
-      
+
       if (
-        targetParsed.levelCode !== nextClassInfo.nextLevelCode ||
-        targetParsed.levelNumber !== nextClassInfo.nextClassNumber
+        targetClasses.some((c) =>
+          c.schoolYearId !== nextSchoolYear.id ||
+          c.semesterId !== nextSemester.id ||
+          c.levelId !== (nextClassInfo.promotionType === 'NEXT_LEVEL' ? nextLevel?.id : sourceClass.levelId) ||
+          !matchesClassIdentity(c.name, nextClassInfo.nextLevelCode, nextClassInfo.nextClassNumber, sourceParsed.classChar)
+        )
       ) {
-        const expectedClassName = `${nextClassInfo.nextLevelCode} ${nextClassInfo.nextClassNumber}${sourceParsed.classChar}`;
+        const expectedClassName = buildClassName(
+          nextClassInfo.nextLevelCode,
+          nextClassInfo.nextClassNumber,
+          sourceParsed.classChar
+        );
         return errorResponse(
-          `Kelas tujuan "${targetClass.name}" tidak sesuai. Berdasarkan sistem naik kelas, kelas tujuan yang valid adalah "${expectedClassName}" setelah semester akhir.`,
+          `Kelas tujuan "${targetClass.name}" tidak sesuai. Berdasarkan sistem naik kelas, kelas tujuan yang valid adalah "${expectedClassName}" pada tahun ajaran ${nextSchoolYear.year} semester 1.`,
           400
         );
       }

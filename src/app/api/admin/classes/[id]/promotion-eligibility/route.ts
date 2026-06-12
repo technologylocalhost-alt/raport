@@ -2,7 +2,13 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { requireMenuAccess } from '@/lib/auth/verify-access';
-import { parseClassName, calculateNextClass } from '@/lib/class-promotion';
+import {
+  parseClassName,
+  calculateNextClass,
+  buildClassName,
+  matchesClassIdentity,
+} from '@/lib/class-promotion';
+import { getNextSchoolYearForPromotion, getSemesterByNumber } from '@/lib/promotion-period';
 import { serverError } from '@/lib/server-log';
 
 async function requirePromotionEligibilityAccess(req: NextRequest) {
@@ -28,6 +34,13 @@ export async function GET(
       include: {
         level: true,
         semester: true,
+        schoolYear: {
+          select: {
+            id: true,
+            year: true,
+            startDate: true,
+          },
+        },
         students: { select: { id: true } },
         subjects: {
           include: {
@@ -105,6 +118,32 @@ export async function GET(
     }
 
     const eligible = pendingSubjects.length === 0 && subjects.length > 0;
+    const parsed = parseClassName(classData.name);
+    if (!parsed) {
+      return successResponse({
+        eligible: false,
+        totalSubjects: subjects.length,
+        approvedSubjects,
+        pendingSubjects,
+        totalStudents,
+        class: {
+          id: classData.id,
+          name: classData.name,
+          level: classData.level,
+        },
+        nextLevel: null,
+        promotionType: null,
+        targetSchoolYear: null,
+        targetSemester: null,
+        targetClassName: null,
+        targetClassSuggestions: [],
+        reason: `Nama kelas "${classData.name}" tidak sesuai format`,
+      });
+    }
+
+    if (!parsed.levelCode) {
+      parsed.levelCode = classData.level.code;
+    }
 
     // Cek level berikutnya
     const nextLevel = await prisma.level.findFirst({
@@ -115,168 +154,292 @@ export async function GET(
       select: { id: true, name: true, code: true, order: true, levelCount: true },
     });
 
-    // Calculate target class suggestions berdasarkan levelCount logic
-    const targetClassSuggestions: Array<{
+    const totalSemestersPerYear = await prisma.semester.count({
+      where: { schoolYearId: classData.schoolYearId },
+    });
+    const currentSemester = classData.semester.number;
+    const promotionType: 'SEMESTER' | 'LEVEL' =
+      currentSemester < totalSemestersPerYear ? 'SEMESTER' : 'LEVEL';
+
+    type TargetClassSuggestion = {
       id: string;
       name: string;
+      capacity: number;
       levelId: string;
       level: { id: string; name: string; code: string; order: number; levelCount: number };
-    }> = [];
+      schoolYear: { id: string; year: string };
+      semester: { id: string; number: number };
+      waliKelas?: { id: string; name: string } | null;
+      isActive: boolean;
+      _count: { students: number };
+    };
+
+    const targetClassSuggestions: TargetClassSuggestion[] = [];
+    let targetSchoolYear: { id: string; year: string } | null = null;
+    let targetSemester: { id: string; number: number } | null = null;
+    let targetClassName: string | null = null;
 
     if (eligible) {
-      // Parse current class name untuk extract level number
-      const parsed = parseClassName(classData.name);
-      
-      if (parsed) {
-        // Ensure levelCode is set from actual level if not parsed from class name
-        if (!parsed.levelCode) {
-          parsed.levelCode = classData.level.code;
+      if (promotionType === 'SEMESTER') {
+        const nextSemester = await getSemesterByNumber(classData.schoolYearId, currentSemester + 1);
+        if (!nextSemester) {
+          return successResponse({
+            eligible: true,
+            totalSubjects: subjects.length,
+            approvedSubjects,
+            pendingSubjects,
+            totalStudents,
+            class: {
+              id: classData.id,
+              name: classData.name,
+              level: classData.level,
+            },
+            nextLevel: nextLevel || null,
+            promotionType,
+            targetSchoolYear: {
+              id: classData.schoolYear.id,
+              year: classData.schoolYear.year,
+            },
+            targetSemester: null,
+            targetClassName: classData.name,
+            targetClassSuggestions: [],
+            reason: `Semester berikutnya untuk tahun ajaran ${classData.schoolYear.year} belum tersedia`,
+          });
         }
 
-        // Get semester info - tentukan next semester
-        const currentSemester = classData.semester.number;
-        const totalSemestersPerYear = 2; // Asumsi: 2 semester per tahun
-        
-        let nextSemesterId: string | null = null;
-        let nextSchoolYearId = classData.schoolYearId;
-        
-        if (currentSemester < totalSemestersPerYear) {
-          // Semester selanjutnya di tahun ajaran yang sama
-          const nextSem = await prisma.semester.findFirst({
-            where: {
-              schoolYearId: classData.schoolYearId,
-              number: currentSemester + 1,
+        targetSchoolYear = {
+          id: classData.schoolYear.id,
+          year: classData.schoolYear.year,
+        };
+        targetSemester = {
+          id: nextSemester.id,
+          number: nextSemester.number,
+        };
+        targetClassName = classData.name;
+
+        const sameLevelClasses = await prisma.class.findMany({
+          where: {
+            schoolYearId: classData.schoolYearId,
+            semesterId: nextSemester.id,
+            levelId: classData.levelId,
+            name: classData.name,
+          },
+          select: {
+            id: true,
+            name: true,
+            capacity: true,
+            levelId: true,
+            level: { select: { id: true, name: true, code: true, order: true, levelCount: true } },
+            schoolYear: { select: { id: true, year: true } },
+            semester: { select: { id: true, number: true } },
+            waliKelas: { select: { id: true, name: true } },
+            isActive: true,
+            _count: { select: { students: true } },
+          },
+        });
+
+        targetClassSuggestions.push(...sameLevelClasses);
+
+        if (targetClassSuggestions.length === 0) {
+          return successResponse({
+            eligible: true,
+            totalSubjects: subjects.length,
+            approvedSubjects,
+            pendingSubjects,
+            totalStudents,
+            class: {
+              id: classData.id,
+              name: classData.name,
+              level: classData.level,
             },
-            select: { id: true },
+            nextLevel: nextLevel || null,
+            promotionType,
+            targetSchoolYear,
+            targetSemester,
+            targetClassName,
+            targetClassSuggestions: [],
+            reason: `Kelas tujuan "${classData.name}" untuk semester berikutnya belum tersedia`,
           });
-          nextSemesterId = nextSem?.id || null;
-        } else {
-          // Jika semester 2 (akhir tahun), ambil semester 1 tahun ajaran berikutnya
-          const nextSchoolYear = await prisma.schoolYear.findFirst({
-            where: {
-              schoolId: classData.level.schoolId,
+        }
+      } else {
+        const nextSchoolYear = await getNextSchoolYearForPromotion(
+          classData.level.schoolId,
+          classData.schoolYear.startDate
+        );
+
+        if (!nextSchoolYear) {
+          return successResponse({
+            eligible: false,
+            totalSubjects: subjects.length,
+            approvedSubjects,
+            pendingSubjects,
+            totalStudents,
+            class: {
+              id: classData.id,
+              name: classData.name,
+              level: classData.level,
             },
-            orderBy: { year: 'desc' },
-            select: { id: true, year: true },
-            take: 1,
+            nextLevel: nextLevel || null,
+            promotionType,
+            targetSchoolYear: null,
+            targetSemester: null,
+            targetClassName: null,
+            targetClassSuggestions: [],
+            reason: 'Tahun ajaran berikutnya belum tersedia',
           });
-          
-          if (nextSchoolYear) {
-            const nextSem = await prisma.semester.findFirst({
-              where: {
-                schoolYearId: nextSchoolYear.id,
-                number: 1,
-              },
-              select: { id: true },
-            });
-            nextSemesterId = nextSem?.id || null;
-            nextSchoolYearId = nextSchoolYear.id;
-          }
         }
 
-        // TYPE 1: Semester Progression (tetap kelas, ganti semester)
-        // Jika current semester < 2, suggest same class tapi semester selanjutnya
-        if (currentSemester < totalSemestersPerYear && nextSemesterId) {
-          const sameLevelClasses = await prisma.class.findMany({
-            where: {
-              schoolYearId: classData.schoolYearId,
-              semesterId: nextSemesterId,
-              levelId: classData.levelId,
-              name: classData.name, // Sama class name
+        const nextSemester = await getSemesterByNumber(nextSchoolYear.id, 1);
+        if (!nextSemester) {
+          return successResponse({
+            eligible: true,
+            totalSubjects: subjects.length,
+            approvedSubjects,
+            pendingSubjects,
+            totalStudents,
+            class: {
+              id: classData.id,
+              name: classData.name,
+              level: classData.level,
             },
-            select: {
-              id: true,
-              name: true,
-              levelId: true,
-              level: { select: { id: true, name: true, code: true, order: true, levelCount: true } },
+            nextLevel: nextLevel || null,
+            promotionType,
+            targetSchoolYear: {
+              id: nextSchoolYear.id,
+              year: nextSchoolYear.year,
             },
+            targetSemester: null,
+            targetClassName: null,
+            targetClassSuggestions: [],
+            reason: `Semester 1 untuk tahun ajaran ${nextSchoolYear.year} belum tersedia`,
           });
-          targetClassSuggestions.push(...sameLevelClasses);
         }
 
-        // TYPE 2: Level Progression (naik tingkat/kelas)
-        // Hanya suggest naik tingkat jika semester saat ini adalah semester akhir (2)
-        if (currentSemester === totalSemestersPerYear) {
-          // Calculate next class info untuk level progression
-          const nextLevel = await prisma.level.findFirst({
-            where: {
-              schoolId: classData.level.schoolId,
-              order: classData.level.order + 1,
-            },
-            select: { id: true, name: true, code: true, order: true, levelCount: true },
-          });
-
-          const nextClassInfo = calculateNextClass(parsed, {
+        const nextClassInfo = calculateNextClass(
+          parsed,
+          {
             code: classData.level.code,
             levelCount: classData.level.levelCount || 0,
             order: classData.level.order,
+          },
+          nextLevel
+        );
+
+        if (!nextClassInfo) {
+          return successResponse({
+            eligible: true,
+            totalSubjects: subjects.length,
+            approvedSubjects,
+            pendingSubjects,
+            totalStudents,
+            class: {
+              id: classData.id,
+              name: classData.name,
+              level: classData.level,
+            },
+            nextLevel: nextLevel || null,
+            promotionType,
+            targetSchoolYear: {
+              id: nextSchoolYear.id,
+              year: nextSchoolYear.year,
+            },
+            targetSemester: {
+              id: nextSemester.id,
+              number: nextSemester.number,
+            },
+            targetClassName: null,
+            targetClassSuggestions: [],
+            reason: 'Level berikutnya belum tersedia',
           });
-
-          if (nextClassInfo && nextSemesterId) {
-            // Strategy 1: Try to find class in SAME level first (naik tingkat dalam level)
-            const sameLevelClasses = await prisma.class.findMany({
-              where: {
-                schoolYearId: nextSchoolYearId,
-                semesterId: nextSemesterId,
-                levelId: classData.levelId,
-              },
-              select: {
-                id: true,
-                name: true,
-                levelId: true,
-                level: { select: { id: true, name: true, code: true, order: true, levelCount: true } },
-              },
-            });
-
-            const filteredSameLevelClasses = sameLevelClasses.filter((c) => {
-              const classParsed = parseClassName(c.name);
-              return (
-                classParsed &&
-                c.level.code === nextClassInfo.nextLevelCode &&
-                classParsed.levelNumber === nextClassInfo.nextClassNumber
-              );
-            });
-
-            if (filteredSameLevelClasses.length > 0) {
-              targetClassSuggestions.push(...filteredSameLevelClasses);
-            } else if (nextLevel) {
-              // Strategy 2: If not found in same level, suggest class from NEXT level
-              // Try same class number in next level
-              const nextLevelClasses = await prisma.class.findMany({
-                where: {
-                  schoolYearId: nextSchoolYearId,
-                  semesterId: nextSemesterId,
-                  levelId: nextLevel.id,
-                },
-                select: {
-                  id: true,
-                  name: true,
-                  levelId: true,
-                  level: { select: { id: true, name: true, code: true, order: true, levelCount: true } },
-                },
-              });
-
-              // Try: sama class number tapi level baru (1B MTS → 1B MA)
-              const filteredNextLevelClasses = nextLevelClasses.filter((c) => {
-                const classParsed = parseClassName(c.name);
-                return (
-                  classParsed &&
-                  c.level.code === nextLevel.code &&
-                  classParsed.levelNumber === parsed.levelNumber // Sama number, level baru
-                );
-              });
-
-              if (filteredNextLevelClasses.length > 0) {
-                targetClassSuggestions.push(...filteredNextLevelClasses);
-              } else {
-                // Fallback: suggest ANY class in next level
-                if (nextLevelClasses.length > 0) {
-                  targetClassSuggestions.push(...nextLevelClasses.slice(0, 3));
-                }
-              }
-            }
-          }
         }
+
+        targetSchoolYear = {
+          id: nextSchoolYear.id,
+          year: nextSchoolYear.year,
+        };
+        targetSemester = {
+          id: nextSemester.id,
+          number: nextSemester.number,
+        };
+        targetClassName = buildClassName(
+          nextClassInfo.nextLevelCode,
+          nextClassInfo.nextClassNumber,
+          parsed.classChar
+        );
+
+        const targetLevelId = nextClassInfo.promotionType === 'NEXT_LEVEL'
+          ? nextLevel?.id || null
+          : classData.levelId;
+
+        if (!targetLevelId) {
+          return successResponse({
+            eligible: true,
+            totalSubjects: subjects.length,
+            approvedSubjects,
+            pendingSubjects,
+            totalStudents,
+            class: {
+              id: classData.id,
+              name: classData.name,
+              level: classData.level,
+            },
+            nextLevel: nextLevel || null,
+            promotionType,
+            targetSchoolYear,
+            targetSemester,
+            targetClassName,
+            targetClassSuggestions: [],
+            reason: 'Target level untuk naik kelas belum tersedia',
+          });
+        }
+
+        const candidateClasses = await prisma.class.findMany({
+          where: {
+            schoolYearId: nextSchoolYear.id,
+            semesterId: nextSemester.id,
+            levelId: targetLevelId,
+          },
+          select: {
+            id: true,
+            name: true,
+            capacity: true,
+            levelId: true,
+            level: { select: { id: true, name: true, code: true, order: true, levelCount: true } },
+            schoolYear: { select: { id: true, year: true } },
+            semester: { select: { id: true, number: true } },
+            waliKelas: { select: { id: true, name: true } },
+            isActive: true,
+            _count: { select: { students: true } },
+          },
+        });
+
+        const matchedClasses = candidateClasses.filter((c) =>
+          matchesClassIdentity(c.name, nextClassInfo.nextLevelCode, nextClassInfo.nextClassNumber, parsed.classChar)
+        );
+
+        if (matchedClasses.length === 0) {
+          return successResponse({
+            eligible: true,
+            totalSubjects: subjects.length,
+            approvedSubjects,
+            pendingSubjects,
+            totalStudents,
+            class: {
+              id: classData.id,
+              name: classData.name,
+              level: classData.level,
+            },
+            nextLevel: nextLevel || null,
+            promotionType,
+            targetSchoolYear,
+            targetSemester,
+            targetClassName,
+            targetClassSuggestions: [],
+            reason: `Kelas tujuan "${targetClassName}" belum tersedia untuk tahun ajaran ${nextSchoolYear.year}`,
+          });
+        }
+
+        targetClassSuggestions.push(...matchedClasses);
       }
     }
 
@@ -292,6 +455,10 @@ export async function GET(
         level: classData.level,
       },
       nextLevel: nextLevel || null,
+      promotionType,
+      targetSchoolYear,
+      targetSemester,
+      targetClassName,
       targetClassSuggestions,
     });
   } catch (error) {

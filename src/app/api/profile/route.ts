@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getAuthenticatedUser } from '@/lib/auth/access';
 import { hashPassword } from '@/lib/auth/password';
+import { setNoStoreHeaders } from '@/lib/auth/cookies';
 import { z } from 'zod';
 import bcryptjs from 'bcryptjs';
 import { serverError } from '@/lib/server-log';
@@ -32,6 +33,11 @@ async function getUser(req: NextRequest) {
       isActive: true,
       createdAt: true,
       updatedAt: true,
+      bagianList: {
+        select: {
+          bagian: true,
+        },
+      },
       school: {
         select: {
           id: true,
@@ -45,6 +51,10 @@ async function getUser(req: NextRequest) {
     },
   });
 
+  if (!user) {
+    return null;
+  }
+
   return user;
 }
 
@@ -57,22 +67,33 @@ export async function GET(request: NextRequest) {
     const user = await getUser(request);
     
     if (!user) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       );
+      setNoStoreHeaders(response);
+      return response;
     }
 
-    return NextResponse.json({
+    const { bagianList, ...userData } = user;
+
+    const response = NextResponse.json({
       success: true,
-      data: user,
+      data: {
+        ...userData,
+        bagian: bagianList.map((item) => item.bagian),
+      },
     });
+    setNoStoreHeaders(response);
+    return response;
   } catch (error) {
     serverError('[Profile] Get error:', error);
-    return NextResponse.json(
+    const response = NextResponse.json(
       { error: 'Failed to get profile' },
       { status: 500 }
     );
+    setNoStoreHeaders(response);
+    return response;
   }
 }
 
@@ -85,21 +106,25 @@ export async function PUT(request: NextRequest) {
     const user = await getUser(request);
     
     if (!user) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       );
+      setNoStoreHeaders(response);
+      return response;
     }
 
     const body = await request.json();
     const validation = updateProfileSchema.safeParse(body);
 
     if (!validation.success) {
-      return NextResponse.json(
-        { error: 'Validation failed', details: validation.error.issues },
-        { status: 400 }
-      );
-    }
+        const response = NextResponse.json(
+          { error: 'Validation failed', details: validation.error.issues },
+          { status: 400 }
+        );
+        setNoStoreHeaders(response);
+        return response;
+      }
 
     const { name, email, currentPassword, newPassword } = validation.data;
 
@@ -117,10 +142,12 @@ export async function PUT(request: NextRequest) {
       });
 
       if (existingUser) {
-        return NextResponse.json(
+        const response = NextResponse.json(
           { error: 'Email sudah digunakan' },
           { status: 400 }
         );
+        setNoStoreHeaders(response);
+        return response;
       }
 
       updateData.email = email;
@@ -129,10 +156,12 @@ export async function PUT(request: NextRequest) {
     // If changing password, verify current password
     if (newPassword) {
       if (!currentPassword) {
-        return NextResponse.json(
+        const response = NextResponse.json(
           { error: 'Password lama harus diisi' },
           { status: 400 }
         );
+        setNoStoreHeaders(response);
+        return response;
       }
 
       // Get user with password
@@ -141,20 +170,24 @@ export async function PUT(request: NextRequest) {
       });
 
       if (!userWithPassword) {
-        return NextResponse.json(
+        const response = NextResponse.json(
           { error: 'User not found' },
           { status: 404 }
         );
+        setNoStoreHeaders(response);
+        return response;
       }
 
       // Verify current password
       const isPasswordValid = await bcryptjs.compare(currentPassword, userWithPassword.password);
 
       if (!isPasswordValid) {
-        return NextResponse.json(
+        const response = NextResponse.json(
           { error: 'Password lama salah' },
           { status: 400 }
         );
+        setNoStoreHeaders(response);
+        return response;
       }
 
       // Hash new password
@@ -187,16 +220,20 @@ export async function PUT(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: 'Profile berhasil diperbarui',
       data: updatedUser,
     });
+    setNoStoreHeaders(response);
+    return response;
   } catch (error) {
     serverError('[Profile] Update error:', error);
-    return NextResponse.json(
+    const response = NextResponse.json(
       { error: 'Failed to update profile' },
       { status: 500 }
     );
+    setNoStoreHeaders(response);
+    return response;
   }
 }

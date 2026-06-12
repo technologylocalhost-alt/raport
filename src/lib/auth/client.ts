@@ -58,20 +58,80 @@ export function setCurrentUser(user: AuthUser | null) {
 }
 
 export function isAuthenticated(): boolean {
-  return !!getAccessToken() && !!getCurrentUser();
+  return !!getCurrentUser() || !!getAccessToken();
+}
+
+interface ProfileResponse {
+  success: boolean;
+  data?: Partial<AuthUser> & {
+    school?: {
+      id: string;
+      name: string;
+      address: string | null;
+      phone: string | null;
+      email: string | null;
+      npsn: string | null;
+    };
+  };
+}
+
+/**
+ * Fetch the active session from the server-side cookie and cache it locally.
+ * Returns null when there is no valid session.
+ */
+export async function fetchCurrentUser(): Promise<AuthUser | null> {
+  try {
+    const response = await fetch('/api/profile', {
+      method: 'GET',
+      credentials: 'include',
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        clearAuthData();
+      }
+      return null;
+    }
+
+    const data = (await response.json()) as ProfileResponse;
+    const profile = data.data;
+
+    if (!profile?.id || !profile.email || !profile.name || !profile.role || !profile.schoolId) {
+      clearAuthData();
+      return null;
+    }
+
+    const currentUser: AuthUser = {
+      id: profile.id,
+      email: profile.email,
+      name: profile.name,
+      role: profile.role,
+      schoolId: profile.schoolId,
+      isActive: profile.isActive ?? true,
+      bagian: profile.bagian ?? [],
+    };
+
+    setCurrentUser(currentUser);
+    return currentUser;
+  } catch (error) {
+    devError('[Auth Client] Failed to fetch current user:', error);
+    return null;
+  }
 }
 
 export async function logout(redirectPath?: string) {
   if (!isBrowser()) return;
 
   const currentPath = redirectPath || window.location.pathname;
-  const token = getAccessToken();
 
   try {
     await fetch('/api/auth/logout', {
       method: 'POST',
       credentials: 'include',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
   } catch (err) {
     devWarn('[Auth Client] Logout API call failed:', err);

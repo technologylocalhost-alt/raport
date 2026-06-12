@@ -3,12 +3,36 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
+import { getAuthenticatedUser } from '@/lib/auth/access';
+import { canAccessMenu } from '@/lib/auth/rbac';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import { serverError } from '@/lib/server-log';
 
+async function requireSemesterReadAccess(req: NextRequest) {
+  const user = await getAuthenticatedUser(req);
+  if (!user) return null;
+
+  const candidatePaths =
+    user.role === 'ADMIN' || user.role === 'PRINCIPAL'
+      ? ['/admin/academic-structure']
+      : user.role === 'TEACHER'
+        ? ['/teacher/raport-mental', '/teacher/raport-mental/penilaian']
+        : user.role === 'WALI_KELAS'
+          ? ['/wali-kelas/raport-mental', '/wali-kelas/raport-mental/penilaian']
+          : [];
+
+  for (const path of candidatePaths) {
+    if (await canAccessMenu(path, user.role, user.bagian)) {
+      return user;
+    }
+  }
+
+  return null;
+}
+
 async function requireSemesterAccess(req: NextRequest) {
-  return requireAdminOrPrincipal(req);
+  return requireMenuAccess(req, '/admin/academic-structure', ['ADMIN', 'PRINCIPAL']);
 }
 
 const semesterSchema = z.object({
@@ -27,7 +51,7 @@ const semesterSchema = z.object({
  */
 export async function GET(request: NextRequest) {
   try {
-    const admin = await requireSemesterAccess(request);
+    const admin = await requireSemesterReadAccess(request);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }

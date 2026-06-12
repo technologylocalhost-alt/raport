@@ -8,7 +8,7 @@ import {
   Clock, Users
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
-import { clearAuthData, getCurrentUser } from '@/lib/auth/client';
+import { clearAuthData, fetchCurrentUser } from '@/lib/auth/client';
 import { devError } from '@/lib/dev-log';
 
 interface User {
@@ -213,7 +213,7 @@ export default function TeacherDashboard() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const userData = getCurrentUser();
+        const userData = await fetchCurrentUser();
         if (!userData) {
           router.push('/login');
           return;
@@ -234,10 +234,10 @@ export default function TeacherDashboard() {
               if (result.success && result.data) {
                 setStats(result.data);
               }
-            } else if (response.status === 401) {
-              clearAuthData();
-              router.push('/login');
-            } else {
+        } else if (response.status === 401) {
+          clearAuthData();
+          router.push('/login');
+        } else {
               devError('Failed to fetch dashboard stats:', response.statusText as unknown);
             }
         } catch (fetchError) {
@@ -253,8 +253,7 @@ export default function TeacherDashboard() {
       }
     };
 
-    const timer = setTimeout(checkAuth, 0);
-    return () => clearTimeout(timer);
+    void checkAuth();
   }, [router]);
 
   if (isLoading) {

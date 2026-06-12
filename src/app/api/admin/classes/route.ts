@@ -4,11 +4,12 @@ import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-res
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { getAuthenticatedUser } from '@/lib/auth/access';
+import { canAccessMenu } from '@/lib/auth/rbac';
 import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import { serverError } from '@/lib/server-log';
 
-async function requireClassAccess(req: NextRequest) {
+async function requireClassListAccess(req: NextRequest, scope: string | null) {
   const user = await getAuthenticatedUser(req);
   if (!user) return null;
 
@@ -18,6 +19,16 @@ async function requireClassAccess(req: NextRequest) {
 
   if (user.role === 'WALI_KELAS') {
     return requireMenuAccess(req, '/wali-kelas/classes', ['WALI_KELAS']);
+  }
+
+  if (user.role === 'TEACHER' && scope === 'raport-mental') {
+    const candidatePaths = ['/teacher/raport-mental/penilaian', '/teacher/raport-mental'];
+    for (const path of candidatePaths) {
+      if (await canAccessMenu(path, user.role, user.bagian)) {
+        return user;
+      }
+    }
+    return null;
   }
 
   return null;
@@ -42,7 +53,8 @@ const classSchema = z.object({
  */
 export async function GET(request: NextRequest) {
   try {
-    const admin = await requireClassAccess(request);
+    const scope = request.nextUrl.searchParams.get('scope');
+    const admin = await requireClassListAccess(request, scope);
     if (!admin) {
       return errorResponse('Token tidak valid atau expired', 401);
     }
@@ -108,7 +120,8 @@ export async function GET(request: NextRequest) {
       where.semesterId = semesterId;
     }
     
-    // For WALI_KELAS, only show their own class
+    // For WALI_KELAS, only show their own class.
+    // For TEACHER on raport-mental scope, show all classes for the selected period.
     if (admin.role === 'WALI_KELAS') {
       where.waliKelasId = admin.id;
     } else if (waliKelasId && waliKelasId.trim() !== '') {
@@ -132,7 +145,7 @@ export async function GET(request: NextRequest) {
         include: {
           level: { select: { id: true, name: true, code: true } },
           schoolYear: { select: { id: true, year: true, isActive: true } },
-          semester: { select: { id: true, number: true } },
+          semester: { select: { id: true, number: true, isActive: true } },
           waliKelas: { select: { id: true, name: true, email: true } },
           teachers: {
             include: {

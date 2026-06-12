@@ -1,16 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireRoles } from '@/lib/auth/access';
+import { getAuthenticatedUser } from '@/lib/auth/access';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { serverError } from '@/lib/server-log';
+
+async function requireStudentNotesAccess(request: NextRequest) {
+  const user = await getAuthenticatedUser(request);
+  if (!user) {
+    return null;
+  }
+
+  if (user.role !== 'WALI_KELAS') {
+    return null;
+  }
+
+  return requireMenuAccess(request, '/wali-kelas/reports', ['WALI_KELAS']);
+}
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireRoles(request, ['TEACHER', 'WALI_KELAS', 'ADMIN']);
+    const user = await requireStudentNotesAccess(request);
     if (!user) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { id: studentId } = await params;
@@ -69,7 +83,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireRoles(request, ['WALI_KELAS', 'ADMIN']);
+    const user = await requireStudentNotesAccess(request);
     if (!user) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }

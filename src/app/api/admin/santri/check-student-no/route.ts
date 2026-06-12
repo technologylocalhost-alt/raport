@@ -1,12 +1,12 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { serverError } from '@/lib/server-log';
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await requireAdminOrPrincipal(request);
+    const user = await requireMenuAccess(request, '/admin/santri', ['ADMIN', 'PRINCIPAL']);
     if (!user) {
       return errorResponse('Unauthorized', 401);
     }

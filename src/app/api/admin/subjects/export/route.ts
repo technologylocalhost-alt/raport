@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import * as XLSX from 'xlsx';
 import { serverError } from '@/lib/server-log';
 
 async function requireSubjectExportAccess(req: NextRequest) {
-  return requireAdminOrPrincipal(req);
+  return requireMenuAccess(req, '/admin/subjects', ['ADMIN', 'PRINCIPAL']);
 }
 
 export async function GET(request: NextRequest) {

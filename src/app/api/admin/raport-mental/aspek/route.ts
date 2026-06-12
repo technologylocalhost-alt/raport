@@ -2,10 +2,15 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { requireRaportMentalAccess } from '@/lib/auth/access';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { serverError } from '@/lib/server-log';
 
 async function requireRaportMental(req: NextRequest) {
   return requireRaportMentalAccess(req, '/admin/raport-mental');
+}
+
+async function requireRaportMentalManage(req: NextRequest) {
+  return requireMenuAccess(req, '/admin/raport-mental', ['ADMIN', 'PRINCIPAL']);
 }
 
 /**
@@ -41,7 +46,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const user = await requireRaportMental(request);
+    const user = await requireRaportMentalManage(request);
     if (!user) return errorResponse('Unauthorized', 401);
 
     const body = await request.json();

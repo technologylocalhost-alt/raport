@@ -87,16 +87,16 @@ COPY --from=builder /app/bunfig.toml ./
 # Set environment variables for low memory
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
+ENV PORT=9876
 ENV NODE_OPTIONS="--max-old-space-size=384"
 ENV PATH="/app/node_modules/.bin:$PATH"
 
 # Expose port
-EXPOSE 3000
+EXPOSE 9876
 
 # Health check with longer intervals to reduce overhead
 HEALTHCHECK --interval=60s --timeout=5s --start-period=60s --retries=3 \
-  CMD bun run -e "fetch('http://localhost:3000/api/health').catch(() => process.exit(1))" || exit 1
+  CMD bun run -e "fetch('http://localhost:9876/api/health').catch(() => process.exit(1))" || exit 1
 
 # Use tini to handle signals properly
 ENTRYPOINT ["/sbin/tini", "--"]

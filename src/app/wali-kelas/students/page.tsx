@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, FormEvent, Suspense, useRef } from 'r
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, X, AlertCircle, CheckCircle, ArrowLeft, Upload, Download } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
-import { getCurrentUser } from '@/lib/auth/client';
+import { fetchCurrentUser } from '@/lib/auth/client';
 import { devError } from '@/lib/dev-log';
 
 interface Class {
@@ -15,6 +15,17 @@ interface Class {
   semesterId: string;
   semesterName?: string;
   capacity: number;
+  isActive?: boolean;
+  schoolYear?: {
+    id: string;
+    year: string;
+    isActive?: boolean;
+  };
+  semester?: {
+    id: string;
+    number: number;
+    isActive?: boolean;
+  };
   _count?: {
     students?: number;
   };
@@ -94,6 +105,7 @@ function StudentsPageContent() {
   const [errorMessage, setErrorMessage] = useState('');
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedClassName, setSelectedClassName] = useState<string>('');
+  const [selectedClassReadOnly, setSelectedClassReadOnly] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResultState | null>(null);
@@ -112,9 +124,19 @@ function StudentsPageContent() {
 
   const itemsPerPage = 20;
 
+  function isClassReadOnly(classItem: Class) {
+    return classItem.isActive === false ||
+      classItem.schoolYear?.isActive === false ||
+      classItem.semester?.isActive === false;
+  }
+
   useEffect(() => {
-    const parsedUser = getCurrentUser() as { id: string; schoolId?: string } | null;
-    if (parsedUser) {
+    let active = true;
+
+    async function bootstrapSession() {
+      const parsedUser = await fetchCurrentUser();
+      if (!active || !parsedUser) return;
+
       const classIdParam = searchParams.get('classId');
       if (classIdParam) {
         setSelectedClassId(classIdParam);
@@ -123,6 +145,12 @@ function StudentsPageContent() {
         void fetchClasses(parsedUser.id);
       }
     }
+
+    void bootstrapSession();
+
+    return () => {
+      active = false;
+    };
   }, [searchParams]);
 
   async function fetchClassNameAndStudents(classId: string) {
@@ -133,6 +161,11 @@ function StudentsPageContent() {
 
       if (classResponse.ok && classData.data) {
         setSelectedClassName(classData.data.name);
+        setSelectedClassReadOnly(
+          classData.data.isActive === false ||
+          classData.data.schoolYear?.isActive === false ||
+          classData.data.semester?.isActive === false
+        );
       }
       
       setIsLoading(false);
@@ -199,6 +232,11 @@ function StudentsPageContent() {
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
+    if (selectedClassReadOnly) {
+      setErrorMessage('Kelas semester lampau hanya dapat dibaca');
+      return;
+    }
+
     if (!formData.name || !formData.studentNo || !formData.email) {
       setErrorMessage('Nama, Nomor Siswa, dan Email harus diisi');
       return;
@@ -254,6 +292,11 @@ function StudentsPageContent() {
   }
 
   async function handleEdit(student: Student) {
+    if (selectedClassReadOnly) {
+      setErrorMessage('Kelas semester lampau hanya dapat dibaca');
+      return;
+    }
+
     setEditingId(student.id);
     setFormData({
       studentNo: student.studentNo || '',
@@ -271,6 +314,11 @@ function StudentsPageContent() {
   }
 
   async function handleDelete(id: string) {
+    if (selectedClassReadOnly) {
+      setErrorMessage('Kelas semester lampau hanya dapat dibaca');
+      return;
+    }
+
     if (!confirm('Apakah Anda yakin ingin menghapus siswa ini?')) return;
 
     try {
@@ -340,6 +388,14 @@ function StudentsPageContent() {
 
   async function handleImport(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+
+    if (selectedClassReadOnly) {
+      setImportResult({
+        success: false,
+        error: 'Kelas semester lampau hanya dapat dibaca',
+      });
+      return;
+    }
 
     const file = fileInputRef.current?.files?.[0];
     if (!file) {
@@ -456,6 +512,10 @@ function StudentsPageContent() {
                 onClick={() => {
                   setSelectedClassId(classItem.id);
                   setSelectedClassName(classItem.name);
+                  setSelectedClassReadOnly(isClassReadOnly(classItem));
+                  setShowForm(false);
+                  setEditingId(null);
+                  setShowImportModal(false);
                   setCurrentPage(1);
                   setSearchTerm('');
                 }}
@@ -508,6 +568,10 @@ function StudentsPageContent() {
           <button
             onClick={() => {
               router.push('/wali-kelas/classes');
+              setSelectedClassReadOnly(false);
+              setShowForm(false);
+              setEditingId(null);
+              setShowImportModal(false);
             }}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
             title="Kembali ke Daftar Kelas"
@@ -519,6 +583,11 @@ function StudentsPageContent() {
               Daftar Siswa - {selectedClassName}
             </h1>
             <p className="text-gray-600 mt-1 text-sm">Kelola data siswa di kelas ini</p>
+            {selectedClassReadOnly && (
+              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                Semester atau tahun ajaran kelas ini sudah lewat. Data siswa tetap bisa dibaca, tetapi tambah, ubah, hapus, dan impor dinonaktifkan.
+              </div>
+            )}
           </div>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
@@ -529,13 +598,18 @@ function StudentsPageContent() {
             <Download size={20} /> <span className="hidden sm:inline">Export</span>
           </button>
           <button
-            onClick={() => setShowImportModal(true)}
-            className="flex-1 sm:flex-initial bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
+            onClick={() => {
+              if (selectedClassReadOnly) return;
+              setShowImportModal(true);
+            }}
+            disabled={selectedClassReadOnly}
+            className={`flex-1 sm:flex-initial text-white px-3 sm:px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base ${selectedClassReadOnly ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
           >
             <Upload size={20} /> <span className="hidden sm:inline">Import</span>
           </button>
           <button
             onClick={() => {
+              if (selectedClassReadOnly) return;
               setShowForm(true);
               setEditingId(null);
               setFormData({
@@ -550,7 +624,8 @@ function StudentsPageContent() {
                 parentPhoneNo: '',
               });
             }}
-            className="flex-1 sm:flex-initial bg-green-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
+            disabled={selectedClassReadOnly}
+            className={`flex-1 sm:flex-initial text-white px-3 sm:px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base ${selectedClassReadOnly ? 'bg-gray-300 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'}`}
           >
             <Plus size={20} /> <span className="hidden sm:inline">Tambah Siswa</span>
           </button>
@@ -586,7 +661,7 @@ function StudentsPageContent() {
       )}
 
       {/* Form */}
-      {showForm && (
+      {showForm && !selectedClassReadOnly && (
         <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 border-l-4 border-green-500">
           <h2 className="text-lg sm:text-xl font-semibold mb-4">
             {editingId ? '✏️ Edit Siswa' : '➕ Tambah Siswa'}
@@ -792,20 +867,26 @@ function StudentsPageContent() {
                   <td className="px-6 py-4 text-sm text-gray-700">{student.email || '-'}</td>
                   <td className="px-6 py-4 text-sm text-gray-700">{student.phone || '-'}</td>
                   <td className="px-6 py-4 text-center space-x-2">
-                    <button
-                      onClick={() => handleEdit(student)}
-                      className="text-blue-600 hover:text-blue-900 inline-flex items-center gap-1"
-                      title="Edit"
-                    >
-                      <Edit size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(student.id)}
-                      className="text-red-600 hover:text-red-900 inline-flex items-center gap-1"
-                      title="Hapus"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    {selectedClassReadOnly ? (
+                      <span className="text-xs text-gray-400">Baca</span>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleEdit(student)}
+                          className="text-blue-600 hover:text-blue-900 inline-flex items-center gap-1"
+                          title="Edit"
+                        >
+                          <Edit size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(student.id)}
+                          className="text-red-600 hover:text-red-900 inline-flex items-center gap-1"
+                          title="Hapus"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))
@@ -867,20 +948,26 @@ function StudentsPageContent() {
               </div>
 
               {/* Actions */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleEdit(student)}
-                  className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-                >
-                  <Edit size={16} /> Edit
-                </button>
-                <button
-                  onClick={() => handleDelete(student.id)}
-                  className="flex-1 px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-                >
-                  <Trash2 size={16} /> Hapus
-                </button>
-              </div>
+              {selectedClassReadOnly ? (
+                <div className="w-full px-3 py-2 bg-gray-100 text-gray-500 text-sm font-medium rounded-lg text-center">
+                  Mode baca
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleEdit(student)}
+                    className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Edit size={16} /> Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(student.id)}
+                    className="flex-1 px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Trash2 size={16} /> Hapus
+                  </button>
+                </div>
+              )}
             </div>
           ))
         )}

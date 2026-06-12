@@ -225,6 +225,7 @@ function AspekModal({
 export default function RaportMentalMasterPage() {
   const router = useRouter();
   const pathname = usePathname();
+  const canManage = pathname.startsWith('/admin');
   const mentalBasePath = pathname.startsWith('/teacher')
     ? '/teacher/raport-mental'
     : pathname.startsWith('/wali-kelas')
@@ -284,7 +285,11 @@ export default function RaportMentalMasterPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Master Data Raport Mental</h1>
-          <p className="text-sm text-gray-500 mt-1">Kelola seksi penilaian dan aspek di dalamnya</p>
+          <p className="text-sm text-gray-500 mt-1">
+            {canManage
+              ? 'Kelola seksi penilaian dan aspek di dalamnya'
+              : 'Lihat master data yang sudah diinput admin'}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -293,12 +298,14 @@ export default function RaportMentalMasterPage() {
           >
             <BookOpen size={15} /> Penilaian Santri
           </button>
-          <button
-            onClick={() => setSeksiModal({ open: true, data: null })}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
-          >
-            <Plus size={15} /> Tambah Seksi
-          </button>
+          {canManage && (
+            <button
+              onClick={() => setSeksiModal({ open: true, data: null })}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
+            >
+              <Plus size={15} /> Tambah Seksi
+            </button>
+          )}
         </div>
       </div>
 
@@ -343,10 +350,12 @@ export default function RaportMentalMasterPage() {
           <List className="mx-auto text-gray-300 mb-3" size={40} />
           <p className="text-gray-500 font-medium">Belum ada seksi penilaian</p>
           <p className="text-sm text-gray-400 mt-1">Klik &quot;Tambah Seksi&quot; untuk memulai, atau jalankan seed script</p>
-          <button onClick={() => setSeksiModal({ open: true, data: null })}
-            className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">
-            <Plus size={14} /> Tambah Seksi Pertama
-          </button>
+          {canManage && (
+            <button onClick={() => setSeksiModal({ open: true, data: null })}
+              className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">
+              <Plus size={14} /> Tambah Seksi Pertama
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
@@ -368,20 +377,22 @@ export default function RaportMentalMasterPage() {
                   </div>
                   <p className="text-xs text-gray-400 mt-0.5">{seksi.aspek.length} aspek</p>
                 </div>
-                <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                  <button onClick={() => setSeksiModal({ open: true, data: seksi })}
-                    className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-500 transition-colors" title="Edit seksi">
-                    <Edit2 size={14} />
-                  </button>
-                  <button onClick={() => handleDeleteSeksi(seksi)}
-                    className="p-1.5 hover:bg-red-50 rounded-lg text-red-500 transition-colors" title="Hapus seksi">
-                    <Trash2 size={14} />
-                  </button>
-                  <button onClick={() => setAspekModal({ open: true, data: null, seksiId: seksi.id })}
-                    className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-600 transition-colors" title="Tambah aspek">
-                    <Plus size={14} />
-                  </button>
-                </div>
+                {canManage && (
+                  <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                    <button onClick={() => setSeksiModal({ open: true, data: seksi })}
+                      className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-500 transition-colors" title="Edit seksi">
+                      <Edit2 size={14} />
+                    </button>
+                    <button onClick={() => handleDeleteSeksi(seksi)}
+                      className="p-1.5 hover:bg-red-50 rounded-lg text-red-500 transition-colors" title="Hapus seksi">
+                      <Trash2 size={14} />
+                    </button>
+                    <button onClick={() => setAspekModal({ open: true, data: null, seksiId: seksi.id })}
+                      className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-600 transition-colors" title="Tambah aspek">
+                      <Plus size={14} />
+                    </button>
+                  </div>
+                )}
                 <div className="text-gray-400 shrink-0">
                   {expandedIds.has(seksi.id) ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                 </div>
@@ -393,8 +404,10 @@ export default function RaportMentalMasterPage() {
                   {seksi.aspek.length === 0 ? (
                     <div className="px-10 py-4 text-sm text-gray-400 italic text-center">
                       Belum ada aspek.
-                      <button onClick={() => setAspekModal({ open: true, data: null, seksiId: seksi.id })}
-                        className="ml-2 text-emerald-600 font-medium hover:underline">Tambah aspek</button>
+                      {canManage && (
+                        <button onClick={() => setAspekModal({ open: true, data: null, seksiId: seksi.id })}
+                          className="ml-2 text-emerald-600 font-medium hover:underline">Tambah aspek</button>
+                      )}
                     </div>
                   ) : (
                     <div className="divide-y divide-gray-50">
@@ -416,27 +429,31 @@ export default function RaportMentalMasterPage() {
                               <p className="text-xs text-gray-400 mt-0.5 truncate">{aspek.keterangan}</p>
                             )}
                           </div>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => setAspekModal({ open: true, data: aspek, seksiId: seksi.id })}
-                              className="p-1 hover:bg-blue-50 rounded text-blue-500" title="Edit aspek">
-                              <Edit2 size={12} />
-                            </button>
-                            <button onClick={() => handleDeleteAspek(aspek)}
-                              className="p-1 hover:bg-red-50 rounded text-red-500" title="Hapus aspek">
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
+                          {canManage && (
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => setAspekModal({ open: true, data: aspek, seksiId: seksi.id })}
+                                className="p-1 hover:bg-blue-50 rounded text-blue-500" title="Edit aspek">
+                                <Edit2 size={12} />
+                              </button>
+                              <button onClick={() => handleDeleteAspek(aspek)}
+                                className="p-1 hover:bg-red-50 rounded text-red-500" title="Hapus aspek">
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
                   )}
                   {/* Tombol tambah aspek di bawah */}
-                  <div className="px-10 py-2 border-t border-gray-50">
-                    <button onClick={() => setAspekModal({ open: true, data: null, seksiId: seksi.id })}
-                      className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 font-medium">
-                      <Plus size={12} /> Tambah Aspek
-                    </button>
-                  </div>
+                  {canManage && (
+                    <div className="px-10 py-2 border-t border-gray-50">
+                      <button onClick={() => setAspekModal({ open: true, data: null, seksiId: seksi.id })}
+                        className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 font-medium">
+                        <Plus size={12} /> Tambah Aspek
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -445,19 +462,23 @@ export default function RaportMentalMasterPage() {
       )}
 
       {/* Modals */}
-      <SeksiModal
-        open={seksiModal.open}
-        onClose={() => setSeksiModal({ open: false, data: null })}
-        seksi={seksiModal.data}
-        onSave={fetchData}
-      />
-      <AspekModal
-        open={aspekModal.open}
-        onClose={() => setAspekModal({ open: false, data: null, seksiId: '' })}
-        aspek={aspekModal.data}
-        seksiId={aspekModal.seksiId}
-        onSave={fetchData}
-      />
+      {canManage && (
+        <>
+          <SeksiModal
+            open={seksiModal.open}
+            onClose={() => setSeksiModal({ open: false, data: null })}
+            seksi={seksiModal.data}
+            onSave={fetchData}
+          />
+          <AspekModal
+            open={aspekModal.open}
+            onClose={() => setAspekModal({ open: false, data: null, seksiId: '' })}
+            aspek={aspekModal.data}
+            seksiId={aspekModal.seksiId}
+            onSave={fetchData}
+          />
+        </>
+      )}
     </div>
   );
 }

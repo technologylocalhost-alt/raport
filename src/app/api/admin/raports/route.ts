@@ -2,11 +2,11 @@ import { AssessmentType, Prisma } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { paginatedResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { serverError } from '@/lib/server-log';
 
 async function requireRaportListAccess(req: NextRequest) {
-  return requireAdminOrPrincipal(req);
+  return requireMenuAccess(req, '/admin/raports', ['ADMIN', 'PRINCIPAL']);
 }
 
 /**

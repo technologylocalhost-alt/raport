@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, Mail, Building2, Shield, Calendar, Save, Lock, Eye, EyeOff } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
-import { getCurrentUser, setCurrentUser } from '@/lib/auth/client';
+import { fetchCurrentUser, getCurrentUser, setCurrentUser } from '@/lib/auth/client';
 import { devError } from '@/lib/dev-log';
 
 interface UserProfile {
@@ -44,7 +44,9 @@ export default function TeacherProfilePage() {
 
   const fetchProfile = useCallback(async () => {
     try {
-      if (!getCurrentUser()) {
+      const sessionUser = await fetchCurrentUser();
+
+      if (!sessionUser) {
         router.push('/login');
         return;
       }
@@ -82,7 +84,9 @@ export default function TeacherProfilePage() {
     setIsSaving(true);
 
     try {
-      if (!getCurrentUser()) {
+      const sessionUser = await fetchCurrentUser();
+
+      if (!sessionUser) {
         router.push('/login');
         return;
       }
@@ -126,7 +130,7 @@ export default function TeacherProfilePage() {
       setCurrentPassword('');
       setNewPassword('');
 
-      const currentUser = getCurrentUser();
+      const currentUser = await fetchCurrentUser();
       if (currentUser) {
         setCurrentUser({
           ...currentUser,

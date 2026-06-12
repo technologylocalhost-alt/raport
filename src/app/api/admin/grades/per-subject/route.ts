@@ -1,11 +1,11 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { serverError } from '@/lib/server-log';
 
 async function requireGradeSummaryAccess(req: NextRequest) {
-  return requireAdminOrPrincipal(req);
+  return requireMenuAccess(req, '/admin/penilaian', ['ADMIN', 'PRINCIPAL']);
 }
 
 /**

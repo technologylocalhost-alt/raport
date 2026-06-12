@@ -4,8 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, AlertCircle } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
+import { fetchCurrentUser } from '@/lib/auth/client';
 import { devError } from '@/lib/dev-log';
-import { clearAuthData, getCurrentUser } from '@/lib/auth/client';
+import { clearAuthData } from '@/lib/auth/client';
 
 interface Student {
   id: string;
@@ -26,7 +27,7 @@ export default function WaliKelasReportsPage() {
       setIsLoading(true);
       setErrorMessage('');
       
-      const user = getCurrentUser();
+      const user = await fetchCurrentUser();
       const userId = user?.id;
       if (!userId || userId.trim() === '') {
         clearAuthData();

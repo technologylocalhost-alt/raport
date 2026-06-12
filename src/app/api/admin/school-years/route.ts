@@ -2,12 +2,36 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
+import { getAuthenticatedUser } from '@/lib/auth/access';
+import { canAccessMenu } from '@/lib/auth/rbac';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import { serverError } from '@/lib/server-log';
 
+async function requireSchoolYearReadAccess(req: NextRequest) {
+  const user = await getAuthenticatedUser(req);
+  if (!user) return null;
+
+  const candidatePaths =
+    user.role === 'ADMIN' || user.role === 'PRINCIPAL'
+      ? ['/admin/academic-structure']
+      : user.role === 'TEACHER'
+        ? ['/teacher/raport-mental', '/teacher/raport-mental/penilaian']
+        : user.role === 'WALI_KELAS'
+          ? ['/wali-kelas/raport-mental', '/wali-kelas/raport-mental/penilaian']
+          : [];
+
+  for (const path of candidatePaths) {
+    if (await canAccessMenu(path, user.role, user.bagian)) {
+      return user;
+    }
+  }
+
+  return null;
+}
+
 async function requireSchoolYearAccess(req: NextRequest) {
-  return requireAdminOrPrincipal(req);
+  return requireMenuAccess(req, '/admin/academic-structure', ['ADMIN', 'PRINCIPAL']);
 }
 
 const schoolYearSchema = z.object({
@@ -26,6 +50,11 @@ const schoolYearSchema = z.object({
  */
 export async function GET(request: NextRequest) {
   try {
+    const admin = await requireSchoolYearReadAccess(request);
+    if (!admin) {
+      return errorResponse('Unauthorized', 401);
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');

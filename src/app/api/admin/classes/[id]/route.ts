@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { getAuthenticatedUser } from '@/lib/auth/access';
 import { requireMenuAccess } from '@/lib/auth/verify-access';
+import { requireEditableClassByPeriod } from '@/lib/auth/class-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import { serverError } from '@/lib/server-log';
 
@@ -69,8 +70,8 @@ export async function GET(
       where: { id },
       include: {
         level: true,
-        schoolYear: true,
-        semester: true,
+        schoolYear: { select: { id: true, year: true, isActive: true } },
+        semester: { select: { id: true, number: true, isActive: true } },
         waliKelas: { select: { id: true, name: true, email: true } },
         teachers: {
           include: {
@@ -164,6 +165,11 @@ export async function PUT(
 
     if (!existingClass) {
       return errorResponse('Kelas tidak ditemukan', 404);
+    }
+
+    const writableClass = await requireEditableClassByPeriod(id);
+    if (!writableClass.ok) {
+      return errorResponse('Kelas semester lampau hanya dapat dibaca', 403);
     }
 
     // Prepare update data - use existing values if not provided
@@ -304,6 +310,11 @@ export async function DELETE(
 
     if (!existingClass) {
       return errorResponse('Kelas tidak ditemukan', 404);
+    }
+
+    const writableClass = await requireEditableClassByPeriod(id);
+    if (!writableClass.ok) {
+      return errorResponse('Kelas semester lampau hanya dapat dibaca', 403);
     }
 
     // Check if class has students

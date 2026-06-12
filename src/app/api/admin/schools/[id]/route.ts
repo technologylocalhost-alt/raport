@@ -2,7 +2,9 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
+import { getAuthenticatedUser } from '@/lib/auth/access';
+import { canAccessMenu } from '@/lib/auth/rbac';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import { serverError } from '@/lib/server-log';
 
@@ -18,7 +20,29 @@ const schoolSchema = z.object({
  * Verify admin authorization
  */
 async function requireSchoolAccess(req: NextRequest) {
-  return requireAdminOrPrincipal(req);
+  return requireMenuAccess(req, '/admin/schools', ['ADMIN', 'PRINCIPAL']);
+}
+
+async function requireSchoolReadAccess(req: NextRequest) {
+  const user = await getAuthenticatedUser(req);
+  if (!user) return null;
+
+  const candidatePaths =
+    user.role === 'ADMIN' || user.role === 'PRINCIPAL'
+      ? ['/admin/schools']
+      : user.role === 'TEACHER'
+        ? ['/teacher/raport-mental', '/teacher/raport-mental/penilaian']
+        : user.role === 'WALI_KELAS'
+          ? ['/wali-kelas/raport-mental', '/wali-kelas/raport-mental/penilaian']
+          : [];
+
+  for (const path of candidatePaths) {
+    if (await canAccessMenu(path, user.role, user.bagian)) {
+      return user;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -31,6 +55,11 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const admin = await requireSchoolReadAccess(request);
+    if (!admin) {
+      return errorResponse('Unauthorized', 401);
+    }
+
     const school = await prisma.school.findUnique({
       where: { id },
       include: {

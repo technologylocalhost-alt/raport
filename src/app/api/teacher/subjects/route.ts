@@ -30,10 +30,22 @@ export async function GET(request: NextRequest) {
             creditHours: true,
           },
         },
-        class: {
+      class: {
           select: {
             id: true,
             name: true,
+            semester: {
+              select: {
+                id: true,
+                number: true,
+              },
+            },
+            schoolYear: {
+              select: {
+                id: true,
+                year: true,
+              },
+            },
             level: {
               select: {
                 id: true,
@@ -46,7 +58,21 @@ export async function GET(request: NextRequest) {
     });
 
     // Group by subject and aggregate classes
-    const subjectsMap = new Map<string, { id: string; code: string; name: string; nameArabic: string | null; description: string | null; creditHours: number | null; classes: { id: string; name: string; level: { id: string; name: string } | null }[] }>();
+    const subjectsMap = new Map<string, {
+      id: string;
+      code: string;
+      name: string;
+      nameArabic: string | null;
+      description: string | null;
+      creditHours: number | null;
+      classes: {
+        id: string;
+        name: string;
+        semester: { id: string; number: number } | null;
+        schoolYear: { id: string; year: string } | null;
+        level: { id: string; name: string } | null;
+      }[];
+    }>();
     
     classTeachers.forEach((ct) => {
       const key = ct.subject.id;
@@ -58,6 +84,8 @@ export async function GET(request: NextRequest) {
           existing.classes.push({
             id: ct.class.id,
             name: ct.class.name,
+            semester: ct.class.semester,
+            schoolYear: ct.class.schoolYear,
             level: ct.class.level,
           });
         }
@@ -72,6 +100,8 @@ export async function GET(request: NextRequest) {
           classes: [{
             id: ct.class.id,
             name: ct.class.name,
+            semester: ct.class.semester,
+            schoolYear: ct.class.schoolYear,
             level: ct.class.level,
           }],
         });
@@ -95,4 +125,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

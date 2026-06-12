@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import { AuthenticatedUser } from '@/lib/auth/access';
 import { serverError } from '@/lib/server-log';
@@ -68,7 +68,7 @@ function buildSantriData(body: Record<string, unknown>) {
 }
 
 async function requireSantriAccess(req: NextRequest) {
-  return requireAdminOrPrincipal(req);
+  return requireMenuAccess(req, '/admin/santri', ['ADMIN', 'PRINCIPAL']);
 }
 
 /**

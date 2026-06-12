@@ -1,7 +1,11 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
-import { ensureClassOwnedByWaliKelasOrAllowed, requireClassSubjectAccess } from '@/lib/auth/class-access';
+import {
+  ensureClassOwnedByWaliKelasOrAllowed,
+  requireClassSubjectAccess,
+  requireEditableClassByPeriod,
+} from '@/lib/auth/class-access';
 import { AuthenticatedUser } from '@/lib/auth/access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import { serverError } from '@/lib/server-log';
@@ -72,6 +76,11 @@ export async function POST(
 
     if (!access.ok) {
       return errorResponse(access.reason === 'NOT_FOUND' ? 'Class not found' : 'Unauthorized', access.reason === 'NOT_FOUND' ? 404 : 403);
+    }
+
+    const writableClass = await requireEditableClassByPeriod(id);
+    if (!writableClass.ok) {
+      return errorResponse('Kelas semester lampau hanya dapat dibaca', 403);
     }
 
     const body = await request.json();

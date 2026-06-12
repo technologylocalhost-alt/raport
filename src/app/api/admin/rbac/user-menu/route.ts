@@ -1,6 +1,5 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
-import { prisma } from '@/lib/db';
 import { getAuthenticatedUser } from '@/lib/auth/access';
 import { getAllowedMenuPaths } from '@/lib/auth/rbac';
 import { serverError } from '@/lib/server-log';
@@ -36,12 +35,6 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const permissionCount = await prisma.menuPermission.count({
-      where: {
-        ...(menuGroup ? { menuGroup } : {}),
-      },
-    });
-
     const allowedPaths = await getAllowedMenuPaths(
       user.role,
       bagianList,
@@ -52,8 +45,8 @@ export async function GET(request: NextRequest) {
       role: user.role,
       bagian: bagianList,
       allowedPaths,
-      // Restrictions exist when permission records exist, even if this user gets zero paths.
-      hasRestrictions: permissionCount > 0,
+      // Treat menu permissions as authoritative. An empty result set is still restricted.
+      hasRestrictions: true,
     });
   } catch (error) {
     serverError('Get user menu error:', error);

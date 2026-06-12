@@ -89,6 +89,10 @@ export default function DetailSantriPage({ params }: { params: Promise<{ id: str
     return String(val);
   };
 
+  const latestClass = data?.classHistory?.length
+    ? data.classHistory[data.classHistory.length - 1]
+    : null;
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -103,81 +107,101 @@ export default function DetailSantriPage({ params }: { params: Promise<{ id: str
   if (!data) return null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 bg-slate-50/70">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <button onClick={() => router.push('/admin/santri')}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <ArrowLeft size={20} className="text-gray-600" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{data.name}</h1>
-            <p className="text-gray-500 text-sm mt-1">No Stambuk: {data.studentNo}</p>
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-start gap-4">
+            <button onClick={() => router.push('/admin/santri')}
+              className="mt-0.5 rounded-lg border border-slate-200 p-2 transition-colors hover:bg-slate-50">
+              <ArrowLeft size={20} className="text-slate-600" />
+            </button>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Dokumen Administrasi Santri</p>
+              <h1 className="mt-1 text-2xl font-bold text-slate-900">{data.name}</h1>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">No. Stambuk: {data.studentNo || '-'}</span>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">Jenis Kelamin: {formatValue('gender', data.gender)}</span>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">Riwayat Kelas: {latestClass ? latestClass.className : '-'}</span>
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
           <button onClick={handleDownloadPdf} disabled={isGeneratingPdf}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed">
-            <FileDown size={16} /> {isGeneratingPdf ? 'Generating...' : 'Download PDF'}
+            className="flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">
+            <FileDown size={16} /> {isGeneratingPdf ? 'Membuat PDF...' : 'Download PDF'}
           </button>
           <button onClick={() => router.push(`/admin/santri/${id}/edit`)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors font-medium text-sm">
+            className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50">
             <Edit size={16} /> Edit
           </button>
           <button onClick={handleDelete}
-            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-lg transition-colors font-medium text-sm">
+            className="flex items-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-50">
             <Trash2 size={16} /> Hapus
           </button>
+          </div>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {[
+          { label: 'Nama', value: data.name },
+          { label: 'No. Stambuk', value: data.studentNo || '-' },
+          { label: 'Riwayat Kelas', value: latestClass ? `${latestClass.className} · ${latestClass.schoolYear}` : '-' },
+        ].map((item) => (
+          <div key={item.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">{item.label}</div>
+            <div className="mt-2 text-sm font-semibold text-slate-900">{item.value}</div>
+          </div>
+        ))}
       </div>
 
       {/* Detail Sections - tampilkan semua */}
       {DETAIL_SECTIONS.map((section) => (
-        <div key={section.title} className="bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="px-6 py-3 bg-emerald-50 border-b border-emerald-100">
-            <h2 className="text-sm font-bold text-emerald-800 uppercase tracking-wider">{section.title}</h2>
+        <div key={section.title} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-slate-50 px-6 py-3">
+            <h2 className="text-sm font-bold uppercase tracking-[0.22em] text-slate-700">{section.title}</h2>
           </div>
           <div className="p-6">
             {section.title === 'Riwayat Kelas & Kamar di PPMDL' ? (
               <div className="space-y-6">
                 {/* Riwayat Kelas dari Database */}
                 <div>
-                  <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Riwayat Kelas (dari Database)</h3>
+                  <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Riwayat Kelas (dari Database)</h3>
                   {data.classHistory && data.classHistory.length > 0 ? (
-                    <div className="overflow-x-auto border rounded-lg">
+                    <div className="overflow-x-auto rounded-lg border border-slate-200">
                       <table className="w-full text-sm">
-                        <thead className="bg-gray-50 border-b">
+                        <thead className="border-b border-slate-200 bg-slate-50">
                           <tr>
-                            <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">No</th>
-                            <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Tahun Ajaran</th>
-                            <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Semester</th>
-                            <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Tingkat</th>
-                            <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Kelas</th>
-                            <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Wali Kelas</th>
+                            <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-slate-500">No</th>
+                            <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-slate-500">Tahun Ajaran</th>
+                            <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-slate-500">Semester</th>
+                            <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-slate-500">Tingkat</th>
+                            <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-slate-500">Kelas</th>
+                            <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-slate-500">Wali Kelas</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100">
+                        <tbody className="divide-y divide-slate-100">
                           {data.classHistory.map((ch: ClassHistoryItem, idx: number) => (
-                            <tr key={idx} className="hover:bg-gray-50">
-                              <td className="px-4 py-2.5 text-gray-700">{idx + 1}</td>
-                              <td className="px-4 py-2.5 text-gray-900 font-medium">{ch.schoolYear}</td>
-                              <td className="px-4 py-2.5 text-gray-700">{ch.semester}</td>
-                              <td className="px-4 py-2.5 text-gray-700">{ch.levelName}</td>
-                              <td className="px-4 py-2.5 text-gray-900 font-medium">{ch.className}</td>
-                              <td className="px-4 py-2.5 text-gray-700">{ch.waliKelasName}</td>
+                            <tr key={idx} className="hover:bg-slate-50">
+                              <td className="px-4 py-2.5 text-slate-600">{idx + 1}</td>
+                              <td className="px-4 py-2.5 font-medium text-slate-900">{ch.schoolYear}</td>
+                              <td className="px-4 py-2.5 text-slate-700">{ch.semester}</td>
+                              <td className="px-4 py-2.5 text-slate-700">{ch.levelName}</td>
+                              <td className="px-4 py-2.5 font-medium text-slate-900">{ch.className}</td>
+                              <td className="px-4 py-2.5 text-slate-700">{ch.waliKelasName}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-400 italic">Belum ada data riwayat kelas di database</p>
+                    <p className="text-sm italic text-slate-400">Belum ada data riwayat kelas di database</p>
                   )}
                 </div>
 
                 {/* Field manual lainnya: riwayat kamar & kamar berkesan */}
-                <div className="space-y-6 pt-4 border-t border-gray-100">
+                <div className="space-y-6 border-t border-slate-200 pt-4">
                   {section.fields.filter(f => f.key !== 'riwayatKelas').map(f => {
                     const val = data[f.key];
                     
@@ -188,26 +212,26 @@ export default function DetailSantriPage({ params }: { params: Promise<{ id: str
                         if (Array.isArray(items) && items.length > 0) {
                           return (
                             <div key={f.key}>
-                              <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">{f.label}</h3>
-                              <div className="overflow-x-auto border rounded-lg">
+                              <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">{f.label}</h3>
+                              <div className="overflow-x-auto rounded-lg border border-slate-200">
                                 <table className="w-full text-sm">
-                                  <thead className="bg-emerald-50/50 border-b border-emerald-100">
+                                  <thead className="border-b border-slate-200 bg-slate-50">
                                     <tr>
-                                      <th className="px-3 py-2 text-left text-xs font-bold text-emerald-800 uppercase">No</th>
-                                      <th className="px-3 py-2 text-left text-xs font-bold text-emerald-800 uppercase">Kelas</th>
-                                      <th className="px-3 py-2 text-left text-xs font-bold text-emerald-800 uppercase">Tahun</th>
-                                      <th className="px-3 py-2 text-left text-xs font-bold text-emerald-800 uppercase">Smt 1</th>
-                                      <th className="px-3 py-2 text-left text-xs font-bold text-emerald-800 uppercase">Smt 2</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold uppercase text-slate-500">No</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold uppercase text-slate-500">Kelas</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold uppercase text-slate-500">Tahun</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold uppercase text-slate-500">Smt 1</th>
+                                      <th className="px-3 py-2 text-left text-xs font-bold uppercase text-slate-500">Smt 2</th>
                                     </tr>
                                   </thead>
-                                  <tbody className="divide-y divide-gray-100">
+                                  <tbody className="divide-y divide-slate-100">
                                     {items.map((it: KamarHistoryItem, i: number) => (
-                                      <tr key={i} className="hover:bg-gray-50">
-                                        <td className="px-3 py-2 text-gray-500 text-xs">{i + 1}</td>
-                                        <td className="px-3 py-2 text-gray-900 font-medium">{it.kelas || '-'}</td>
-                                        <td className="px-3 py-2 text-gray-700">{it.tahun || '-'}</td>
-                                        <td className="px-3 py-2 text-gray-900 font-medium">{it.smt1 || '-'}</td>
-                                        <td className="px-3 py-2 text-gray-900 font-medium">{it.smt2 || '-'}</td>
+                                      <tr key={i} className="hover:bg-slate-50">
+                                        <td className="px-3 py-2 text-xs text-slate-500">{i + 1}</td>
+                                        <td className="px-3 py-2 font-medium text-slate-900">{it.kelas || '-'}</td>
+                                        <td className="px-3 py-2 text-slate-700">{it.tahun || '-'}</td>
+                                        <td className="px-3 py-2 font-medium text-slate-900">{it.smt1 || '-'}</td>
+                                        <td className="px-3 py-2 font-medium text-slate-900">{it.smt2 || '-'}</td>
                                       </tr>
                                     ))}
                                   </tbody>
@@ -224,9 +248,9 @@ export default function DetailSantriPage({ params }: { params: Promise<{ id: str
                     const displayVal = formatValue(f.key, val);
                     return (
                       <div key={f.key}>
-                        <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">{f.label}</dt>
+                        <dt className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">{f.label}</dt>
                         <dd className={`mt-1 text-sm font-medium whitespace-pre-wrap ${
-                          displayVal === '-' ? 'text-gray-400 italic' : 'text-gray-900'
+                          displayVal === '-' ? 'italic text-slate-400' : 'text-slate-900'
                         }`}>
                           {displayVal}
                         </dd>
@@ -242,9 +266,9 @@ export default function DetailSantriPage({ params }: { params: Promise<{ id: str
                   const displayVal = ('type' in f && f.type === 'date') ? formatDate(val as string | null) : formatValue(f.key, val);
                   return (
                     <div key={f.key}>
-                      <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">{f.label}</dt>
+                      <dt className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">{f.label}</dt>
                       <dd className={`mt-1 text-sm font-medium whitespace-pre-wrap ${
-                        displayVal === '-' ? 'text-gray-400 italic' : 'text-gray-900'
+                        displayVal === '-' ? 'italic text-slate-400' : 'text-slate-900'
                       }`}>
                         {displayVal}
                       </dd>

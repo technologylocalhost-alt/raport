@@ -1,8 +1,7 @@
-import { Prisma, UserRole, ActivityAction, ActivityStatus } from '@prisma/client';
+import { Prisma, ActivityAction, ActivityStatus } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { withAuth } from '@/lib/auth/middleware';
-import { getAuthenticatedUser } from '@/lib/auth/access';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { serverError } from '@/lib/server-log';
 
 /**
@@ -21,10 +20,10 @@ import { serverError } from '@/lib/server-log';
  * - endDate: ISO string (filter by date range end)
  */
 
-export const GET = withAuth(async (request: NextRequest, user) => {
+export const GET = async (request: NextRequest) => {
   try {
-    // Only admins can view activity logs
-    if (user.role !== UserRole.ADMIN) {
+    const user = await requireMenuAccess(request, '/admin/activity-logs', ['ADMIN']);
+    if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized: Only admins can view activity logs' },
         { status: 403 }
@@ -127,7 +126,7 @@ export const GET = withAuth(async (request: NextRequest, user) => {
       { status: 500 }
     );
   }
-});
+};
 
 /**
  * GET /api/admin/activity-logs/summary
@@ -135,8 +134,8 @@ export const GET = withAuth(async (request: NextRequest, user) => {
  */
 export async function getSummary(request: NextRequest) {
   try {
-    const user = await getAuthenticatedUser(request);
-    if (!user || user.role !== UserRole.ADMIN) {
+    const user = await requireMenuAccess(request, '/admin/activity-logs', ['ADMIN']);
+    if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }

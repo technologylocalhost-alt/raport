@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import * as XLSX from 'xlsx';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import { AuthenticatedUser } from '@/lib/auth/access';
@@ -168,7 +168,7 @@ const INT_KEYS = new Set(['anakKe', 'dariAnak']);
 const DATE_KEYS = new Set(['birthDate', 'tanggalInput']);
 
 async function requireSantriImportAccess(req: NextRequest) {
-  return requireAdminOrPrincipal(req);
+  return requireMenuAccess(req, '/admin/santri', ['ADMIN', 'PRINCIPAL']);
 }
 
 function parseValue(value: unknown, fieldKey: string): string | number | Date | null {

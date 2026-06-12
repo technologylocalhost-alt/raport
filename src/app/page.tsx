@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { BookOpen, Users } from 'lucide-react';
+import { fetchCurrentUser } from '@/lib/auth/client';
 import { devError } from '@/lib/dev-log';
 
 interface SchoolData {
@@ -40,7 +41,7 @@ interface PengumumanResponse {
 }
 
 export default function Home() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentRole, setCurrentRole] = useState<string | null>(null);
   const [allData, setAllData] = useState<Record<string, SchoolData>>({});
   const [schools, setSchools] = useState<School[]>([]);
   const [selectedSchool, setSelectedSchool] = useState<string>('all');
@@ -50,10 +51,19 @@ export default function Home() {
   const [schoolYear, setSchoolYear] = useState<PengumumanSchoolYear | null>(null);
 
   useEffect(() => {
-    // Check if user is logged in
-    if (typeof window !== 'undefined' && localStorage.getItem('accessToken')) {
-      setIsLoggedIn(true);
+    let active = true;
+
+    async function bootstrapSession() {
+      const user = await fetchCurrentUser();
+      if (!active) return;
+      setCurrentRole(user?.role ?? null);
     }
+
+    void bootstrapSession();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -134,15 +144,21 @@ export default function Home() {
               <p className="text-xs text-gray-500">Pengumuman Nilai Siswa</p>
             </div>
           </div>
-          {isLoggedIn && (
+          {currentRole && (
             <Link
-              href="/admin/dashboard"
+              href={
+                currentRole === 'TEACHER'
+                  ? '/teacher/dashboard'
+                  : currentRole === 'WALI_KELAS'
+                    ? '/wali-kelas/dashboard'
+                    : '/admin/dashboard'
+              }
               className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
             >
               Dashboard
             </Link>
           )}
-          {!isLoggedIn && (
+          {!currentRole && (
             <Link
               href="/login"
               className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"

@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { requireClassReadUser } from '@/lib/auth/class-admin-access';
+import { requireEditableClassByPeriod } from '@/lib/auth/class-access';
 import { z } from 'zod';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import { serverError } from '@/lib/server-log';
@@ -219,6 +220,11 @@ export async function POST(
       return errorResponse('Unauthorized', 403);
     }
 
+    const writableClass = await requireEditableClassByPeriod(id);
+    if (!writableClass.ok) {
+      return errorResponse('Kelas semester lampau hanya dapat dibaca', 403);
+    }
+
     const body = await request.json();
     const validation = studentSchema.safeParse(body);
 
@@ -352,4 +358,3 @@ export async function POST(
     return errorResponse('Failed to create/update student', 500);
   }
 }
-

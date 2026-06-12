@@ -7,7 +7,7 @@ import {
   AlertCircle, Loader
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
-import { getCurrentUser } from '@/lib/auth/client';
+import { fetchCurrentUser } from '@/lib/auth/client';
 import { devError } from '@/lib/dev-log';
 
 interface TeacherStats {
@@ -74,17 +74,28 @@ export default function TeacherAnalyticsPage() {
   }, [selectedClass]);
 
   useEffect(() => {
-    const userData = getCurrentUser();
-    if (!userData) {
-      router.push('/login');
-      return;
-    }
-    if (userData.role !== 'TEACHER') {
-      router.push('/admin/dashboard');
-      return;
+    let active = true;
+
+    async function bootstrapSession() {
+      const userData = await fetchCurrentUser();
+      if (!active) return;
+      if (!userData) {
+        router.push('/login');
+        return;
+      }
+      if (userData.role !== 'TEACHER') {
+        router.push('/admin/dashboard');
+        return;
+      }
+
+      void fetchData();
     }
 
-    void fetchData();
+    void bootstrapSession();
+
+    return () => {
+      active = false;
+    };
   }, [fetchData, router]);
 
   if (isLoading) {

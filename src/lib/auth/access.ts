@@ -1,22 +1,44 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyAccessToken } from '@/lib/auth/jwt';
+import { extractAccessToken } from '@/lib/auth/token-extractor';
 import { UserRole } from '@prisma/client';
 
 export type AuthenticatedUser = Awaited<ReturnType<typeof getAuthenticatedUser>>;
 
-function getMenuPathWithRolePrefix(menuPath: string, role: UserRole): string | null {
-  if (!menuPath.startsWith('/admin')) return null;
+function getRaportMentalCandidatePaths(menuPath: string, role: UserRole): string[] {
+  const paths = new Set<string>([menuPath]);
 
-  const suffix = menuPath.slice('/admin'.length);
   const rolePrefix =
     role === UserRole.TEACHER
       ? '/teacher'
       : role === UserRole.WALI_KELAS
       ? '/wali-kelas'
+      : role === UserRole.ADMIN || role === UserRole.PRINCIPAL
+      ? '/admin'
       : null;
 
-  return rolePrefix ? `${rolePrefix}${suffix}` : null;
+  if (!rolePrefix || !menuPath.startsWith('/admin')) {
+    return Array.from(paths);
+  }
+
+  const suffix = menuPath.slice('/admin'.length);
+  paths.add(`${rolePrefix}${suffix}`);
+
+  if (suffix.startsWith('/raport-mental')) {
+    const alternateSuffix =
+      suffix === '/raport-mental'
+        ? '/raport-mental/penilaian'
+        : suffix === '/raport-mental/penilaian'
+          ? '/raport-mental'
+          : null;
+
+    if (alternateSuffix) {
+      paths.add(`${rolePrefix}${alternateSuffix}`);
+    }
+  }
+
+  return Array.from(paths);
 }
 
 function hasMenuPermission(user: NonNullable<Awaited<ReturnType<typeof getAuthenticatedUser>>>, permission: { roles: string; bagian: string | null; isActive: boolean }) {
@@ -53,14 +75,13 @@ function hasMenuPermission(user: NonNullable<Awaited<ReturnType<typeof getAuthen
 }
 
 /**
- * Get authenticated user from Bearer token, including bagian list.
+ * Get authenticated user from access token cookie or Bearer token, including bagian list.
  * Returns null if token is invalid, user does not exist, or user is inactive.
  */
 export async function getAuthenticatedUser(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
+  const token = extractAccessToken(req);
+  if (!token) return null;
 
-  const token = authHeader.slice(7);
   const payload = verifyAccessToken(token);
   if (!payload) return null;
 
@@ -111,7 +132,6 @@ export async function requireBagian(req: NextRequest, allowedBagian?: string[]) 
 
 /**
  * Special access rule for Raport Mental.
- * - user must have at least one bagian
  * - MenuPermission.isActive must be respected
  * - if MenuPermission.roles is configured (not ALL), user role must match
  * - if MenuPermission.bagian is configured, user must match one of them
@@ -123,17 +143,7 @@ export async function requireRaportMentalAccess(
   const user = await getAuthenticatedUser(req);
   if (!user) return null;
 
-  // Admin and principal should not be blocked by bagian requirements for this feature.
-  // They still must pass menu permission checks if permission rows exist.
-  const skipBagianCheck = user.role === UserRole.ADMIN || user.role === UserRole.PRINCIPAL;
-
-  if (!skipBagianCheck) {
-    const userWithBagian = await requireBagian(req);
-    if (!userWithBagian) return null;
-  }
-
-  const fallbackPath = getMenuPathWithRolePrefix(menuPath, user.role);
-  const candidatePaths = Array.from(new Set([menuPath, ...(fallbackPath ? [fallbackPath] : [])]));
+  const candidatePaths = getRaportMentalCandidatePaths(menuPath, user.role);
 
   const permissions = await prisma.menuPermission.findMany({
     where: { menuPath: { in: candidatePaths } },

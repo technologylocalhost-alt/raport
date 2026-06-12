@@ -14,6 +14,6 @@ export async function fetchAllowedMenuPaths(menuGroup: 'admin' | 'teacher' | 'wa
 
   return {
     allowedPaths: (data.data?.allowedPaths || []) as string[],
-    hasRestrictions: Boolean(data.data?.hasRestrictions),
+    hasRestrictions: true,
   };
 }

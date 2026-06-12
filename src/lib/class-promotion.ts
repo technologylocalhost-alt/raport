@@ -20,6 +20,12 @@ export interface LevelInfo {
   order: number;
 }
 
+export interface NextClassInfo {
+  nextLevelCode: string;
+  nextClassNumber: number;
+  promotionType: 'SAME_LEVEL' | 'NEXT_LEVEL';
+}
+
 /**
  * Parse class name to extract just the number and character
  * Examples:
@@ -53,30 +59,60 @@ export function parseClassName(className: string): ClassInfo | null {
   return null;
 }
 
+export function buildClassName(levelCode: string, classNumber: number, classChar: string) {
+  return `${levelCode} ${classNumber}${classChar}`;
+}
+
+export function matchesClassIdentity(
+  className: string,
+  expectedLevelCode: string,
+  expectedClassNumber: number,
+  expectedClassChar: string
+) {
+  const parsed = parseClassName(className);
+  if (!parsed) return false;
+
+  const levelCodeMatches = !parsed.levelCode || parsed.levelCode === expectedLevelCode;
+  return (
+    levelCodeMatches &&
+    parsed.levelNumber === expectedClassNumber &&
+    parsed.classChar === expectedClassChar
+  );
+}
+
 /**
  * Calculate the next class number within the same level or find next level
  * 
  * @param currentClass Parsed current class info
  * @param currentLevel Current level with levelCount
  * @param nextLevel Next level (if promoting to new level)
- * @returns { nextLevelCode, nextClassNumber } or null if cannot promote
+ * @returns { nextLevelCode, nextClassNumber, promotionType } or null if cannot promote
  * 
- * IMPORTANT: This ALWAYS returns promotion within the SAME level first.
- * System will try to find next class in next level only if it doesn't exist in current level.
+ * IMPORTANT: If the current level has a configured levelCount, the system
+ * promotes within the same level until that count is reached, then rolls over
+ * to the next level. If levelCount is missing or zero, it stays in the same level.
  */
 export function calculateNextClass(
   currentClass: ClassInfo,
-  currentLevel: LevelInfo
-): { nextLevelCode: string; nextClassNumber: number } | null {
-  // ALWAYS try to promote within the same level first
-  // The next level logic will be handled by filterering target classes
+  currentLevel: LevelInfo,
+  nextLevel: Pick<LevelInfo, 'code' | 'order' | 'levelCount'> | null = null
+): NextClassInfo | null {
   const nextClassNumber = currentClass.levelNumber + 1;
-  
-  // Return next class in same level
-  // System will filter from available classes - if class doesn't exist, no suggestion
+
+  if (currentLevel.levelCount > 0 && currentClass.levelNumber >= currentLevel.levelCount) {
+    if (!nextLevel) return null;
+
+    return {
+      nextLevelCode: nextLevel.code,
+      nextClassNumber,
+      promotionType: 'NEXT_LEVEL',
+    };
+  }
+
   return {
     nextLevelCode: currentLevel.code,
     nextClassNumber,
+    promotionType: 'SAME_LEVEL',
   };
 }
 
@@ -109,16 +145,16 @@ export function getPossibleTargetClasses(
   nextLevel: LevelInfo | null,
   classes: Array<{ id: string; name: string; levelId: string }>
 ) {
-  const next = calculateNextClass(sourceClass, currentLevel);
+  const next = calculateNextClass(sourceClass, currentLevel, nextLevel);
   if (!next) return [];
   
   // Return classes matching the next level and possible numbers
   return classes.filter((c) => {
-    const parsed = parseClassName(c.name);
-    if (!parsed) return false;
-    
-    // Match level code and class number
-    return parsed.levelCode === next.nextLevelCode && 
-           parsed.levelNumber === next.nextClassNumber;
+    return matchesClassIdentity(
+      c.name,
+      next.nextLevelCode,
+      next.nextClassNumber,
+      sourceClass.classChar
+    );
   });
 }

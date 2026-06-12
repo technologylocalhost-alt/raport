@@ -168,6 +168,7 @@ export async function POST(request: NextRequest) {
         name: user.name,
         role: user.role,
         schoolId: user.schoolId,
+        isActive: user.isActive,
         bagian: userBagian,
       },
     });

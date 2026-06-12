@@ -427,6 +427,10 @@ export default function PenilaianRaportMentalPage() {
         semesterId: selectedSemesterId,
         limit: '100',
       });
+      if (pathname.startsWith('/teacher') || pathname.startsWith('/wali-kelas')) {
+        params.set('scope', 'raport-mental');
+      }
+
       const res = await apiFetch(`/api/admin/classes?${params}`);
       const d = await res.json();
       if (d.success) {
@@ -435,7 +439,7 @@ export default function PenilaianRaportMentalPage() {
       }
     } catch (e) { devError('Raport mental error:', e); }
     finally { setLoadingKelas(false); }
-  }, [selectedSchoolId, selectedSchoolYearId, selectedSemesterId]);
+  }, [pathname, selectedSchoolId, selectedSchoolYearId, selectedSemesterId]);
 
   useEffect(() => {
     if (!selectedSchoolId || !selectedSchoolYearId || !selectedSemesterId) return;

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import * as XLSX from 'xlsx';
 import { serverError } from '@/lib/server-log';
 
@@ -161,7 +161,7 @@ const ALL_FIELDS = [
 ];
 
 async function requireSantriTemplateAccess(req: NextRequest) {
-  return requireAdminOrPrincipal(req);
+  return requireMenuAccess(req, '/admin/santri', ['ADMIN', 'PRINCIPAL']);
 }
 
 /**
@@ -170,7 +170,10 @@ async function requireSantriTemplateAccess(req: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    await requireSantriTemplateAccess(request);
+    const user = await requireSantriTemplateAccess(request);
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     // Sample data row
     const sampleRow: Record<string, string> = {};

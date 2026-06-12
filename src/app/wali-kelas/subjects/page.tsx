@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Library, AlertCircle, X, Search, RotateCw } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
-import { getCurrentUser } from '@/lib/auth/client';
+import { fetchCurrentUser } from '@/lib/auth/client';
 import { devError } from '@/lib/dev-log';
 
 interface Subject {
@@ -13,7 +13,13 @@ interface Subject {
   nameArabic?: string;
   description?: string;
   creditHours?: number;
-  classes: Array<{ id: string; name: string }>;
+  classes: Array<{
+    id: string;
+    name: string;
+    semester?: { id: string; number: number } | null;
+    schoolYear?: { id: string; year: string } | null;
+    level?: { id: string; name: string } | null;
+  }>;
   assessmentTypes?: string[];
 }
 
@@ -29,10 +35,12 @@ export default function WaliKelasSubjectsPage() {
   const itemsPerPage = 10;
 
   useEffect(() => {
-    const user = getCurrentUser();
-    if (user) {
-      void fetchAllSubjects();
-    }
+    void (async () => {
+      const user = await fetchCurrentUser();
+      if (user) {
+        void fetchAllSubjects();
+      }
+    })();
   }, []);
 
   async function fetchAllSubjects() {
@@ -79,7 +87,7 @@ export default function WaliKelasSubjectsPage() {
   const sortedSubjects = [...subjects].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' }));
   
   // Get unique classes from all subjects
-  const classMap = new Map<string, { id: string; name: string }>();
+  const classMap = new Map<string, Subject['classes'][number]>();
   sortedSubjects.forEach(subject => {
     subject.classes.forEach(cls => {
       if (!classMap.has(cls.id)) {
@@ -87,7 +95,22 @@ export default function WaliKelasSubjectsPage() {
       }
     });
   });
-  const allClasses = Array.from(classMap.values()).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+  const allClasses = Array.from(classMap.values()).sort((a, b) => {
+    const classOrder = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+    if (classOrder !== 0) return classOrder;
+    const aSemester = a.semester?.number || 0;
+    const bSemester = b.semester?.number || 0;
+    if (aSemester !== bSemester) return aSemester - bSemester;
+    const aYear = a.schoolYear?.year || '';
+    const bYear = b.schoolYear?.year || '';
+    return aYear.localeCompare(bYear);
+  });
+
+  function formatClassLabel(cls: Subject['classes'][number]) {
+    const semesterLabel = cls.semester?.number ? `Sem. ${cls.semester.number}` : 'Sem. -';
+    const yearLabel = cls.schoolYear?.year || '-';
+    return `${cls.name} · ${semesterLabel} · ${yearLabel}`;
+  }
 
   // Filter subjects based on class and search
   const filteredSubjects = sortedSubjects.filter((subject) => {
@@ -108,7 +131,7 @@ export default function WaliKelasSubjectsPage() {
   }, [selectedClass, searchText]);
 
   const handleRefresh = async () => {
-    const user = getCurrentUser();
+    const user = await fetchCurrentUser();
     if (user) {
       setIsRefreshing(true);
       try {
@@ -193,7 +216,7 @@ export default function WaliKelasSubjectsPage() {
                   <option value="">Semua Kelas</option>
                   {allClasses.map((cls) => (
                     <option key={cls.id} value={cls.id}>
-                      {cls.name}
+                      {formatClassLabel(cls)}
                     </option>
                   ))}
                 </select>
@@ -265,15 +288,19 @@ export default function WaliKelasSubjectsPage() {
                         <td className="px-6 py-4 text-sm">
                           <div className="flex flex-wrap gap-2">
                             {subject.classes.map((classItem) => (
-                              <a
-                                key={classItem.id}
-                                href={`/wali-kelas/subjects/${classItem.id}/students?subjectId=${subject.id}`}
-                                className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-semibold hover:bg-emerald-200 transition-colors cursor-pointer"
-                              >
-                                {classItem.name}
-                              </a>
-                            ))}
-                          </div>
+                          <a
+                            key={classItem.id}
+                            href={`/wali-kelas/subjects/${classItem.id}/students?subjectId=${subject.id}`}
+                            className="inline-flex flex-col gap-0.5 px-3 py-2 bg-emerald-100 text-emerald-800 rounded-lg text-xs font-semibold hover:bg-emerald-200 transition-colors cursor-pointer"
+                          >
+                                <span>{classItem.name}</span>
+                                <span className="text-[10px] font-medium text-emerald-700">
+                                  {classItem.semester?.number ? `Sem. ${classItem.semester.number}` : 'Sem. -'}
+                                  {classItem.schoolYear?.year ? ` • ${classItem.schoolYear.year}` : ''}
+                                </span>
+                          </a>
+                        ))}
+                      </div>
                         </td>
                         {['UTS_1', 'UAS_1', 'UTS_2', 'UAS_2', 'FINAL_EXAM_1', 'FINAL_EXAM_2'].map((type) => {
                           const isDone = subject.assessmentTypes && subject.assessmentTypes.includes(type);
@@ -320,9 +347,13 @@ export default function WaliKelasSubjectsPage() {
                           <a
                             key={classItem.id}
                             href={`/wali-kelas/subjects/${classItem.id}/students?subjectId=${subject.id}`}
-                            className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-semibold hover:bg-emerald-200 transition-colors cursor-pointer"
+                            className="inline-flex flex-col gap-0.5 px-3 py-2 bg-emerald-100 text-emerald-800 rounded-lg text-xs font-semibold hover:bg-emerald-200 transition-colors cursor-pointer"
                           >
-                            {classItem.name}
+                            <span>{classItem.name}</span>
+                            <span className="text-[10px] font-medium text-emerald-700">
+                              {classItem.semester?.number ? `Sem. ${classItem.semester.number}` : 'Sem. -'}
+                              {classItem.schoolYear?.year ? ` • ${classItem.schoolYear.year}` : ''}
+                            </span>
                           </a>
                         ))}
                       </div>

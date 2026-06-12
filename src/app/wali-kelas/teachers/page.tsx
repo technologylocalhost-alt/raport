@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, FormEvent } from 'react';
 import { Plus, Trash2, X, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
-import { getCurrentUser } from '@/lib/auth/client';
+import { fetchCurrentUser } from '@/lib/auth/client';
 import { devError } from '@/lib/dev-log';
 
 interface Class {
@@ -59,10 +59,12 @@ export default function WaliKelasTeachersPage() {
   const [formData, setFormData] = useState<FormData>({ teacherId: '', subjectId: '' });
 
   useEffect(() => {
-    const parsedUser = getCurrentUser();
-    if (parsedUser) {
-      void fetchClasses(parsedUser.id);
-    }
+    void (async () => {
+      const parsedUser = await fetchCurrentUser();
+      if (parsedUser) {
+        void fetchClasses(parsedUser.id);
+      }
+    })();
   }, []);
 
   async function fetchClasses(waliKelasId: string) {

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Building2, Users, Calendar, GraduationCap, School, BookMarked } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
-import { getCurrentUser } from '@/lib/auth/client';
+import { fetchCurrentUser } from '@/lib/auth/client';
 import { devError } from '@/lib/dev-log';
 
 interface User {
@@ -67,8 +67,8 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
 
   useEffect(() => {
-    const checkAuth = () => {
-      const userData = getCurrentUser();
+    const checkAuth = async () => {
+      const userData = await fetchCurrentUser();
       if (!userData) {
         router.push('/login');
         return;
@@ -88,8 +88,7 @@ export default function AdminDashboard() {
       }
     };
 
-    const timer = setTimeout(checkAuth, 0);
-    return () => clearTimeout(timer);
+    void checkAuth();
   }, [router]);
 
   const fetchStats = useCallback(async () => {

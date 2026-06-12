@@ -1,9 +1,9 @@
 /**
- * Enhanced fetch with automatic token injection and refresh for API calls.
- * Keeps current bearer-token flow working while centralizing auth behavior.
+ * Enhanced fetch with automatic refresh for API calls.
+ * Session now relies on cookies, so requests always include credentials.
  */
 
-import { getAccessToken, logout, setAccessToken } from './auth/client';
+import { logout, setAccessToken } from './auth/client';
 import { devError, devWarn } from './dev-log';
 
 // Flag to prevent multiple simultaneous refresh attempts
@@ -75,14 +75,6 @@ export async function apiFetch(
   // Prepare headers
   const headers = new Headers(fetchOptions.headers);
 
-  // Add Authorization header if token exists and skipAuth is false
-  if (!skipAuth && typeof window !== 'undefined') {
-    const token = getAccessToken();
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`);
-    }
-  }
-
   // Ensure credentials included for cookies
   const init: RequestInit = {
     ...fetchOptions,
@@ -99,19 +91,19 @@ export async function apiFetch(
       return new Promise<Response>((resolve) => {
         subscribeTokenRefresh((newToken) => {
           if (newToken) {
-            // Retry original request with new token
-            headers.set('Authorization', `Bearer ${newToken}`);
+            // Retry original request after refresh; cookies are the source of truth.
             fetch(url, { ...init, headers })
               .then(resolve)
               .catch(() => {
                 void logout();
                 resolve(response); // Return original 401 response
               });
-          } else {
-            // Refresh failed, logout
-            void logout();
-            resolve(response);
+            return;
           }
+
+          // Refresh failed, logout
+          void logout();
+          resolve(response);
         });
       });
     }
@@ -127,8 +119,7 @@ export async function apiFetch(
         onRefreshed(newToken);
         isRefreshing = false;
         
-        // Retry original request with new token
-        headers.set('Authorization', `Bearer ${newToken}`);
+        // Retry original request after refresh; cookies are the source of truth.
         response = await fetch(url, { ...init, headers });
         
         return response;
@@ -150,4 +141,3 @@ export async function apiFetch(
 
   return response;
 }
-

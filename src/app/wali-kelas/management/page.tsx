@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState, FormEvent } from 'react';
-import { Plus, Trash2, X, AlertCircle, CheckCircle, ArrowLeft, BookOpen, Users, Download, Upload } from 'lucide-react';
+import { Plus, Trash2, X, AlertCircle, CheckCircle, ArrowLeft, BookOpen, Users, Download, Upload, Eye } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
-import { getCurrentUser } from '@/lib/auth/client';
+import { fetchCurrentUser } from '@/lib/auth/client';
 import { devError } from '@/lib/dev-log';
 
 interface Class {
@@ -13,6 +13,16 @@ interface Class {
   levelName?: string;
   capacity: number;
   isActive?: boolean;
+  schoolYear?: {
+    id: string;
+    year: string;
+    isActive?: boolean;
+  };
+  semester?: {
+    id: string;
+    number: number;
+    isActive?: boolean;
+  };
 }
 
 interface ClassSubject {
@@ -50,6 +60,16 @@ interface Teacher {
 
 interface ClassApiItem extends Class {
   level?: { name?: string };
+  schoolYear?: {
+    id: string;
+    year: string;
+    isActive?: boolean;
+  };
+  semester?: {
+    id: string;
+    number: number;
+    isActive?: boolean;
+  };
 }
 
 interface ImportResultState {
@@ -90,7 +110,7 @@ export default function WaliKelasClassManagementPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedClassName, setSelectedClassName] = useState<string>('');
-  const [, setSelectedClassActive] = useState(true);
+  const [selectedClassReadOnly, setSelectedClassReadOnly] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('subjects');
   const [showSubjectForm, setShowSubjectForm] = useState(false);
   const [showTeacherForm, setShowTeacherForm] = useState(false);
@@ -98,6 +118,8 @@ export default function WaliKelasClassManagementPage() {
   const [teacherFormData, setTeacherFormData] = useState<TeacherFormData>({ teacherId: '', subjectId: '' });
   const [subjectCurrentPage, setSubjectCurrentPage] = useState(1);
   const [teacherCurrentPage, setTeacherCurrentPage] = useState(1);
+  const [subjectTableSearch, setSubjectTableSearch] = useState('');
+  const [teacherTableSearch, setTeacherTableSearch] = useState('');
   const [subjectSearchText, setSubjectSearchText] = useState('');
   const [teacherSearchText, setTeacherSearchText] = useState('');
   const [subjectSearchTeacherText, setSubjectSearchTeacherText] = useState('');
@@ -107,11 +129,23 @@ export default function WaliKelasClassManagementPage() {
   const [showImportResult, setShowImportResult] = useState(false);
   const itemsPerPage = 10;
 
+  function isClassReadOnly(classItem: Class) {
+    return classItem.isActive === false ||
+      classItem.schoolYear?.isActive === false ||
+      classItem.semester?.isActive === false;
+  }
+
+  function isActionLocked(classItem: Class) {
+    return classItem.isActive === false && !isClassReadOnly(classItem);
+  }
+
   useEffect(() => {
-    const parsedUser = getCurrentUser();
-    if (parsedUser) {
-      void fetchClasses(parsedUser.id);
-    }
+    void (async () => {
+      const parsedUser = await fetchCurrentUser();
+      if (parsedUser) {
+        void fetchClasses(parsedUser.id);
+      }
+    })();
   }, []);
 
   async function fetchClasses(waliKelasId: string) {
@@ -171,6 +205,14 @@ export default function WaliKelasClassManagementPage() {
     }
   }, [selectedClassId, fetchClassSubjects, fetchClassTeachers]);
 
+  useEffect(() => {
+    setSubjectCurrentPage(1);
+  }, [subjectTableSearch, selectedClassId]);
+
+  useEffect(() => {
+    setTeacherCurrentPage(1);
+  }, [teacherTableSearch, selectedClassId]);
+
   async function fetchAllSubjects() {
     try {
       const response = await apiFetch(`/api/admin/subjects?limit=100`);
@@ -201,6 +243,10 @@ export default function WaliKelasClassManagementPage() {
 
   async function handleAddSubject(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!canModifySelectedClass) {
+      setErrorMessage('Kelas ini hanya bisa dibaca pada semester yang sudah lewat');
+      return;
+    }
     if (!subjectFormData.subjectId) {
       setErrorMessage('Pilih mata pelajaran');
       return;
@@ -234,6 +280,10 @@ export default function WaliKelasClassManagementPage() {
 
   async function handleAddTeacher(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!canModifySelectedClass) {
+      setErrorMessage('Kelas ini hanya bisa dibaca pada semester yang sudah lewat');
+      return;
+    }
     if (!teacherFormData.teacherId || !teacherFormData.subjectId) {
       setErrorMessage('Pilih guru dan mata pelajaran');
       return;
@@ -266,6 +316,10 @@ export default function WaliKelasClassManagementPage() {
   }
 
   async function handleDeleteSubject(subjectId: string) {
+    if (!canModifySelectedClass) {
+      setErrorMessage('Kelas ini hanya bisa dibaca pada semester yang sudah lewat');
+      return;
+    }
     if (!confirm('Hapus mata pelajaran?')) return;
     try {
       const response = await apiFetch(`/api/admin/classes/${selectedClassId}/subjects/${subjectId}`, {
@@ -283,6 +337,10 @@ export default function WaliKelasClassManagementPage() {
   }
 
   async function handleDeleteTeacher(teacherId: string) {
+    if (!canModifySelectedClass) {
+      setErrorMessage('Kelas ini hanya bisa dibaca pada semester yang sudah lewat');
+      return;
+    }
     if (!confirm('Hapus guru?')) return;
     try {
       const response = await apiFetch(`/api/admin/classes/${selectedClassId}/teachers/${teacherId}`, {
@@ -357,8 +415,41 @@ export default function WaliKelasClassManagementPage() {
     }
   }
 
+  const filteredClassSubjects = [...classSubjects]
+    .filter((cs) => {
+      const search = subjectTableSearch.trim().toLowerCase();
+      if (!search) return true;
+      return (
+        cs.subject.code.toLowerCase().includes(search) ||
+        cs.subject.name.toLowerCase().includes(search) ||
+        (cs.subject.nameArabic || '').toLowerCase().includes(search) ||
+        (cs.subject.description || '').toLowerCase().includes(search)
+      );
+    })
+    .sort((a, b) => a.subject.code.localeCompare(b.subject.code, undefined, { numeric: true, sensitivity: 'base' }));
+
+  const filteredClassTeachers = [...classTeachers]
+    .filter((ct) => {
+      const search = teacherTableSearch.trim().toLowerCase();
+      if (!search) return true;
+      return (
+        ct.teacher.name.toLowerCase().includes(search) ||
+        ct.teacher.email.toLowerCase().includes(search) ||
+        ct.subject.code.toLowerCase().includes(search) ||
+        ct.subject.name.toLowerCase().includes(search)
+      );
+    })
+    .sort((a, b) => a.subject.code.localeCompare(b.subject.code, undefined, { numeric: true, sensitivity: 'base' }));
+
+  const canModifySelectedClass =
+    selectedClassId !== null && !selectedClassReadOnly;
+
   async function handleImport(type: 'subjects' | 'teachers', file: File) {
     try {
+      if (!canModifySelectedClass) {
+        setErrorMessage('Kelas ini hanya bisa dibaca pada semester yang sudah lewat');
+        return;
+      }
       setIsImporting(true);
       const endpoint = type === 'subjects'
         ? `/api/admin/classes/${selectedClassId}/subjects/import`
@@ -436,7 +527,10 @@ export default function WaliKelasClassManagementPage() {
                 </thead>
                 <tbody>
                   {classes.map((classItem) => (
-                    <tr key={classItem.id} className={`border-b transition-colors ${classItem.isActive !== false ? 'hover:bg-gray-50 cursor-pointer' : 'bg-gray-50 opacity-70'}`}>
+                    <tr
+                      key={classItem.id}
+                      className={`border-b transition-colors ${isActionLocked(classItem) ? 'bg-gray-50 opacity-70' : 'hover:bg-gray-50 cursor-pointer'}`}
+                    >
                       <td className="px-6 py-4 text-sm font-semibold text-gray-900">
                         <div className="flex items-center gap-2">
                           {classItem.name}
@@ -452,19 +546,24 @@ export default function WaliKelasClassManagementPage() {
                       <td className="px-6 py-4 text-center">
                         <button
                           onClick={() => {
-                            if (classItem.isActive !== false) {
-                              setSelectedClassId(classItem.id);
-                              setSelectedClassName(classItem.name);
-                              setSelectedClassActive(!!classItem.isActive);
-                              setActiveTab('subjects');
-                              fetchAllSubjects();
-                            }
+                            setSelectedClassId(classItem.id);
+                            setSelectedClassName(classItem.name);
+                            setSelectedClassReadOnly(isClassReadOnly(classItem));
+                            setActiveTab('subjects');
+                            fetchAllSubjects();
                           }}
-                          disabled={classItem.isActive === false}
-                          className={`text-white px-4 py-2 rounded-lg font-medium transition-colors ${classItem.isActive !== false ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-300 cursor-not-allowed'}`}
-                          title={classItem.isActive === false ? 'Kelas tidak aktif - tidak dapat dikelola' : 'Kelola kelas'}
+                          disabled={isActionLocked(classItem)}
+                          className={`inline-flex items-center justify-center rounded-lg p-2 transition-colors ${isActionLocked(classItem) ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}
+                          title={
+                            isActionLocked(classItem)
+                              ? 'Kelas tidak aktif - tidak dapat dikelola'
+                              : (isClassReadOnly(classItem)
+                                  ? 'Lihat kelas'
+                                  : 'Kelola kelas')
+                          }
+                          aria-label={isClassReadOnly(classItem) ? 'Lihat Kelas' : 'Kelola Kelas'}
                         >
-                          Kelola
+                          <Eye size={16} />
                         </button>
                       </td>
                     </tr>
@@ -476,7 +575,10 @@ export default function WaliKelasClassManagementPage() {
             {/* Mobile Cards View */}
             <div className="md:hidden space-y-4">
               {classes.map((classItem) => (
-                <div key={classItem.id} className={`bg-white rounded-lg shadow-md border border-gray-200 p-4 ${classItem.isActive === false ? 'opacity-70' : ''}`}>
+                <div
+                  key={classItem.id}
+                  className={`bg-white rounded-lg shadow-md border border-gray-200 p-4 ${isActionLocked(classItem) ? 'opacity-70' : ''}`}
+                >
                   <div className="mb-4">
                     <div className="flex items-center gap-2 mb-1">
                       <p className="font-bold text-lg text-gray-900">{classItem.name}</p>
@@ -497,19 +599,24 @@ export default function WaliKelasClassManagementPage() {
 
                   <button
                     onClick={() => {
-                      if (classItem.isActive !== false) {
-                        setSelectedClassId(classItem.id);
-                        setSelectedClassName(classItem.name);
-                        setSelectedClassActive(!!classItem.isActive);
-                        setActiveTab('subjects');
-                        fetchAllSubjects();
-                      }
+                      setSelectedClassId(classItem.id);
+                      setSelectedClassName(classItem.name);
+                      setSelectedClassReadOnly(isClassReadOnly(classItem));
+                      setActiveTab('subjects');
+                      fetchAllSubjects();
                     }}
-                    disabled={classItem.isActive === false}
-                    className={`w-full text-white px-4 py-2 rounded-lg font-medium transition-colors ${classItem.isActive !== false ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-300 cursor-not-allowed'}`}
-                    title={classItem.isActive === false ? 'Kelas tidak aktif - tidak dapat dikelola' : 'Kelola kelas'}
+                    disabled={isActionLocked(classItem)}
+                    className={`inline-flex w-full items-center justify-center rounded-lg p-2 transition-colors ${isActionLocked(classItem) ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}
+                    title={
+                      isActionLocked(classItem)
+                        ? 'Kelas tidak aktif - tidak dapat dikelola'
+                        : (isClassReadOnly(classItem)
+                            ? 'Lihat kelas'
+                            : 'Kelola kelas')
+                    }
+                    aria-label={isClassReadOnly(classItem) ? 'Lihat Kelas' : 'Kelola Kelas'}
                   >
-                    {classItem.isActive === false ? 'Tidak Aktif' : 'Kelola Kelas'}
+                    <Eye size={16} />
                   </button>
                 </div>
               ))}
@@ -529,6 +636,7 @@ export default function WaliKelasClassManagementPage() {
             onClick={() => {
               setSelectedClassId(null);
               setSelectedClassName('');
+              setSelectedClassReadOnly(false);
               setShowSubjectForm(false);
               setShowTeacherForm(false);
             }}
@@ -540,10 +648,23 @@ export default function WaliKelasClassManagementPage() {
             <h1 className="text-xl sm:text-3xl font-bold text-gray-900">
               Manajemen Kelas - {selectedClassName}
             </h1>
-            <p className="text-gray-600 mt-1 text-xs sm:text-base">Kelola mata pelajaran dan guru pengajar</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs sm:text-base">
+              <p className="text-gray-600">Kelola mata pelajaran dan guru pengajar</p>
+              {selectedClassReadOnly && (
+                <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700">
+                  Mode baca
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
+
+      {selectedClassReadOnly && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Semester atau tahun ajaran kelas ini sudah lewat. Data tetap bisa dibaca, tetapi tambah, ubah, hapus, dan impor dinonaktifkan.
+        </div>
+      )}
 
       {successMessage && (
         <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
@@ -605,7 +726,7 @@ export default function WaliKelasClassManagementPage() {
         {activeTab === 'subjects' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row gap-3">
-              {!showSubjectForm && (
+              {canModifySelectedClass && !showSubjectForm && (
                 <button
                   onClick={() => {
                     setShowSubjectForm(true);
@@ -622,21 +743,23 @@ export default function WaliKelasClassManagementPage() {
               >
                 <Download size={20} /> <span className="hidden sm:inline">Unduh Template</span><span className="sm:hidden">Template</span>
               </button>
-              <label className="flex-1 sm:flex-none bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 cursor-pointer flex items-center justify-center gap-2 transition-colors text-sm sm:text-base">
-                <Upload size={20} /> <span className="hidden sm:inline">Impor Data</span><span className="sm:hidden">Impor</span>
-                <input
-                  type="file"
-                  accept=".csv,.xlsx,.xls"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      handleImport('subjects', file);
-                    }
-                  }}
-                  disabled={isImporting}
-                  className="hidden"
-                />
-              </label>
+              {canModifySelectedClass && (
+                <label className="flex-1 sm:flex-none bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 cursor-pointer flex items-center justify-center gap-2 transition-colors text-sm sm:text-base">
+                  <Upload size={20} /> <span className="hidden sm:inline">Impor Data</span><span className="sm:hidden">Impor</span>
+                  <input
+                    type="file"
+                    accept=".csv,.xlsx,.xls"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        handleImport('subjects', file);
+                      }
+                    }}
+                    disabled={isImporting}
+                    className="hidden"
+                  />
+                </label>
+              )}
               <button
                 onClick={() => handleExport('subjects')}
                 className="flex-1 sm:flex-none bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
@@ -645,7 +768,18 @@ export default function WaliKelasClassManagementPage() {
               </button>
             </div>
 
-            {showSubjectForm && (
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+              <label className="block text-sm font-semibold text-gray-800 mb-2">Cari Mata Pelajaran di Tabel</label>
+              <input
+                type="text"
+                value={subjectTableSearch}
+                onChange={(e) => setSubjectTableSearch(e.target.value)}
+                placeholder="Cari kode, nama, arab, atau deskripsi..."
+                className="w-full px-4 py-3 bg-white border border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
+            {showSubjectForm && canModifySelectedClass && (
               <div className="bg-emerald-50 rounded-lg p-4 sm:p-6 border-l-4 border-emerald-600">
                 <h3 className="text-lg font-semibold mb-4">Tambah Mata Pelajaran</h3>
                 <form onSubmit={handleAddSubject} className="space-y-4">
@@ -738,14 +872,14 @@ export default function WaliKelasClassManagementPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {classSubjects.length === 0 ? (
+                  {filteredClassSubjects.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                        Belum ada mata pelajaran
+                        {subjectTableSearch ? 'Tidak ada mata pelajaran yang cocok dengan pencarian.' : 'Belum ada mata pelajaran'}
                       </td>
                     </tr>
                   ) : (
-                    [...classSubjects].sort((a, b) => a.subject.code.localeCompare(b.subject.code, undefined, { numeric: true, sensitivity: 'base' })).slice((subjectCurrentPage - 1) * itemsPerPage, subjectCurrentPage * itemsPerPage).map((cs) => (
+                    filteredClassSubjects.slice((subjectCurrentPage - 1) * itemsPerPage, subjectCurrentPage * itemsPerPage).map((cs) => (
                       <tr key={cs.id} className="border-b hover:bg-gray-50">
                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{cs.subject.code}</td>
                         <td className="px-6 py-4 text-sm text-gray-700">{cs.subject.name}</td>
@@ -756,12 +890,16 @@ export default function WaliKelasClassManagementPage() {
                           {cs.subject.description || '-'}
                         </td>
                         <td className="px-6 py-4 text-center">
-                          <button
-                            onClick={() => handleDeleteSubject(cs.subject.id)}
-                            className="text-red-600 hover:text-red-900 transition-colors"
-                          >
-                            <Trash2 size={18} />
-                          </button>
+                          {canModifySelectedClass ? (
+                            <button
+                              onClick={() => handleDeleteSubject(cs.subject.id)}
+                              className="text-red-600 hover:text-red-900 transition-colors"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          ) : (
+                            <span className="text-xs text-gray-400">Baca</span>
+                          )}
                         </td>
                       </tr>
                     ))
@@ -772,12 +910,12 @@ export default function WaliKelasClassManagementPage() {
 
             {/* Subjects Cards - Mobile */}
             <div className="md:hidden space-y-4">
-              {classSubjects.length === 0 ? (
+              {filteredClassSubjects.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
-                  Belum ada mata pelajaran
+                  {subjectTableSearch ? 'Tidak ada mata pelajaran yang cocok dengan pencarian.' : 'Belum ada mata pelajaran'}
                 </div>
               ) : (
-                [...classSubjects].sort((a, b) => a.subject.code.localeCompare(b.subject.code, undefined, { numeric: true, sensitivity: 'base' })).slice((subjectCurrentPage - 1) * itemsPerPage, subjectCurrentPage * itemsPerPage).map((cs) => (
+                filteredClassSubjects.slice((subjectCurrentPage - 1) * itemsPerPage, subjectCurrentPage * itemsPerPage).map((cs) => (
                   <div key={cs.id} className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
                     <div className="mb-3 flex items-start justify-between">
                       <div className="flex-1">
@@ -794,22 +932,28 @@ export default function WaliKelasClassManagementPage() {
                       </div>
                     )}
 
-                    <button
-                      onClick={() => handleDeleteSubject(cs.subject.id)}
-                      className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Trash2 size={16} /> Hapus
-                    </button>
+                    {canModifySelectedClass ? (
+                      <button
+                        onClick={() => handleDeleteSubject(cs.subject.id)}
+                        className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Trash2 size={16} /> Hapus
+                      </button>
+                    ) : (
+                      <div className="w-full px-3 py-2 bg-gray-100 text-gray-500 text-sm font-medium rounded-lg text-center">
+                        Mode baca
+                      </div>
+                    )}
                   </div>
                 ))
               )}
             </div>
 
             {/* Subjects Pagination */}
-            {classSubjects.length > itemsPerPage && (
+            {filteredClassSubjects.length > itemsPerPage && (
               <div className="flex items-center justify-between mt-6 px-2 bg-gray-50 py-4 rounded-lg">
                 <div className="text-sm font-medium text-gray-700">
-                  Menampilkan {(subjectCurrentPage - 1) * itemsPerPage + 1} - {Math.min(subjectCurrentPage * itemsPerPage, classSubjects.length)} dari {classSubjects.length} mata pelajaran
+                  Menampilkan {(subjectCurrentPage - 1) * itemsPerPage + 1} - {Math.min(subjectCurrentPage * itemsPerPage, filteredClassSubjects.length)} dari {filteredClassSubjects.length} mata pelajaran
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -835,8 +979,8 @@ export default function WaliKelasClassManagementPage() {
                     ))}
                   </div>
                   <button
-                    onClick={() => setSubjectCurrentPage(Math.min(Math.ceil(classSubjects.length / itemsPerPage), subjectCurrentPage + 1))}
-                    disabled={subjectCurrentPage === Math.ceil(classSubjects.length / itemsPerPage)}
+                    onClick={() => setSubjectCurrentPage(Math.min(Math.ceil(filteredClassSubjects.length / itemsPerPage), subjectCurrentPage + 1))}
+                    disabled={subjectCurrentPage === Math.ceil(filteredClassSubjects.length / itemsPerPage)}
                     className="px-4 py-3 bg-emerald-600 text-white border-2 border-emerald-600 font-semibold rounded-lg hover:bg-emerald-700 transition-colors disabled:bg-gray-300 disabled:border-gray-300 disabled:cursor-not-allowed"
                   >
                     Selanjutnya →
@@ -851,7 +995,7 @@ export default function WaliKelasClassManagementPage() {
         {activeTab === 'teachers' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row gap-3">
-              {!showTeacherForm && (
+              {canModifySelectedClass && !showTeacherForm && (
                 <button
                   onClick={() => {
                     setShowTeacherForm(true);
@@ -871,21 +1015,23 @@ export default function WaliKelasClassManagementPage() {
               >
                 <Download size={20} /> <span className="hidden sm:inline">Unduh Template</span><span className="sm:hidden">Template</span>
               </button>
-              <label className="flex-1 sm:flex-none bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 cursor-pointer flex items-center justify-center gap-2 transition-colors text-sm sm:text-base">
-                <Upload size={20} /> <span className="hidden sm:inline">Impor Data</span><span className="sm:hidden">Impor</span>
-                <input
-                  type="file"
-                  accept=".csv,.xlsx,.xls"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      handleImport('teachers', file);
-                    }
-                  }}
-                  disabled={isImporting}
-                  className="hidden"
-                />
-              </label>
+              {canModifySelectedClass && (
+                <label className="flex-1 sm:flex-none bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 cursor-pointer flex items-center justify-center gap-2 transition-colors text-sm sm:text-base">
+                  <Upload size={20} /> <span className="hidden sm:inline">Impor Data</span><span className="sm:hidden">Impor</span>
+                  <input
+                    type="file"
+                    accept=".csv,.xlsx,.xls"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        handleImport('teachers', file);
+                      }
+                    }}
+                    disabled={isImporting}
+                    className="hidden"
+                  />
+                </label>
+              )}
               <button
                 onClick={() => handleExport('teachers')}
                 className="flex-1 sm:flex-none bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
@@ -894,7 +1040,18 @@ export default function WaliKelasClassManagementPage() {
               </button>
             </div>
 
-            {showTeacherForm && (
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+              <label className="block text-sm font-semibold text-gray-800 mb-2">Cari Guru Pengajar di Tabel</label>
+              <input
+                type="text"
+                value={teacherTableSearch}
+                onChange={(e) => setTeacherTableSearch(e.target.value)}
+                placeholder="Cari nama guru, email, kode, atau mata pelajaran..."
+                className="w-full px-4 py-3 bg-white border border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
+            {showTeacherForm && canModifySelectedClass && (
               <div className="bg-emerald-50 rounded-lg p-4 sm:p-6 border-l-4 border-emerald-600">
                 <h3 className="text-lg font-semibold mb-4">Tambah Guru Pengajar</h3>
                 <form onSubmit={handleAddTeacher} className="space-y-4">
@@ -1034,14 +1191,14 @@ export default function WaliKelasClassManagementPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {classTeachers.length === 0 ? (
+                  {filteredClassTeachers.length === 0 ? (
                     <tr>
                       <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
-                        Belum ada guru
+                        {teacherTableSearch ? 'Tidak ada guru yang cocok dengan pencarian.' : 'Belum ada guru'}
                       </td>
                     </tr>
                   ) : (
-                    [...classTeachers].sort((a, b) => a.subject.code.localeCompare(b.subject.code, undefined, { numeric: true, sensitivity: 'base' })).slice((teacherCurrentPage - 1) * itemsPerPage, teacherCurrentPage * itemsPerPage).map((ct) => (
+                    filteredClassTeachers.slice((teacherCurrentPage - 1) * itemsPerPage, teacherCurrentPage * itemsPerPage).map((ct) => (
                       <tr key={ct.id} className="border-b hover:bg-gray-50">
                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{ct.teacher.name}</td>
                         <td className="px-6 py-4 text-sm text-gray-700">{ct.teacher.email}</td>
@@ -1049,12 +1206,16 @@ export default function WaliKelasClassManagementPage() {
                           {ct.subject.code} - {ct.subject.name}
                         </td>
                         <td className="px-6 py-4 text-center">
-                          <button
-                            onClick={() => handleDeleteTeacher(ct.id)}
-                            className="text-red-600 hover:text-red-900"
-                          >
-                            <Trash2 size={18} />
-                          </button>
+                          {canModifySelectedClass ? (
+                            <button
+                              onClick={() => handleDeleteTeacher(ct.id)}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          ) : (
+                            <span className="text-xs text-gray-400">Baca</span>
+                          )}
                         </td>
                       </tr>
                     ))
@@ -1065,12 +1226,12 @@ export default function WaliKelasClassManagementPage() {
 
             {/* Teachers Cards - Mobile */}
             <div className="md:hidden space-y-4">
-              {classTeachers.length === 0 ? (
+              {filteredClassTeachers.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
-                  Belum ada guru
+                  {teacherTableSearch ? 'Tidak ada guru yang cocok dengan pencarian.' : 'Belum ada guru'}
                 </div>
               ) : (
-                [...classTeachers].sort((a, b) => a.subject.code.localeCompare(b.subject.code, undefined, { numeric: true, sensitivity: 'base' })).slice((teacherCurrentPage - 1) * itemsPerPage, teacherCurrentPage * itemsPerPage).map((ct) => (
+                filteredClassTeachers.slice((teacherCurrentPage - 1) * itemsPerPage, teacherCurrentPage * itemsPerPage).map((ct) => (
                   <div key={ct.id} className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
                     <div className="mb-3">
                       <p className="font-bold text-lg text-gray-900">{ct.teacher.name}</p>
@@ -1083,22 +1244,28 @@ export default function WaliKelasClassManagementPage() {
                       </p>
                     </div>
 
-                    <button
-                      onClick={() => handleDeleteTeacher(ct.id)}
-                      className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Trash2 size={16} /> Hapus
-                    </button>
+                    {canModifySelectedClass ? (
+                      <button
+                        onClick={() => handleDeleteTeacher(ct.id)}
+                        className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Trash2 size={16} /> Hapus
+                      </button>
+                    ) : (
+                      <div className="w-full px-3 py-2 bg-gray-100 text-gray-500 text-sm font-medium rounded-lg text-center">
+                        Mode baca
+                      </div>
+                    )}
                   </div>
                 ))
               )}
             </div>
 
             {/* Teachers Pagination */}
-            {classTeachers.length > itemsPerPage && (
+            {filteredClassTeachers.length > itemsPerPage && (
               <div className="flex items-center justify-between mt-6 px-2 bg-gray-50 py-4 rounded-lg">
                 <div className="text-sm font-medium text-gray-700">
-                  Menampilkan {(teacherCurrentPage - 1) * itemsPerPage + 1} - {Math.min(teacherCurrentPage * itemsPerPage, classTeachers.length)} dari {classTeachers.length} guru
+                  Menampilkan {(teacherCurrentPage - 1) * itemsPerPage + 1} - {Math.min(teacherCurrentPage * itemsPerPage, filteredClassTeachers.length)} dari {filteredClassTeachers.length} guru
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -1124,8 +1291,8 @@ export default function WaliKelasClassManagementPage() {
                     ))}
                   </div>
                   <button
-                    onClick={() => setTeacherCurrentPage(Math.min(Math.ceil(classTeachers.length / itemsPerPage), teacherCurrentPage + 1))}
-                    disabled={teacherCurrentPage === Math.ceil(classTeachers.length / itemsPerPage)}
+                    onClick={() => setTeacherCurrentPage(Math.min(Math.ceil(filteredClassTeachers.length / itemsPerPage), teacherCurrentPage + 1))}
+                    disabled={teacherCurrentPage === Math.ceil(filteredClassTeachers.length / itemsPerPage)}
                     className="px-4 py-3 bg-emerald-600 text-white border-2 border-emerald-600 font-semibold rounded-lg hover:bg-emerald-700 transition-colors disabled:bg-gray-300 disabled:border-gray-300 disabled:cursor-not-allowed"
                   >
                     Selanjutnya →

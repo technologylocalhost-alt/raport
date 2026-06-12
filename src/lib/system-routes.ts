@@ -10,6 +10,8 @@ export interface SystemRouteMeta {
 }
 
 export const SYSTEM_ROUTE_META: readonly SystemRouteMeta[] = [
+  { path: '/access-denied', category: 'utility', access: 'always' },
+
   { path: '/admin/profile', category: 'profile', access: 'always' },
   { path: '/teacher/profile', category: 'profile', access: 'always' },
   { path: '/wali-kelas/profile', category: 'profile', access: 'always' },
@@ -21,7 +23,6 @@ export const SYSTEM_ROUTE_META: readonly SystemRouteMeta[] = [
   { path: '/admin/raport-arab/detail', category: 'detail', access: 'catalogued' },
   { path: '/admin/raport-mental/laporan', category: 'report', access: 'catalogued' },
   { path: '/admin/reports/detail', category: 'detail', access: 'catalogued' },
-  { path: '/admin/santri/tambah', category: 'utility', access: 'catalogued' },
   { path: '/admin/school-years', category: 'utility', access: 'catalogued' },
   { path: '/admin/semesters', category: 'utility', access: 'catalogued' },
 

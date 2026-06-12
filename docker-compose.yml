@@ -15,12 +15,12 @@ services:
       JWT_ACCESS_EXPIRY: ${JWT_ACCESS_EXPIRY:-15m}
       JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY:-7d}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-your-secret-key}
-      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:25000}
-      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:25000}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:9876}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:9876}
       # Memory optimization for Node.js and Puppeteer
       NODE_OPTIONS: "--max-old-space-size=512"
     ports:
-      - "${APP_PORT:-25000}:3000"
+      - "${APP_PORT:-9876}:9876"
     volumes:
       - ./.env:/app/.env
     restart: unless-stopped
@@ -31,7 +31,7 @@ services:
     cpus: 1
     # Optimized health check
     healthcheck:
-      test: ["CMD", "bun", "run", "-e", "fetch('http://localhost:3000/api/health').catch(() => process.exit(1))"]
+      test: ["CMD", "bun", "run", "-e", "fetch('http://localhost:9876/api/health').catch(() => process.exit(1))"]
       interval: 60s
       timeout: 5s
       retries: 3

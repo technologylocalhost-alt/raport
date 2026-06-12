@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import * as XLSX from 'xlsx';
 import { serverError } from '@/lib/server-log';
@@ -53,7 +53,7 @@ function normalizeRow(row: ImportRow): NormalizedRow {
 export async function POST(request: NextRequest) {
   try {
     // Verify admin
-    const user = await requireAdminOrPrincipal(request);
+    const user = await requireMenuAccess(request, '/admin/subjects', ['ADMIN', 'PRINCIPAL']);
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -239,7 +239,7 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     // Log failed import
-    const verifyUser = await requireAdminOrPrincipal(request);
+    const verifyUser = await requireMenuAccess(request, '/admin/subjects', ['ADMIN', 'PRINCIPAL']);
     if (verifyUser) {
       const ipAddress = getClientIp(request);
       const userAgent = getUserAgent(request);

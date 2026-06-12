@@ -2,12 +2,12 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import { serverError } from '@/lib/server-log';
 
 async function requireLevelAccess(req: NextRequest) {
-  return requireAdminOrPrincipal(req);
+  return requireMenuAccess(req, '/admin/levels', ['ADMIN', 'PRINCIPAL']);
 }
 
 const levelSchema = z.object({
@@ -25,6 +25,11 @@ const levelSchema = z.object({
  */
 export async function GET(request: NextRequest) {
   try {
+    const admin = await requireLevelAccess(request);
+    if (!admin) {
+      return errorResponse('Unauthorized', 401);
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');

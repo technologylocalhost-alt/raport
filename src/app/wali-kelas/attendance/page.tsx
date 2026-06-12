@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, FormEvent, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, X, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
-import { getCurrentUser } from '@/lib/auth/client';
+import { fetchCurrentUser } from '@/lib/auth/client';
 import { devError } from '@/lib/dev-log';
 
 interface AttendanceRecord {
@@ -95,8 +95,12 @@ function AttendancePageContent() {
   const itemsPerPage = 10;
 
   useEffect(() => {
-    const parsedUser = getCurrentUser();
-    if (parsedUser) {
+    let active = true;
+
+    async function bootstrapSession() {
+      const parsedUser = await fetchCurrentUser();
+      if (!active || !parsedUser) return;
+
       const classIdParam = searchParams.get('classId');
       if (classIdParam) {
         setSelectedClassId(classIdParam);
@@ -105,6 +109,12 @@ function AttendancePageContent() {
         void fetchClasses(parsedUser.id);
       }
     }
+
+    void bootstrapSession();
+
+    return () => {
+      active = false;
+    };
   }, [searchParams]);
 
   useEffect(() => {

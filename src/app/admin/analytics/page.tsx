@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Filter, ChevronDown, ChevronUp, School } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
-import { getCurrentUser } from '@/lib/auth/client';
+import { fetchCurrentUser } from '@/lib/auth/client';
 import { devError } from '@/lib/dev-log';
 
 interface School {
@@ -298,17 +298,28 @@ export default function AnalyticsPage() {
   }, [filterLevel, filterSchoolYear, filterSemester]);
 
   useEffect(() => {
-    const user = getCurrentUser();
-    if (!user) {
-      router.push('/login');
-      return;
+    let active = true;
+
+    async function bootstrapSession() {
+      const user = await fetchCurrentUser();
+      if (!active) return;
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+
+      void fetchFilterOptions();
+      void fetchStats();
+      void fetchGradesPerClass();
+      void fetchGradesPerSubject();
+      void fetchSchoolRankings();
     }
 
-    void fetchFilterOptions();
-    void fetchStats();
-    void fetchGradesPerClass();
-    void fetchGradesPerSubject();
-    void fetchSchoolRankings();
+    void bootstrapSession();
+
+    return () => {
+      active = false;
+    };
   }, [router, fetchFilterOptions, fetchGradesPerClass, fetchGradesPerSubject, fetchSchoolRankings, fetchStats]);
 
   useEffect(() => {

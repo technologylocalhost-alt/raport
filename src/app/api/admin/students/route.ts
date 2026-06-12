@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/db';
+import { requireEditableClassByPeriod } from '@/lib/auth/class-access';
 import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { logActivity, getClientIp, getUserAgent } from '@/lib/activity-logger';
 import { serverError } from '@/lib/server-log';
@@ -122,6 +123,11 @@ export async function POST(request: NextRequest) {
 
     if (!name || !studentNo || !classId) {
       return errorResponse('Name, student number, and class are required', 400);
+    }
+
+    const writableClass = await requireEditableClassByPeriod(classId);
+    if (!writableClass.ok) {
+      return errorResponse('Kelas semester lampau hanya dapat dibaca', 403);
     }
 
     // Check if student number already exists

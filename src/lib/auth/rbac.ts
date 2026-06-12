@@ -3,7 +3,7 @@ import { UserRole } from '@prisma/client';
 
 /**
  * Check if a user can access a specific menu path based on MenuPermission records.
- * Default: if no MenuPermission record exists for the path, access is allowed (backward compatible).
+ * Default: fail closed if no MenuPermission record exists for the path.
  */
 export async function canAccessMenu(
   menuPath: string,
@@ -14,13 +14,13 @@ export async function canAccessMenu(
     where: { menuPath },
   });
 
-  // No record = no restriction (backward compatible)
-  if (!permission) return true;
+  // Missing permission row = deny until the route is explicitly catalogued.
+  if (!permission) return false;
 
-  // Inactive permission = hidden from everyone
+  // Inactive permission = hidden from everyone.
   if (!permission.isActive) return false;
 
-  // Check role
+  // Check role.
   if (permission.roles !== 'ALL') {
     const allowedRoles = permission.roles.split(',').map((r) => r.trim());
     if (!allowedRoles.includes(userRole)) return false;
@@ -30,10 +30,9 @@ export async function canAccessMenu(
     userRole === UserRole.ADMIN ||
     userRole === UserRole.PRINCIPAL;
 
-  // Check bagian (if restriction is set)
+  // Check bagian (if restriction is set).
   if (permission.bagian && !bypassBagianCheck) {
     const requiredBagian = permission.bagian.split(',').map((b) => b.trim());
-    // User must have at least one matching bagian
     const hasMatch = requiredBagian.some((b) => userBagian.includes(b));
     if (!hasMatch) return false;
   }
@@ -63,7 +62,7 @@ export async function getAllowedMenuPaths(
 ): Promise<string[]> {
   const permissions = await getMenuPermissions(menuGroup);
 
-  // If no permissions exist at all, return empty array to signal "no restrictions"
+  // Missing registry rows should never broaden access.
   if (permissions.length === 0) return [];
 
   const allowed: string[] = [];
@@ -75,13 +74,13 @@ export async function getAllowedMenuPaths(
       userRole === UserRole.ADMIN ||
       userRole === UserRole.PRINCIPAL;
 
-    // Check role
+    // Check role.
     if (perm.roles !== 'ALL') {
       const allowedRoles = perm.roles.split(',').map((r) => r.trim());
       if (!allowedRoles.includes(userRole)) continue;
     }
 
-    // Check bagian
+    // Check bagian.
     if (perm.bagian && !bypassBagianCheck) {
       const requiredBagian = perm.bagian.split(',').map((b) => b.trim());
       const hasMatch = requiredBagian.some((b) => userBagian.includes(b));

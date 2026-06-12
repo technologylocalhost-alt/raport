@@ -39,6 +39,24 @@ interface ClassItem {
   _count?: { students: number };
 }
 
+interface PreviewTeacher {
+  teacher: { id: string; name: string; email: string };
+  subject: { id: string; name: string; code: string };
+}
+
+interface GeneratedTargetPreview {
+  id: string | null;
+  name: string;
+  capacity: number;
+  level: Level & { levelCount?: number | null };
+  schoolYear: { id: string; year: string };
+  semester: { id: string; number: number };
+  waliKelas?: { id: string; name: string; email?: string | null } | null;
+  isActive: boolean;
+  teachers: PreviewTeacher[];
+  _count?: { students: number };
+}
+
 interface PendingSubject {
   id: string;
   name: string;
@@ -54,12 +72,11 @@ interface EligibilityResult {
   totalStudents: number;
   class: { id: string; name: string; level: Level };
   nextLevel: Level | null;
-  targetClassSuggestions: Array<{
-    id: string;
-    name: string;
-    levelId: string;
-    level: Level;
-  }>;
+  promotionType?: 'SEMESTER' | 'LEVEL' | null;
+  targetSchoolYear?: { id: string; year: string } | null;
+  targetSemester?: { id: string; number: number } | null;
+  targetClassName?: string | null;
+  targetClassSuggestions: ClassItem[];
   reason?: string;
 }
 
@@ -94,6 +111,10 @@ export function NaikKelasContent() {
 
   // Step 3 data
   const [targetClasses, setTargetClasses] = useState<ClassItem[]>([]);
+  const [isGeneratingTarget, setIsGeneratingTarget] = useState(false);
+  const [targetPreview, setTargetPreview] = useState<GeneratedTargetPreview | null>(null);
+  const [showTargetPreview, setShowTargetPreview] = useState(false);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   // Step 4 data
   const [students, setStudents] = useState<Student[]>([]);
@@ -237,11 +258,77 @@ export function NaikKelasContent() {
     
     // Set target classes dan show step 3
     if (eligibility.targetClassSuggestions && eligibility.targetClassSuggestions.length > 0) {
-      setTargetClasses(eligibility.targetClassSuggestions as unknown as ClassItem[]);
+      setTargetClasses(eligibility.targetClassSuggestions);
       setStep(3);
     } else {
       setError('Tidak ada kelas tujuan yang tersedia untuk promosi');
     }
+  }
+
+  async function handleGenerateTarget() {
+    if (!selectedSourceClassId) {
+      setError('Pilih kelas terlebih dahulu');
+      return;
+    }
+
+    setIsPreviewLoading(true);
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/admin/classes/${selectedSourceClassId}/generate-target`);
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setError(data.error || 'Gagal memuat pratinjau kelas tujuan');
+        return;
+      }
+
+      setTargetPreview(data.data?.class || null);
+      setShowTargetPreview(true);
+    } catch {
+      setError('Gagal menghubungi server');
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  }
+
+  async function confirmGenerateTarget() {
+    if (!selectedSourceClassId) return;
+
+    setIsGeneratingTarget(true);
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/admin/classes/${selectedSourceClassId}/generate-target`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setError(data.error || 'Gagal menggenerate kelas tujuan');
+        return;
+      }
+
+      setShowTargetPreview(false);
+      setTargetPreview(null);
+      const refreshedRes = await apiFetch(`/api/admin/classes/${selectedSourceClassId}/promotion-eligibility`);
+      const refreshedData = await refreshedRes.json();
+      if (refreshedRes.ok && refreshedData.success) {
+        setEligibility(refreshedData.data);
+        if (refreshedData.data?.targetClassSuggestions?.length) {
+          setTargetClasses(refreshedData.data.targetClassSuggestions);
+          setStep(3);
+        }
+      } else {
+        await checkEligibility(selectedSourceClassId);
+      }
+      setSuccessMsg(data.message || 'Kelas tujuan berhasil digenerate');
+    } catch {
+      setError('Gagal menghubungi server');
+    } finally {
+      setIsGeneratingTarget(false);
+    }
+  }
+
+  function closeTargetPreview() {
+    setShowTargetPreview(false);
+    setTargetPreview(null);
   }
 
 
@@ -410,23 +497,58 @@ export function NaikKelasContent() {
         </div>
       )}
 
+      {successMsg && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
+          <CheckCircle className="text-green-500 flex-shrink-0 mt-0.5" size={20} />
+          <div>
+            <p className="text-green-800 font-medium">Berhasil</p>
+            <p className="text-green-700 text-sm mt-1">{successMsg}</p>
+          </div>
+          <button onClick={() => setSuccessMsg('')} className="ml-auto text-green-400 hover:text-green-600">
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* ── STEP 1: Pilih Kelas Asal ── */}
       {step === 1 && (
-        <div className="bg-white rounded-lg shadow p-6 space-y-4">
-          <h2 className="text-lg font-bold text-gray-900">Langkah 1 — Pilih Kelas Asal</h2>
-          <p className="text-sm text-gray-600">
-            Pilih kelas yang akan diproses naik kelas. Pastikan kelas sudah memiliki semua nilai yang di-approve.
-          </p>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6 space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Langkah 1 - Pilih Kelas Asal</h2>
+              <p className="text-sm text-slate-600 mt-1">
+                Pilih kelas yang akan diproses naik kelas. Pastikan semua nilai sudah di-approve.
+              </p>
+            </div>
+            <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
+              {filteredClasses.length} kelas ditemukan
+            </div>
+          </div>
 
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            <input
-              type="text"
-              placeholder="Cari kelas atau jenjang..."
-              value={classSearch}
-              onChange={(e) => setClassSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-            />
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Pencarian Kelas
+            </label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input
+                  type="text"
+                  placeholder="Cari nama kelas atau jenjang..."
+                  value={classSearch}
+                  onChange={(e) => setClassSearch(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-purple-500 focus:ring-4 focus:ring-purple-100"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setClassSearch('')}
+                disabled={!classSearch}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Bersihkan
+              </button>
+            </div>
           </div>
 
           {isLoading ? (
@@ -556,13 +678,38 @@ export function NaikKelasContent() {
                   <div>
                     <p className={`font-semibold ${eligibility.eligible ? 'text-green-800' : 'text-red-800'}`}>
                       {eligibility.eligible
-                        ? '✅ Kelas ini memenuhi syarat naik kelas!'
+                        ? eligibility.targetClassSuggestions.length > 0
+                          ? '✅ Kelas ini memenuhi syarat naik kelas!'
+                          : '✅ Syarat akademik terpenuhi, tapi kelas tujuan belum tersedia'
                         : '❌ Kelas ini belum memenuhi syarat naik kelas'}
                     </p>
-                    {eligibility.eligible && eligibility.nextLevel && (
+                    {eligibility.eligible && (
                       <p className="text-green-700 text-sm mt-1">
-                        Level berikutnya:{' '}
-                        <span className="font-semibold">{eligibility.nextLevel.name}</span>
+                        {eligibility.promotionType === 'SEMESTER' ? (
+                          <>
+                            Lanjut semester:{' '}
+                            <span className="font-semibold">
+                              Semester {eligibility.targetSemester?.number ?? '-'}{' '}
+                              {eligibility.targetSchoolYear?.year ? `(${eligibility.targetSchoolYear.year})` : ''}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            Level berikutnya:{' '}
+                            <span className="font-semibold">{eligibility.nextLevel?.name ?? '-'}</span>
+                          </>
+                        )}
+                      </p>
+                    )}
+                    {eligibility.eligible && !eligibility.targetClassSuggestions.length && eligibility.reason && (
+                      <p className="text-amber-700 text-sm mt-1">
+                        {eligibility.reason}
+                      </p>
+                    )}
+                    {eligibility.eligible && eligibility.targetClassName && (
+                      <p className="text-green-700 text-sm mt-1">
+                        Kelas tujuan:{' '}
+                        <span className="font-semibold">{eligibility.targetClassName}</span>
                       </p>
                     )}
                     {!eligibility.eligible && eligibility.reason && (
@@ -573,7 +720,7 @@ export function NaikKelasContent() {
                         Selesaikan persetujuan nilai untuk semua mata pelajaran berikut sebelum melanjutkan.
                       </p>
                     )}
-                    {!eligibility.nextLevel && eligibility.eligible && (
+                    {eligibility.eligible && eligibility.promotionType === 'LEVEL' && !eligibility.nextLevel && (
                       <p className="text-orange-600 text-sm mt-1">
                         ⚠️ Tidak ada level berikutnya. Pastikan urutan level sudah diatur di halaman Jenjang Pendidikan.
                       </p>
@@ -626,14 +773,33 @@ export function NaikKelasContent() {
                 <RefreshCw size={16} />
                 Refresh
               </button>
-              <button
-                onClick={handleGoToStep3}
-                disabled={!eligibility?.eligible || !eligibility?.nextLevel}
-                className="flex items-center gap-2 bg-purple-600 text-white px-6 py-2.5 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-              >
-                Pilih Kelas Tujuan
-                <ChevronRight size={18} />
-              </button>
+                <button
+                  onClick={handleGoToStep3}
+                  disabled={!eligibility?.eligible || (eligibility.targetClassSuggestions?.length ?? 0) === 0}
+                  className="flex items-center gap-2 bg-purple-600 text-white px-6 py-2.5 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                >
+                  {eligibility?.targetClassSuggestions?.length ? 'Pilih Kelas Tujuan' : 'Kelas Tujuan Belum Siap'}
+                  <ChevronRight size={18} />
+                </button>
+              {eligibility?.eligible && (eligibility.targetClassSuggestions?.length ?? 0) === 0 && (
+                <button
+                  onClick={handleGenerateTarget}
+                  disabled={isPreviewLoading}
+                  className="flex items-center gap-2 bg-amber-600 text-white px-6 py-2.5 rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                >
+                  {isPreviewLoading ? (
+                    <>
+                      <RefreshCw className="animate-spin" size={18} />
+                      Memuat pratinjau...
+                    </>
+                  ) : (
+                    <>
+                      <TrendingUp size={18} />
+                      Generate Kelas Tujuan
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -921,6 +1087,136 @@ export function NaikKelasContent() {
             >
               Lihat Data Siswa
             </a>
+          </div>
+        </div>
+      )}
+
+      {showTargetPreview && targetPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/60 px-4 py-6">
+          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl overflow-hidden">
+            <div className="flex items-start justify-between gap-4 border-b border-gray-200 px-6 py-5">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-purple-600">
+                  Pratinjau Kelas Tujuan
+                </p>
+                <h3 className="mt-1 text-xl font-bold text-gray-900">
+                  {targetPreview.name}
+                </h3>
+                <p className="mt-1 text-sm text-gray-600">
+                  Informasi berikut hanya pratinjau. Kelas baru akan dibuat setelah Anda menekan tombol konfirmasi.
+                </p>
+              </div>
+              <button
+                onClick={closeTargetPreview}
+                className="rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors"
+                aria-label="Tutup pratinjau"
+              >
+                <XCircle size={22} />
+              </button>
+            </div>
+
+            <div className="grid gap-4 px-6 py-6 md:grid-cols-2">
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
+                  Identitas Kelas
+                </p>
+                <div className="mt-3 space-y-3 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-gray-500">Nama kelas</span>
+                    <span className="font-semibold text-gray-900">{targetPreview.name}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-gray-500">Level</span>
+                    <span className="font-semibold text-gray-900">{targetPreview.level.name}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-gray-500">Tahun ajaran</span>
+                    <span className="font-semibold text-gray-900">{targetPreview.schoolYear.year}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-gray-500">Semester</span>
+                    <span className="font-semibold text-gray-900">Semester {targetPreview.semester.number}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-gray-500">Kapasitas</span>
+                    <span className="font-semibold text-gray-900">{targetPreview.capacity} siswa</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-gray-500">Status aktif</span>
+                    <span className="font-semibold text-gray-900">
+                      {targetPreview.isActive ? 'Aktif' : 'Nonaktif'}
+                    </span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-gray-500">Wali kelas</span>
+                    <span className="font-semibold text-right text-gray-900">
+                      {targetPreview.waliKelas?.name || 'Belum ditentukan'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
+                  Guru Pengajar yang Disalin
+                </p>
+                <div className="mt-3 flex items-center gap-3 rounded-lg bg-purple-50 px-3 py-2 text-sm text-purple-700">
+                  <BookOpen size={16} />
+                  <span className="font-semibold">{targetPreview.teachers.length} pengajar akan dicopy</span>
+                </div>
+
+                <div className="mt-3 max-h-72 overflow-y-auto space-y-2 pr-1">
+                  {targetPreview.teachers.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500">
+                      Tidak ada guru pengajar yang tersimpan di kelas sumber
+                    </div>
+                  ) : (
+                    targetPreview.teachers.map((item) => (
+                      <div
+                        key={`${item.teacher.id}-${item.subject.id}`}
+                        className="rounded-lg border border-gray-200 px-3 py-2"
+                      >
+                        <div className="font-medium text-gray-900">{item.teacher.name}</div>
+                        <div className="text-xs text-gray-500">
+                          {item.subject.code} - {item.subject.name}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 border-t border-gray-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-gray-500">
+                Setelah konfirmasi, data kelas tujuan akan dibuat dengan struktur yang sama seperti kelas sumber, hanya semester yang disesuaikan.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={closeTargetPreview}
+                  className="px-4 py-2.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors font-medium"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={confirmGenerateTarget}
+                  disabled={isGeneratingTarget}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold"
+                >
+                  {isGeneratingTarget ? (
+                    <>
+                      <RefreshCw className="animate-spin" size={18} />
+                      Membuat kelas...
+                    </>
+                  ) : (
+                    <>
+                      <TrendingUp size={18} />
+                      Generate Kelas Tujuan
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

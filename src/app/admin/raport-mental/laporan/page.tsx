@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Download, Printer } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
-import { getCurrentUser } from '@/lib/auth/client';
+import { fetchCurrentUser } from '@/lib/auth/client';
 
 interface School {
   id: string;
@@ -247,32 +247,21 @@ function MentalReportContent() {
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   useEffect(() => {
-    const parsedUser = getCurrentUser();
-
-    if (!parsedUser) {
-      setError('Sesi login tidak ditemukan');
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      const bagian = Array.isArray(parsedUser?.bagian) ? parsedUser.bagian : [];
-      const role = parsedUser?.role;
-
-      if (bagian.length === 0) {
-        if (role === 'TEACHER') router.replace('/teacher/dashboard');
-        else if (role === 'WALI_KELAS') router.replace('/wali-kelas/dashboard');
-        else if (role === 'ADMIN' || role === 'PRINCIPAL') router.replace('/admin/dashboard');
-        else router.replace('/login');
-        return;
-      }
-    } catch {
-      router.replace('/login');
-      return;
-    }
+    let active = true;
 
     const fetchData = async () => {
       try {
+        const parsedUser = await fetchCurrentUser();
+        if (!active) return;
+
+        if (!parsedUser) {
+          setError('Sesi login tidak ditemukan');
+          setIsLoading(false);
+          return;
+        }
+
+        const role = parsedUser?.role;
+
         const [schoolRes, seksiRes, nilaiRes] = await Promise.all([
           apiFetch('/api/admin/schools?limit=100'),
           apiFetch('/api/admin/raport-mental/seksi'),
@@ -318,6 +307,9 @@ function MentalReportContent() {
     }
 
     fetchData();
+    return () => {
+      active = false;
+    };
   }, [router, schoolId, schoolYearId, semesterId, studentNo]);
 
   const nilaiMap = useMemo(

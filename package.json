@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 9876",
     "build": "bun run prisma:generate && PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true next build",
-    "start": "next start",
+    "start": "next start -p 9876",
     "lint": "eslint",
     "test": "bun test",
     "test:watch": "bun test --watch",
@@ -15,9 +15,11 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "seed": "bun scripts/seed.ts",
+    "seed-menu-permissions": "bun scripts/seed-menu-permissions.ts",
     "db:push": "prisma db push",
     "db:seed": "bun run seed",
-    "check:menu": "tsx scripts/check-menu-integrity.ts"
+    "check:menu": "tsx scripts/check-menu-integrity.ts",
+    "check-menu-integrity": "tsx scripts/check-menu-integrity.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.3.0",

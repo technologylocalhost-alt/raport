@@ -3,11 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import puppeteer from 'puppeteer';
 import chromium from '@sparticuz/chromium';
 import { prisma } from '@/lib/db';
-import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import { serverError } from '@/lib/server-log';
 
 async function requireSantriPdfAccess(req: NextRequest) {
-  return requireAdminOrPrincipal(req);
+  return requireMenuAccess(req, '/admin/santri', ['ADMIN', 'PRINCIPAL']);
 }
 
 type PdfField = { label: string; key: string; type?: 'date' };
@@ -234,7 +234,20 @@ function formatDate(val: string | Date | null): string {
   return new Date(val).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function buildHtml(santri: SantriPdfData): string {
+  const latestClass = santri.classHistory && santri.classHistory.length > 0
+    ? santri.classHistory[santri.classHistory.length - 1]
+    : null;
+
   const sectionsHtml = DETAIL_SECTIONS.map(section => {
     // Determine which fields to show in 1 column vs 2 columns
     // History tables or long text fields should be 1 column
@@ -265,18 +278,18 @@ function buildHtml(santri: SantriPdfData): string {
                   ${classHistory.map((ch: ClassHistoryItem, i: number) => `
                     <tr>
                       <td style="text-align:center;">${i + 1}</td>
-                      <td>${ch.schoolYear}</td>
-                      <td style="text-align:center;">${ch.semester}</td>
-                      <td>${ch.levelName || '-'}</td>
-                      <td><strong>${ch.className}</strong></td>
-                      <td>${ch.waliKelasName || '-'}</td>
+                      <td>${escapeHtml(ch.schoolYear)}</td>
+                      <td style="text-align:center;">${escapeHtml(ch.semester)}</td>
+                      <td>${escapeHtml(ch.levelName || '-')}</td>
+                      <td><strong>${escapeHtml(ch.className)}</strong></td>
+                      <td>${escapeHtml(ch.waliKelasName || '-')}</td>
                     </tr>
                   `).join('')}
                 </tbody>
               </table>
             `;
           }
-          return `<div class="full-field"><div class="field-label">${f.label}</div>${tableHtml}</div>`;
+          return `<div class="full-field"><div class="field-label">${escapeHtml(f.label)}</div>${tableHtml}</div>`;
         }
 
         // Special rendering for Riwayat Kamar (from JSON string)
@@ -302,10 +315,10 @@ function buildHtml(santri: SantriPdfData): string {
                       ${(items as KamarHistoryItem[]).map((it, i: number) => `
                         <tr>
                           <td style="text-align:center;">${i + 1}</td>
-                          <td>${it.kelas || '-'}</td>
-                          <td>${it.tahun || '-'}</td>
-                          <td>${it.smt1 || '-'}</td>
-                          <td>${it.smt2 || '-'}</td>
+                          <td>${escapeHtml(it.kelas || '-')}</td>
+                          <td>${escapeHtml(it.tahun || '-')}</td>
+                          <td>${escapeHtml(it.smt1 || '-')}</td>
+                          <td>${escapeHtml(it.smt2 || '-')}</td>
                         </tr>
                       `).join('')}
                     </tbody>
@@ -314,12 +327,12 @@ function buildHtml(santri: SantriPdfData): string {
               }
             } catch {}
           }
-          return `<div class="full-field" style="margin-top:4mm;"><div class="field-label">${f.label}</div>${tableHtml}</div>`;
+          return `<div class="full-field" style="margin-top:4mm;"><div class="field-label">${escapeHtml(f.label)}</div>${tableHtml}</div>`;
         }
 
         const raw = santri[f.key];
         const display = f.type === 'date' ? formatDate(raw as string | Date | null) : formatValue(f.key, raw);
-        return `<div class="full-field mt-2"><div class="field-label">${f.label}</div><div class="field-value">${display}</div></div>`;
+        return `<div class="full-field mt-2"><div class="field-label">${escapeHtml(f.label)}</div><div class="field-value">${escapeHtml(display)}</div></div>`;
       }).join('');
     } else {
       // Standard sections: Use 2-column layout
@@ -332,8 +345,8 @@ function buildHtml(santri: SantriPdfData): string {
             
             return `
               <div class="grid-item ${isLong ? 'col-span-2' : ''}">
-                <div class="field-label">${f.label}</div>
-                <div class="field-value">${display}</div>
+                <div class="field-label">${escapeHtml(f.label)}</div>
+                <div class="field-value">${escapeHtml(display)}</div>
               </div>
             `;
           }).join('')}
@@ -343,7 +356,7 @@ function buildHtml(santri: SantriPdfData): string {
 
     return `
       <div class="section">
-        <div class="section-title">${section.title}</div>
+        <div class="section-title">${escapeHtml(section.title)}</div>
         <div class="section-body">
           ${fieldsContent}
         </div>
@@ -356,140 +369,233 @@ function buildHtml(santri: SantriPdfData): string {
 <head>
   <meta charset="UTF-8">
   <style>
-    @page { margin: 15mm; }
+    @page { margin: 14mm 14mm 16mm; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: 'Helvetica', 'Arial', sans-serif;
-      font-size: 9px;
+      font-family: 'Times New Roman', 'Georgia', serif;
+      font-size: 9.2px;
       color: #1f2937;
-      line-height: 1.5;
+      line-height: 1.45;
       background: white;
     }
     .header-container {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding-bottom: 5mm;
-      border-bottom: 3px double #059669;
-      margin-bottom: 6mm;
-      position: relative;
+      padding: 5mm 6mm 4mm;
+      border: 1px solid #d1d5db;
+      border-top: 4px solid #111827;
+      border-radius: 4px;
+      background: #ffffff;
+      margin-bottom: 5mm;
+      page-break-inside: avoid;
     }
-    .header-text {
+    .header-top {
       text-align: center;
+      margin-bottom: 4mm;
+    }
+    .header-top .institution {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #111827;
+      margin-bottom: 0.8mm;
+    }
+    .header-top .subinstitution {
+      font-size: 9px;
+      color: #4b5563;
+    }
+    .header-top .document-title {
+      margin-top: 2mm;
+      font-size: 13.5px;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      color: #111827;
+    }
+    .header-top .document-subtitle {
+      margin-top: 1mm;
+      font-size: 8.5px;
+      color: #6b7280;
+      font-style: italic;
+    }
+    .header-divider {
+      border-top: 1px solid #d1d5db;
+      margin: 3.5mm 0;
     }
     .header-text h1 {
-      font-size: 16px;
-      color: #065f46;
+      font-family: 'Times New Roman', 'Georgia', serif;
+      font-size: 12.4px;
+      color: #111827;
       text-transform: uppercase;
-      letter-spacing: 1px;
+      letter-spacing: 0.7px;
       margin-bottom: 1mm;
+      line-height: 1.15;
+      font-weight: 700;
     }
     .header-text p {
-      font-size: 10px;
+      font-size: 8.7px;
       color: #4b5563;
-      font-weight: 500;
+      font-weight: 400;
     }
-    .section {
-      margin-bottom: 5mm;
-      break-inside: avoid;
+    .document-meta {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1mm;
+      border: 1px solid #d1d5db;
     }
-    .section-title {
-      background: #f0fdf4;
-      color: #065f46;
-      font-size: 9px;
-      font-weight: 800;
-      padding: 1.5mm 3mm;
-      border-left: 4px solid #059669;
+    .document-meta td {
+      border: 1px solid #d1d5db;
+      padding: 1.8mm 2.3mm;
+      vertical-align: top;
+      font-size: 8.6px;
+    }
+    .document-meta .label {
+      width: 28%;
+      color: #6b7280;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      margin-bottom: 2mm;
+    }
+    .document-meta .value {
+      color: #111827;
+      font-weight: 600;
+    }
+    .section {
+      margin-bottom: 4mm;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      overflow: hidden;
+      background: #fff;
+    }
+    .section-title {
+      background: #f3f4f6;
+      color: #111827;
+      font-size: 8.6px;
+      font-weight: 800;
+      padding: 2.2mm 3.2mm;
+      border-left: 4px solid #111827;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      border-bottom: 1px solid #d1d5db;
     }
     .section-body {
-      padding: 0 2mm;
+      padding: 3mm;
     }
     .grid-container {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      column-gap: 8mm;
-      row-gap: 2.5mm;
+      column-gap: 7mm;
+      row-gap: 2.6mm;
     }
     .grid-item {
       display: flex;
       flex-direction: column;
-      border-bottom: 0.1px solid #f3f4f6;
-      padding-bottom: 0.5mm;
+      border-bottom: 0.2px solid #e5e7eb;
+      padding-bottom: 1mm;
+      min-width: 0;
     }
     .col-span-2 { grid-column: span 2; }
     
     .field-label {
-      font-size: 8px;
+      font-size: 7px;
       font-weight: 600;
       color: #6b7280;
       text-transform: uppercase;
-      margin-bottom: 0.5mm;
+      letter-spacing: 0.6px;
+      margin-bottom: 0.8mm;
     }
     .field-value {
-      font-size: 9.5px;
+      font-size: 9px;
       font-weight: 500;
       color: #111827;
       white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.45;
     }
     .full-field {
       width: 100%;
-      margin-bottom: 3mm;
+      margin-bottom: 3.2mm;
     }
     
     .inner-table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 1.5mm;
-      border: 1px solid #e5e7eb;
+      margin-top: 1.8mm;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      overflow: hidden;
     }
     .inner-table th {
-      background: #f9fafb;
-      color: #374151;
+      background: #e5e7eb;
+      color: #111827;
       font-weight: 700;
-      font-size: 8px;
-      padding: 1.5mm 2mm;
+      font-size: 7.4px;
+      padding: 1.4mm 1.8mm;
       text-align: left;
-      border: 1px solid #e5e7eb;
+      border: 1px solid #d1d5db;
       text-transform: uppercase;
+      letter-spacing: 0.4px;
     }
     .inner-table td {
-      padding: 1.5mm 2mm;
+      padding: 1.5mm 1.8mm;
       font-size: 9px;
       border: 1px solid #e5e7eb;
       color: #1f2937;
+      vertical-align: top;
     }
     .no-data {
-      padding: 4mm;
+      padding: 3.5mm;
       text-align: center;
       color: #9ca3af;
       font-style: italic;
       background: #f9fafb;
-      border-radius: 4px;
+      border-radius: 5px;
       border: 1px dashed #e5e7eb;
     }
     .footer {
       position: fixed;
-      bottom: 10mm;
-      left: 15mm;
-      right: 15mm;
+      bottom: 8mm;
+      left: 14mm;
+      right: 14mm;
       text-align: center;
-      font-size: 7.5px;
+      font-size: 7.2px;
       color: #9ca3af;
       border-top: 0.5px solid #e5e7eb;
-      padding-top: 2mm;
+      padding-top: 1.8mm;
     }
     .mt-2 { margin-top: 2mm; }
   </style>
 </head>
 <body>
   <div class="header-container">
-    <div class="header-text">
-      <h1>Data Master Santri &amp; Santriwati</h1>
-      <p>Pondok Pesantren Modern Darussalam Lahat (PPMDL)</p>
+    <div class="header-top">
+      <div class="institution">Pondok Pesantren Modern Darussalam Lahat</div>
+      <div class="subinstitution">Dokumen Administrasi Santri</div>
+      <div class="document-title">Data Master Santri &amp; Santriwati</div>
+      <div class="document-subtitle">Lembar arsip resmi untuk keperluan administrasi internal</div>
     </div>
+    <div class="header-divider"></div>
+    <table class="document-meta">
+      <tr>
+        <td class="label">Nama Santri</td>
+        <td class="value">${escapeHtml(santri.name || '-')}</td>
+        <td class="label">No. Stambuk</td>
+        <td class="value">${escapeHtml(santri.studentNo || '-')}</td>
+      </tr>
+      <tr>
+        <td class="label">Jenis Kelamin</td>
+        <td class="value">${escapeHtml(formatValue('gender', santri.gender))}</td>
+        <td class="label">Riwayat Kelas Terakhir</td>
+        <td class="value">${escapeHtml(latestClass ? `${latestClass.className} · ${latestClass.schoolYear}` : '-')}</td>
+      </tr>
+      <tr>
+        <td class="label">Jumlah Riwayat Kelas</td>
+        <td class="value">${escapeHtml(String(santri.classHistory?.length || 0))} data</td>
+        <td class="label">Tanggal Cetak</td>
+        <td class="value">${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+      </tr>
+    </table>
   </div>
   ${sectionsHtml}
   <div class="footer">

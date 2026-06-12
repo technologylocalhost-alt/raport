@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAdminOrPrincipal } from '@/lib/auth/admin-access';
+import { requireMenuAccess } from '@/lib/auth/verify-access';
 import * as XLSX from 'xlsx';
 import { serverError } from '@/lib/server-log';
 
@@ -202,7 +202,7 @@ const DETAIL_SECTIONS = [
 const ALL_FIELDS = DETAIL_SECTIONS.flatMap(s => s.fields);
 
 async function requireSantriExportAccess(req: NextRequest) {
-  return requireAdminOrPrincipal(req);
+  return requireMenuAccess(req, '/admin/santri', ['ADMIN', 'PRINCIPAL']);
 }
 
 function formatValue(value: unknown, field: { key: string; type?: string }): string {

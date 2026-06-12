@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Users, BookOpen, Luggage, Eye } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
-import { getCurrentUser } from '@/lib/auth/client';
+import { fetchCurrentUser } from '@/lib/auth/client';
 import { devError } from '@/lib/dev-log';
 
 interface Class {
@@ -17,7 +17,7 @@ interface Class {
   semesterNumber?: number | string;
   capacity: number;
   schoolYearId: string;
-  schoolYear?: string | {
+  schoolYear?: {
     id: string;
     year: string;
     isActive?: boolean;
@@ -25,7 +25,7 @@ interface Class {
   waliKelasId: string;
   isActive?: boolean;
   level?: { name?: string; code?: string };
-  semester?: { number?: number };
+  semester?: { number?: number; isActive?: boolean };
   schoolYearData?: { year?: string };
   _count?: {
     students: number;
@@ -47,11 +47,21 @@ interface Class {
     }>;
 }
 
-function normalizeSchoolYear(value: Class['schoolYear']) {
+function normalizeSchoolYear(value: Class['schoolYear'] | string) {
   if (!value) return '-';
   if (typeof value === 'string') return value;
   return value?.year || '-';
 }
+
+  function isClassReadOnly(classItem: Class) {
+    return classItem.isActive === false ||
+      classItem.schoolYear?.isActive === false ||
+      classItem.semester?.isActive === false;
+  }
+
+  function isActionLocked(classItem: Class) {
+    return classItem.isActive === false && !isClassReadOnly(classItem);
+  }
 
 export default function WaliKelasClassesPage() {
   const router = useRouter();
@@ -59,10 +69,19 @@ export default function WaliKelasClassesPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const parsedUser = getCurrentUser() as { id: string } | null;
-    if (parsedUser) {
+    let active = true;
+
+    async function bootstrapSession() {
+      const parsedUser = await fetchCurrentUser();
+      if (!active || !parsedUser) return;
       void fetchClasses(parsedUser.id);
     }
+
+    void bootstrapSession();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   async function fetchClasses(waliKelasId: string) {
@@ -81,7 +100,6 @@ export default function WaliKelasClassesPage() {
           levelName: c.level?.name || '-',
           levelCode: c.level?.code || '-',
           semesterNumber: c.semester?.number || '-',
-          schoolYear: normalizeSchoolYear(c.schoolYearData?.year || c.schoolYear),
         }));
         setClasses(transformedClasses);
       }
@@ -181,18 +199,22 @@ export default function WaliKelasClassesPage() {
           </thead>
           <tbody>
             {classes.map((classItem) => (
-              <tr key={classItem.id} className={`border-b ${classItem.isActive !== false ? 'hover:bg-gray-50' : 'bg-gray-50'} ${classItem.isActive === false ? 'opacity-70' : ''}`}>
+            <tr
+              key={classItem.id}
+              className={`border-b ${isActionLocked(classItem) ? 'bg-gray-50 opacity-70' : 'hover:bg-gray-50'}`}
+            >
                 <td className="px-6 py-4">
                   <div>
                     <div className="flex items-center gap-2">
                       <p className="font-semibold text-gray-900">{classItem.name}</p>
-                      {classItem.isActive === false && (
+                      {isClassReadOnly(classItem) && (
                         <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded">
-                          Tidak Aktif
+                          Read Only
                         </span>
                       )}
                     </div>
                     <p className="text-xs text-gray-500">Semester {classItem.semesterNumber}</p>
+                    <p className="text-xs text-gray-500">{normalizeSchoolYear(classItem.schoolYear)}</p>
                   </div>
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-700">{classItem.levelName}</td>
@@ -218,20 +240,17 @@ export default function WaliKelasClassesPage() {
                 <td className="px-6 py-4 text-center">
                   <div className="flex items-center justify-center gap-2">
                     <button
-                      onClick={() => classItem.isActive !== false && router.push(`/wali-kelas/students?classId=${classItem.id}`)}
-                      disabled={classItem.isActive === false}
-                      className={`px-3 py-1 rounded-lg transition-colors text-white text-xs font-medium ${classItem.isActive !== false ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-300 cursor-not-allowed'}`}
-                      title={classItem.isActive === false ? 'Kelas Tidak Aktif' : 'Kelola Siswa'}
+                      onClick={() => router.push(`/wali-kelas/students?classId=${classItem.id}`)}
+                      disabled={isActionLocked(classItem)}
+                      className={`inline-flex items-center justify-center rounded-lg p-2 transition-colors ${isActionLocked(classItem) ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}
+                      title={
+                        isActionLocked(classItem)
+                          ? 'Kelas Tidak Aktif'
+                          : (isClassReadOnly(classItem) ? 'Lihat Siswa' : 'Kelola Siswa')
+                      }
+                      aria-label={isClassReadOnly(classItem) ? 'Lihat Siswa' : 'Kelola Siswa'}
                     >
-                      Siswa
-                    </button>
-                    <button
-                      onClick={() => classItem.isActive !== false && router.push(`/wali-kelas/management`)}
-                      disabled={classItem.isActive === false}
-                      className={`p-1 rounded-lg transition-colors ${classItem.isActive !== false ? 'hover:bg-gray-200 text-gray-600' : 'text-gray-400 cursor-not-allowed'}`}
-                      title={classItem.isActive === false ? 'Kelas Tidak Aktif' : 'Kelola Kelas'}
-                    >
-                      <Eye size={18} />
+                      <Eye size={16} />
                     </button>
                   </div>
                 </td>
@@ -244,14 +263,17 @@ export default function WaliKelasClassesPage() {
       {/* Classes Cards - Mobile View */}
       <div className="md:hidden space-y-4">
         {classes.map((classItem) => (
-          <div key={classItem.id} className={`bg-white rounded-lg shadow-md border border-gray-200 p-4 ${classItem.isActive === false ? 'opacity-70' : ''}`}>
+          <div
+            key={classItem.id}
+            className={`bg-white rounded-lg shadow-md border border-gray-200 p-4 ${isActionLocked(classItem) ? 'opacity-70' : ''}`}
+          >
             {/* Class Name */}
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-1">
                 <p className="font-bold text-lg text-gray-900">{classItem.name}</p>
-                {classItem.isActive === false && (
+                {isClassReadOnly(classItem) && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 text-xs font-semibold rounded">
-                    Tidak Aktif
+                    Read Only
                   </span>
                 )}
               </div>
@@ -293,19 +315,17 @@ export default function WaliKelasClassesPage() {
             {/* Actions */}
             <div className="flex gap-2">
               <button
-                onClick={() => classItem.isActive !== false && router.push(`/wali-kelas/students?classId=${classItem.id}`)}
-                disabled={classItem.isActive === false}
-                className={`flex-1 px-3 py-2 text-white text-sm font-medium rounded-lg transition-colors ${classItem.isActive !== false ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-300 cursor-not-allowed'}`}
+                onClick={() => router.push(`/wali-kelas/students?classId=${classItem.id}`)}
+                disabled={isActionLocked(classItem)}
+                className={`inline-flex items-center justify-center rounded-lg p-2 transition-colors ${isActionLocked(classItem) ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}
+                title={
+                  isActionLocked(classItem)
+                    ? 'Kelas Tidak Aktif'
+                    : (isClassReadOnly(classItem) ? 'Lihat Siswa' : 'Kelola Siswa')
+                }
+                aria-label={isClassReadOnly(classItem) ? 'Lihat Siswa' : 'Kelola Siswa'}
               >
-                {classItem.isActive === false ? 'Tidak Aktif' : 'Kelola Siswa'}
-              </button>
-              <button
-                onClick={() => classItem.isActive !== false && router.push(`/wali-kelas/management`)}
-                disabled={classItem.isActive === false}
-                className={`px-3 py-2 rounded-lg transition-colors ${classItem.isActive !== false ? 'bg-gray-200 hover:bg-gray-300 text-gray-600' : 'bg-gray-100 cursor-not-allowed text-gray-400'}`}
-                title={classItem.isActive === false ? 'Kelas Tidak Aktif' : 'Kelola Kelas'}
-              >
-                <Eye size={18} />
+                <Eye size={16} />
               </button>
             </div>
           </div>

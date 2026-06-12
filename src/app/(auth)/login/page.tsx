@@ -3,7 +3,12 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api-client';
-import { clearAuthData, getAccessToken, getCurrentUser, setAccessToken, setCurrentUser } from '@/lib/auth/client';
+import {
+  clearAuthData,
+  fetchCurrentUser,
+  setAccessToken,
+  setCurrentUser,
+} from '@/lib/auth/client';
 import { resolveMenuHref } from '@/lib/menu-config';
 import { fetchAllowedMenuPaths } from '@/lib/rbac-client';
 import { devError } from '@/lib/dev-log';
@@ -16,6 +21,8 @@ interface LoginResponse {
     email: string;
     name: string;
     role: string;
+    schoolId: string;
+    isActive?: boolean;
     bagian?: string[];
   };
   error?: string;
@@ -28,7 +35,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const redirectAfterLogin = useCallback(async (role: string, accessToken?: string | null) => {
+  const redirectAfterLogin = useCallback(async (role: string) => {
     const fallbackPath =
       role === 'ADMIN' || role === 'PRINCIPAL' ? '/admin/dashboard' :
       role === 'TEACHER' ? '/teacher/dashboard' :
@@ -40,12 +47,6 @@ export default function LoginPage() {
       role === 'TEACHER' ? '/teacher' :
       role === 'WALI_KELAS' ? '/wali-kelas' :
       '/admin';
-
-    const token = accessToken || getAccessToken();
-    if (!token) {
-      setTimeout(() => router.push(fallbackPath), 50);
-      return;
-    }
 
     try {
       const menuGroup =
@@ -71,6 +72,11 @@ export default function LoginPage() {
         setTimeout(() => router.push(resolveMenuHref(allowedPaths[0]!, role)), 50);
         return;
       }
+
+      if (hasRestrictions && allowedPaths.length === 0) {
+        setTimeout(() => router.push('/access-denied'), 50);
+        return;
+      }
     } catch (error) {
       devError('Failed to resolve post-login redirect:', error);
     }
@@ -79,15 +85,26 @@ export default function LoginPage() {
   }, [router]);
 
   useEffect(() => {
-    const accessToken = getAccessToken();
-    const user = getCurrentUser();
+    let active = true;
 
-    if (accessToken && user?.role) {
-      void redirectAfterLogin(user.role, accessToken);
-      return;
+    async function bootstrapSession() {
+      const currentUser = await fetchCurrentUser();
+
+      if (!active) return;
+
+      if (currentUser?.role) {
+        await redirectAfterLogin(currentUser.role);
+        return;
+      }
+
+      setIsLoading(false);
     }
 
-    setTimeout(() => setIsLoading(false), 0);
+    void bootstrapSession();
+
+    return () => {
+      active = false;
+    };
   }, [redirectAfterLogin]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -116,10 +133,19 @@ export default function LoginPage() {
       }
 
       setAccessToken(data.accessToken || null);
-      setCurrentUser((data.user || null) as never);
+
+      if (data.user) {
+        setCurrentUser({
+          ...data.user,
+          isActive: data.user.isActive ?? true,
+          bagian: data.user.bagian ?? [],
+        });
+      } else {
+        setCurrentUser(null);
+      }
 
       await new Promise((resolve) => setTimeout(resolve, 100));
-      await redirectAfterLogin(data.user?.role || 'ADMIN', data.accessToken);
+      await redirectAfterLogin(data.user?.role || 'ADMIN');
     } catch (error) {
       clearAuthData();
       setError(error instanceof Error ? error.message : 'An error occurred');
