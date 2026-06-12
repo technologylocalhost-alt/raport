@@ -178,7 +178,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   let admin;
   try {
-    admin = await requireClassAccess(request);
+    admin = await requireClassListAccess(request, null);
     if (!admin) {
       return errorResponse('Unauthorized', 401);
     }
