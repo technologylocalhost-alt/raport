@@ -73,8 +73,7 @@ async function getWaliKelasStats(waliKelasId: string) {
         select: {
           students: true,
         }
-      },
-      students: true,
+      }
     }
   });
 
@@ -110,28 +109,26 @@ async function getWaliKelasStats(waliKelasId: string) {
   // Count hadir today
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
-  
-  const presentToday = await prisma.attendance.count({
-    where: {
-      student: { classId: class_.id },
-      date: { gte: today },
-      status: 'HADIR',
-    }
-  });
 
-  // Count total attendance for average
-  const allAttendance = await prisma.attendance.findMany({
-    where: {
-      student: { classId: class_.id }
-    }
-  });
+  const [presentToday, allAttendance, recentActivities] = await Promise.all([
+    prisma.attendance.count({
+      where: {
+        student: { classId: class_.id },
+        date: { gte: today },
+        status: 'HADIR',
+      }
+    }),
+    prisma.attendance.findMany({
+      where: {
+        student: { classId: class_.id }
+      }
+    }),
+    getRecentActivities(class_.id),
+  ]);
 
   const attendanceRate = allAttendance.length > 0
-    ? Math.round((allAttendance.filter(a => a.status === 'HADIR').length / allAttendance.length) * 100)
+    ? Math.round((allAttendance.filter((a) => a.status === 'HADIR').length / allAttendance.length) * 100)
     : 0;
-
-  // Get recent activities
-  const recentActivities = await getRecentActivities(class_.id);
 
   return {
     className: class_.name,

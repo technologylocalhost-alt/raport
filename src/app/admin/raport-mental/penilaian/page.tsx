@@ -324,6 +324,7 @@ export default function PenilaianRaportMentalPage() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [saveMsg, setSaveMsg] = useState('');
   const [errorSeksi, setErrorSeksi] = useState('');
+  const [saveTimeoutId, setSaveTimeoutId] = useState<number | null>(null);
 
   // ── Derived ──
   const selectedSchoolYear = schoolYears.find(sy => sy.id === selectedSchoolYearId);
@@ -362,6 +363,14 @@ export default function PenilaianRaportMentalPage() {
       .finally(() => setLoadingFilter(false));
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutId) {
+        window.clearTimeout(saveTimeoutId);
+      }
+    };
+  }, [saveTimeoutId]);
+
   // ─── Load tahun ajaran sesuai sekolah terpilih ─────────────────────────────
   useEffect(() => {
     let cancelled = false;
@@ -392,6 +401,26 @@ export default function PenilaianRaportMentalPage() {
         }
 
         const years: SchoolYear[] = Array.isArray(data.data) ? data.data : (data.data?.data ?? []);
+
+        if (selectedSchoolId && years.length === 0) {
+          const fallbackRes = await apiFetch('/api/admin/school-years?limit=100');
+          const fallbackData = await fallbackRes.json();
+          if (fallbackData.success) {
+            const fallbackYears: SchoolYear[] = Array.isArray(fallbackData.data)
+              ? fallbackData.data
+              : (fallbackData.data?.data ?? []);
+            if (fallbackYears.length > 0) {
+              setSchoolYears(fallbackYears);
+              const active = fallbackYears.find(y => y.isActive) ?? fallbackYears[0];
+              if (active) {
+                setSelectedSchoolYearId(active.id);
+                const sem = active.semesters?.find(s => s.isActive) ?? active.semesters?.[0];
+                setSelectedSemesterId(sem?.id ?? '');
+              }
+            }
+          }
+        }
+
         if (cancelled) return;
 
         setSchoolYears(years);
@@ -422,7 +451,6 @@ export default function PenilaianRaportMentalPage() {
     setKelasList([]);
     try {
       const params = new URLSearchParams({
-        schoolId: selectedSchoolId,
         schoolYearId: selectedSchoolYearId,
         semesterId: selectedSemesterId,
         limit: '100',
@@ -434,7 +462,24 @@ export default function PenilaianRaportMentalPage() {
       const res = await apiFetch(`/api/admin/classes?${params}`);
       const d = await res.json();
       if (d.success) {
-        const classes: Kelas[] = Array.isArray(d.data) ? d.data : (d.data?.data ?? []);
+        let classes: Kelas[] = Array.isArray(d.data) ? d.data : (d.data?.data ?? []);
+        if (classes.length === 0) {
+          const fallbackParams = new URLSearchParams({
+            schoolYearId: selectedSchoolYearId,
+            semesterId: selectedSemesterId,
+            limit: '100',
+          });
+          const fallbackRes = await apiFetch(`/api/admin/classes?${fallbackParams}`);
+          const fallbackData = await fallbackRes.json();
+          if (fallbackData.success) {
+            const fallbackClasses: Kelas[] = Array.isArray(fallbackData.data)
+              ? fallbackData.data
+              : (fallbackData.data?.data ?? []);
+            if (fallbackClasses.length > 0) {
+              classes = fallbackClasses;
+            }
+          }
+        }
         setKelasList(classes);
       }
     } catch (e) { devError('Raport mental error:', e); }
@@ -459,7 +504,7 @@ export default function PenilaianRaportMentalPage() {
     setLoadingSantri(true);
     setSantriList([]);
     try {
-      const res = await apiFetch(`/api/admin/classes/${kelasId}/students?limit=200`);
+      const res = await apiFetch(`/api/admin/classes/${kelasId}/students?limit=200&scope=raport-mental`);
       const d = await res.json();
       if (d.success) {
         setSantriList(Array.isArray(d.data) ? d.data : (d.data?.data ?? []));
@@ -581,6 +626,10 @@ export default function PenilaianRaportMentalPage() {
 
   const handleSave = async () => {
     if (!selectedSantri || !selectedSchoolYearId || !selectedSemesterId) return;
+    if (saveTimeoutId) {
+      window.clearTimeout(saveTimeoutId);
+      setSaveTimeoutId(null);
+    }
     setSaving(true); setSaveStatus('idle');
     try {
       const items: { aspekId: string; seksiId: string; nilai: string; dataEkstra: string }[] = [];
@@ -628,8 +677,22 @@ export default function PenilaianRaportMentalPage() {
         body: JSON.stringify({ studentNo: selectedSantri.studentNo, schoolYearId: selectedSchoolYearId, semesterId: selectedSemesterId, items }),
       });
       const d = await res.json();
-      if (d.success) { setSaveStatus('success'); setSaveMsg(d.message || `${items.length} nilai tersimpan`); setTimeout(() => setSaveStatus('idle'), 4000); }
-      else { setSaveStatus('error'); setSaveMsg(d.error || 'Gagal menyimpan'); }
+      if (d.success) {
+        const message = d.message || `${items.length} nilai tersimpan`;
+        setSaveStatus('success');
+        setSaveMsg(message);
+        const timeoutId = window.setTimeout(() => {
+          setSaveStatus('idle');
+          setSaveMsg('');
+          setSelectedSantri(null);
+          setStep('santri');
+          setSaveTimeoutId(null);
+        }, 1200);
+        setSaveTimeoutId(timeoutId);
+      } else {
+        setSaveStatus('error');
+        setSaveMsg(d.error || 'Gagal menyimpan');
+      }
     } catch { setSaveStatus('error'); setSaveMsg('Terjadi kesalahan'); }
     finally { setSaving(false); }
   };

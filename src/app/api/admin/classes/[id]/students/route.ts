@@ -43,6 +43,7 @@ export async function GET(
     }
 
     const { id } = await params;
+    const scope = request.nextUrl.searchParams.get('scope');
 
     // Validation: Check id format
     if (!id || id.trim() === '') {
@@ -75,7 +76,10 @@ export async function GET(
     }
 
     // Authorization check
-    if (user.role === 'WALI_KELAS') {
+    if (scope === 'raport-mental' && (user.role === 'TEACHER' || user.role === 'WALI_KELAS')) {
+      // Raport mental uses the selected period/class context as the access boundary.
+      // The class list has already been filtered at the page level.
+    } else if (user.role === 'WALI_KELAS') {
       // WALI_KELAS can access: their own class OR classes where they teach subjects
       const isWaliKelas = classData.waliKelasId === user.id;
       

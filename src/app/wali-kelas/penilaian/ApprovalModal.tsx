@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
-import { X, CheckCircle, AlertCircle, Loader } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, Loader, Search, XCircle } from 'lucide-react';
 import { devError } from '@/lib/dev-log';
 
 interface GradeSampleItem {
@@ -43,30 +43,33 @@ interface ApprovalModalProps {
   onClose: () => void;
   onSuccess: () => void;
   selectedClass?: string;
+  selectedClassId?: string;
 }
 
-export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClass }: ApprovalModalProps) {
+export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClass, selectedClassId }: ApprovalModalProps) {
   const [subjects, setSubjects] = useState<SubjectApproval[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [approving, setApproving] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [selectedSubject, setSelectedSubject] = useState<SubjectApproval | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     if (isOpen) {
       setSelectedSubject(null);
-      // Jika ada selectedClass dari props, langsung set ke modal
+      setSearchQuery('');
       fetchApprovableSubjects();
     }
-  }, [isOpen, selectedClass]);
+  }, [isOpen, selectedClass, selectedClassId]);
 
   async function fetchApprovableSubjects() {
     try {
       setIsLoading(true);
       setError('');
 
-      const response = await apiFetch('/api/wali-kelas/grades-for-approval');
+      const query = selectedClassId ? `?classId=${encodeURIComponent(selectedClassId)}` : '';
+      const response = await apiFetch(`/api/wali-kelas/grades-for-approval${query}`);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -81,54 +84,54 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
       const data = await response.json();
       const subjectsData = data.data?.subjectsByClass || [];
 
-      // Fetch approved data untuk setiap subject
-      const subjectsWithApprovalStatus = await Promise.all(
-        subjectsData.map(async (subject: SubjectApproval) => {
-          let isFullyApproved = false;
-          let approvedData: GradeSampleItem[] = [];
+      const classIds = Array.from(new Set(subjectsData.map((subject: SubjectApproval) => subject.classId)));
+      const approvalMap = new Map<string, GradeSampleItem[]>();
 
+      const approvalResults = await Promise.all(
+        classIds.map(async (classId) => {
           try {
             const approvalResponse = await apiFetch(
-              `/api/wali-kelas/nilai-approve?classId=${subject.classId}&limit=1000`,
-              {
-                method: 'GET',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-              }
+              `/api/wali-kelas/nilai-approve?classId=${encodeURIComponent(classId)}&limit=1000`
             );
 
-            if (approvalResponse.ok) {
-              const approvalDataResponse = await approvalResponse.json();
-              const allApprovedGrades = approvalDataResponse.data?.data || [];
-              
-              // Filter approved data untuk subject ini
-              approvedData = (allApprovedGrades as GradeSampleItem[]).filter(
-                (g) => g.subjectId === subject.subjectId
-              );
-              
-              const approvedStudents = new Set(approvedData.map((g) => g.studentId));
-              isFullyApproved = approvedStudents.size >= subject.totalStudents;
-            } else {
-              const errorData = await approvalResponse.json();
-              devError(`[ApprovalModal] Approval fetch failed: ${approvalResponse.status}`, errorData);
+            if (!approvalResponse.ok) {
+              return { classId, data: [] as GradeSampleItem[] };
             }
+
+            const approvalDataResponse = await approvalResponse.json();
+            return {
+              classId,
+              data: (approvalDataResponse.data?.data || []) as GradeSampleItem[],
+            };
           } catch (error) {
-            devError('[ApprovalModal] Failed to fetch approval data for subject:', error, subject.subjectId);
+            devError('[ApprovalModal] Failed to fetch approval data for class:', error, classId);
+            return { classId, data: [] as GradeSampleItem[] };
           }
-          
-          const assessmentTypes = subject.gradesSample
-            ? Array.from(new Set(subject.gradesSample.map((g) => g.assessmentType).filter(Boolean))) as string[]
-            : [];
-          
-          return {
-            ...subject,
-            isFullyApproved,
-            approvedData,
-            assessmentTypes,
-          };
         })
       );
+
+      approvalResults.forEach(({ classId, data: approvedGrades }) => {
+        approvalMap.set(classId, approvedGrades);
+      });
+
+      const subjectsWithApprovalStatus = subjectsData.map((subject: SubjectApproval) => {
+        const approvedData = (approvalMap.get(subject.classId) || []).filter(
+          (g) => g.subjectId === subject.subjectId
+        );
+        const approvedStudents = new Set(approvedData.map((g) => g.studentId));
+        const isFullyApproved = approvedStudents.size >= subject.totalStudents;
+
+        const assessmentTypes = subject.gradesSample
+          ? Array.from(new Set(subject.gradesSample.map((g) => g.assessmentType).filter(Boolean))) as string[]
+          : [];
+
+        return {
+          ...subject,
+          isFullyApproved,
+          approvedData,
+          assessmentTypes,
+        };
+      });
 
       setSubjects(subjectsWithApprovalStatus);
     } catch (error) {
@@ -215,8 +218,32 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
 
   const handleClose = () => {
     setSelectedSubject(null);
+    setSearchQuery('');
     onClose();
   };
+
+  const filteredSubjects = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const classSubjects = subjects.filter((s) => s.className === selectedClass);
+
+    if (!query) {
+      return classSubjects;
+    }
+
+    return classSubjects.filter((subject) => {
+      const searchableText = [
+        subject.subjectName,
+        subject.className,
+        ...(subject.teachers || []),
+        ...(subject.assessmentTypes || []),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return searchableText.includes(query);
+    });
+  }, [searchQuery, subjects, selectedClass]);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
@@ -256,9 +283,11 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
             <div className="flex items-center justify-center py-8">
               <Loader size={24} className="animate-spin text-emerald-600" />
             </div>
-          ) : subjects.filter((s) => s.className === selectedClass).length === 0 ? (
+          ) : filteredSubjects.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              Tidak ada penilaian yang siap disetujui untuk kelas {selectedClass}
+              {searchQuery
+                ? `Tidak ada hasil untuk pencarian "${searchQuery}"`
+                : `Tidak ada penilaian yang siap disetujui untuk kelas ${selectedClass}`}
             </div>
           ) : (
             // Subject Selection (direct, no class selection step)
@@ -266,10 +295,33 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
               <div className="text-sm font-medium text-gray-700 mb-3">
                 Kelas: <span className="font-semibold text-emerald-600">{selectedClass}</span>
               </div>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="relative w-full md:max-w-md">
+                  <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Cari mapel, guru, kelas, atau jenis penilaian..."
+                    className="w-full rounded-lg border border-gray-300 bg-white py-2 pl-10 pr-10 text-sm text-gray-900 shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 hover:text-gray-600"
+                      aria-label="Hapus pencarian"
+                    >
+                      <XCircle size={16} />
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500">
+                  {filteredSubjects.length} data ditemukan
+                </p>
+              </div>
               <div className="space-y-3">
-                {subjects
-                  .filter((s) => s.className === selectedClass)
-                  .map((subject) => (
+                {filteredSubjects.map((subject) => (
                     <div
                       key={`${subject.subjectId}-${subject.classId}`}
                       className="border border-gray-200 rounded-lg p-4 hover:border-emerald-500 transition-colors"
@@ -328,7 +380,7 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
                         </button>
                       </div>
                     </div>
-                  ))}
+                ))}
               </div>
             </div>
           )}

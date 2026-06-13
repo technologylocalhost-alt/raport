@@ -60,6 +60,7 @@ interface ApprovalApiItem {
 
 interface TeacherGradeApiItem {
   id: string;
+  classId?: string;
   studentId: string;
   subjectId: string;
   studentName?: string;
@@ -229,63 +230,74 @@ export default function PenilaianPage() {
         classNameMap[c.id] = c.name || 'N/A';
       });
 
-      // Fetch approval data from NilaiApprove - untuk mengetahui grade mana yang sudah di-approve
+      // Fetch approval and grades data in parallel so the page doesn't wait class-by-class.
+      const [approvalResults, gradeResults] = await Promise.all([
+        Promise.all(
+          classIds.map(async (classId) => {
+            try {
+              const approvalResponse = await apiFetch(
+                `/api/wali-kelas/nilai-approve?classId=${classId}&limit=1000`
+              );
+
+              if (!approvalResponse.ok) {
+                return [] as ApprovalApiItem[];
+              }
+
+              const approvalData = await approvalResponse.json();
+              return ((approvalData.data?.data || []) as ApprovalApiItem[]);
+            } catch {
+              return [] as ApprovalApiItem[];
+            }
+          })
+        ),
+        Promise.all(
+          classIds.map(async (classId) => {
+            try {
+              const gradesResponse = await apiFetch(
+                `/api/teacher/grades?classId=${classId}&limit=1000`
+              );
+
+              if (!gradesResponse.ok) {
+                return [] as TeacherGradeApiItem[];
+              }
+
+              const gradesData = await gradesResponse.json();
+              return ((gradesData.data || []) as TeacherGradeApiItem[]).map((grade) => ({
+                ...grade,
+                classId,
+              }));
+            } catch {
+              return [] as TeacherGradeApiItem[];
+            }
+          })
+        ),
+      ]);
+
       const approvalSet = new Set<string>();
-      
-      for (const classId of classIds) {
-        try {
-          const approvalResponse = await apiFetch(
-            `/api/wali-kelas/nilai-approve?classId=${classId}&limit=1000`
-          );
+      approvalResults.flat().forEach((approval) => {
+        approvalSet.add(`${approval.studentId}-${approval.subjectId}`);
+      });
 
-          if (approvalResponse.ok) {
-            const approvalData = await approvalResponse.json();
-            const approvals = (approvalData.data?.data || []) as ApprovalApiItem[];
-            
-            approvals.forEach((approval) => {
-              // Create a key to identify approved grades: studentId-subjectId
-              const key = `${approval.studentId}-${approval.subjectId}`;
-              approvalSet.add(key);
-            });
-          }
-        } catch {
-        }
-      }
-
-      // Fetch grades for all classes
       const gradesList: Grade[] = [];
-
-      for (const classId of classIds) {
-        const gradesResponse = await apiFetch(
-          `/api/teacher/grades?classId=${classId}&limit=1000`
-        );
-
-        if (gradesResponse.ok) {
-          const gradesData = await gradesResponse.json();
-          const mappedGrades = ((gradesData.data || []) as TeacherGradeApiItem[]).map((grade) => {
-            const key = `${grade.studentId}-${grade.subjectId}`;
-            return {
-              id: grade.id,
-              studentName: grade.studentName || 'N/A',
-              studentNo: grade.studentNo || 'N/A',
-              studentNourut: grade.studentNourut,
-              className: classNameMap[classId] || 'N/A',
-              competencyName: grade.competencyName || 'N/A',
-              subjectName: grade.subjectName || 'N/A',
-              score: String(grade.score || 0),
-              assessmentType: grade.assessmentType || 'UTS_1',
-              teacherName: grade.teacherName || 'N/A',
-              isApproved: approvalSet.has(key),
-              suluk: '', // Will be extracted from grades with subjectName 'AS-SULUK' in createSummary()
-              muazobah: '', // Will be extracted from grades with subjectName 'MUWAZOBAH' in createSummary()
-              nazofah: '', // Will be extracted from grades with subjectName 'NAZOFAH' in createSummary()
-            };
-          });
-          if (mappedGrades.length > 0) {
-          }
-          gradesList.push(...mappedGrades);
-        }
-      }
+      gradeResults.flat().forEach((grade) => {
+        const key = `${grade.studentId}-${grade.subjectId}`;
+        gradesList.push({
+          id: grade.id,
+          studentName: grade.studentName || 'N/A',
+          studentNo: grade.studentNo || 'N/A',
+          studentNourut: grade.studentNourut,
+          className: classNameMap[grade.classId || ''] || 'N/A',
+          competencyName: grade.competencyName || 'N/A',
+          subjectName: grade.subjectName || 'N/A',
+          score: String(grade.score || 0),
+          assessmentType: grade.assessmentType || 'UTS_1',
+          teacherName: grade.teacherName || 'N/A',
+          isApproved: approvalSet.has(key),
+          suluk: '',
+          muazobah: '',
+          nazofah: '',
+        });
+      });
       setGrades(gradesList);
       // Create reverse mapping: className -> classId
       const reverseMap: Record<string, string> = {};
@@ -713,7 +725,6 @@ export default function PenilaianPage() {
                     <th className="sticky left-16 z-10 px-4 py-3 text-left font-semibold text-gray-700 text-sm bg-gray-50">STAMBUK</th>
                     <th className="sticky left-32 z-10 px-4 py-3 text-left font-semibold text-gray-700 text-sm bg-gray-50">NAMA</th>
                     <th className="sticky left-56 z-10 px-4 py-3 text-left font-semibold text-gray-700 text-sm bg-gray-50">KELAS</th>
-                    <th className="sticky left-80 z-10 px-4 py-3 text-center font-semibold text-gray-700 text-sm bg-gray-50">STATUS</th>
                     {/* Dynamic subject + assessment type columns - exclude SULUK, MUAZOBAH, NAZOFAH subjects */}
                     {Array.from(
                       new Set(
@@ -748,10 +759,6 @@ export default function PenilaianPage() {
                 </thead>
                 <tbody>
                   {gradesSummary.map((row) => {
-                    // Check if all grades for this student are approved
-                    const studentGrades = filteredGrades.filter((g) => g.studentNo === row.studentNo);
-                    const allApproved = studentGrades.length > 0 && studentGrades.every((g) => g.isApproved);
-                    
                     return (
                       <tr
                         key={row.studentNo}
@@ -770,18 +777,6 @@ export default function PenilaianPage() {
                         </td>
                         <td className="sticky left-32 z-10 px-4 py-3 text-gray-900 text-sm bg-white hover:bg-gray-50">{row.studentName}</td>
                         <td className="sticky left-56 z-10 px-4 py-3 text-gray-600 text-sm bg-white hover:bg-gray-50">{row.className}</td>
-                        <td className="sticky left-80 z-10 px-4 py-3 text-center bg-white hover:bg-gray-50">
-                          {studentGrades.length === 0 ? (
-                            <span className="text-xs font-semibold text-gray-500">Belum ada nilai</span>
-                          ) : allApproved ? (
-                            <div className="flex items-center justify-center gap-1">
-                              <CheckCircle2 size={18} className="text-green-600" />
-                              <span className="text-xs font-semibold text-green-600">Disetujui</span>
-                            </div>
-                          ) : (
-                            <span className="text-xs font-semibold text-amber-600">Menunggu</span>
-                          )}
-                        </td>
                     {/* Dynamic score columns - exclude SULUK, MUAZOBAH, NAZOFAH subjects */}
                     {Array.from(
                       new Set(
@@ -832,7 +827,7 @@ export default function PenilaianPage() {
                 })}
                 {/* Average row grouped by subject */}
                 <tr className="bg-amber-50 border-b border-gray-200 font-semibold">
-                  <td colSpan={5} className="sticky left-0 z-10 px-4 py-3 text-right text-gray-900 text-sm bg-amber-50">
+                  <td colSpan={4} className="sticky left-0 z-10 px-4 py-3 text-right text-gray-900 text-sm bg-amber-50">
                     RATA-RATA MATA PELAJARAN:
                   </td>
                   {(() => {
@@ -922,9 +917,6 @@ export default function PenilaianPage() {
               {/* Mobile Card View */}
               <div className="block md:hidden space-y-4 p-4">
                 {gradesSummary.map((row) => {
-                  const studentGrades = filteredGrades.filter((g) => g.studentNo === row.studentNo);
-                  const allApproved = studentGrades.length > 0 && studentGrades.every((g) => g.isApproved);
-                  
                   return (
                     <div key={row.studentNo} className="bg-white rounded-lg shadow-md p-4 border-l-4 border-emerald-600">
                       {/* Student Header */}
@@ -941,18 +933,6 @@ export default function PenilaianPage() {
                           <h3 className="font-semibold text-gray-900">{row.studentName}</h3>
                           <p className="text-xs text-gray-600">STAMBUK: {row.studentNo}</p>
                           <p className="text-xs text-gray-600">Kelas: {row.className}</p>
-                        </div>
-                        <div className="text-right">
-                          {studentGrades.length === 0 ? (
-                            <span className="text-xs font-semibold text-gray-500">Belum ada nilai</span>
-                          ) : allApproved ? (
-                            <div className="flex items-center justify-end gap-1">
-                              <CheckCircle2 size={16} className="text-green-600" />
-                              <span className="text-xs font-semibold text-green-600">Disetujui</span>
-                            </div>
-                          ) : (
-                            <span className="text-xs font-semibold text-amber-600">Menunggu</span>
-                          )}
                         </div>
                       </div>
 
@@ -1024,6 +1004,7 @@ export default function PenilaianPage() {
         onClose={() => setIsApprovalModalOpen(false)}
         onSuccess={() => fetchGrades()}
         selectedClass={selectedClass}
+        selectedClassId={selectedClass ? classNameToIdMap[selectedClass] : undefined}
       />
     </div>
   );

@@ -62,7 +62,7 @@ function BulkDownloadPageContent() {
     try {
       setError('');
 
-      const response = await apiFetch('/api/admin/classes?limit=100');
+      const response = await apiFetch('/api/admin/classes?limit=100&includeInactive=true');
 
       if (response.status === 401) {
         setError('Sesi Anda telah berakhir. Silakan login kembali');
@@ -193,8 +193,10 @@ function BulkDownloadPageContent() {
         const gradesData = await gradesResponse.json();
         const grades = gradesData.data || [];
 
-        // Fetch more data...
-        await apiFetch(`/api/admin/classes/${classId}`);
+        // Fetch class metadata so semester/year stays accurate in generated PDF
+        const classResponse = await apiFetch(`/api/admin/classes/${classId}`);
+        const classData = await classResponse.json();
+        const classObj = classData.data || {};
 
         // Download PDF
         const pdfResponse = await apiFetch('/api/wali-kelas/generate-pdf-puppeteer', {
@@ -210,8 +212,8 @@ function BulkDownloadPageContent() {
               class: student.className,
             },
             subjectScores: grades,
-            semester: 'Semester 2',
-            schoolYear: '2024/2025',
+            semester: classObj?.semester?.number ? `Semester ${classObj.semester.number}` : 'Semester -',
+            schoolYear: classObj?.schoolYear?.year || 'Tahun Ajaran -',
           }),
         });
 

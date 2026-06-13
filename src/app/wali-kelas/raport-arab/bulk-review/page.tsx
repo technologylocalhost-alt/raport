@@ -55,7 +55,7 @@ function BulkReviewPageContent() {
     try {
       setError('');
 
-      const response = await apiFetch('/api/admin/classes?limit=100');
+      const response = await apiFetch('/api/admin/classes?limit=100&includeInactive=true');
 
       if (response.status === 401) {
         setError('Sesi Anda telah berakhir. Silakan login kembali');

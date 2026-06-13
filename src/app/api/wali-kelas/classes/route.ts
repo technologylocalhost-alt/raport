@@ -15,11 +15,31 @@ export async function GET(request: NextRequest) {
       where: {
         waliKelasId: user.id,
       },
-      include: {
-        level: true,
-        semester: true,
-        schoolYear: true,
-        students: true,
+      select: {
+        id: true,
+        name: true,
+        capacity: true,
+        level: {
+          select: {
+            name: true,
+            code: true,
+          },
+        },
+        semester: {
+          select: {
+            number: true,
+          },
+        },
+        schoolYear: {
+          select: {
+            year: true,
+          },
+        },
+        _count: {
+          select: {
+            students: true,
+          },
+        },
       },
       orderBy: [
         { schoolYear: { year: 'desc' } },
@@ -37,7 +57,7 @@ export async function GET(request: NextRequest) {
         levelCode: c.level?.code,
         semesterNumber: c.semester?.number,
         schoolYear: c.schoolYear?.year,
-        studentCount: c.students.length,
+        studentCount: c._count.students,
         capacity: c.capacity,
       })),
     });

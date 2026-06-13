@@ -501,8 +501,8 @@ function RaportArabDetailContent() {
         student,
         subjectScores,
         attendance,
-        semester: 'Semester 2',
-        schoolYear: '2024/2025',
+        semester: classObj?.semester?.number ? `Semester ${classObj.semester.number}` : 'Semester -',
+        schoolYear: classObj?.schoolYear?.year || 'Tahun Ajaran -',
         school: {
           id: school.id || '',
           name: 'Kementerian Agama Republik Indonesia',

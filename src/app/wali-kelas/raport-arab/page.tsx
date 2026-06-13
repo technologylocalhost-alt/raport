@@ -10,6 +10,19 @@ interface Class {
   id: string;
   name: string;
   code: string;
+  levelId?: string;
+  schoolYearId?: string;
+  semesterId?: string;
+  schoolYear?: {
+    id?: string;
+    year?: string;
+    isActive?: boolean;
+  };
+  semester?: {
+    id?: string;
+    number?: number;
+    isActive?: boolean;
+  };
 }
 
 interface Student {
@@ -22,6 +35,13 @@ interface Student {
 
 interface ClassWithStudents extends Class {
   students: Student[];
+  semesters: Array<{
+    classId: string;
+    semesterNumber?: number;
+    semesterId?: string;
+    isActive?: boolean;
+    students: Student[];
+  }>;
 }
 
 interface NilaiApproveItem {
@@ -59,6 +79,91 @@ function RaportArabPageContent() {
     { value: 'FINAL_EXAM_2', label: 'Ujian Akhir Gel 2' },
   ];
 
+  const getAssessmentSemester = (assessmentType?: string) => {
+    if (!assessmentType) return null;
+    if (assessmentType.endsWith('_1')) return 1;
+    if (assessmentType.endsWith('_2')) return 2;
+    return null;
+  };
+
+  const groupClasses = (classItems: ClassApiItem[]) => {
+    const groupMap = new Map<string, ClassWithStudents>();
+
+    for (const classItem of classItems) {
+      const groupKey = [
+        classItem.name,
+        classItem.levelId || '',
+        classItem.schoolYearId || '',
+      ].join('|');
+
+      const students = (classItem.students || []).map((student) => ({ ...student }));
+      const semesterNumber = classItem.semester?.number;
+
+      const existing = groupMap.get(groupKey);
+      if (!existing) {
+        groupMap.set(groupKey, {
+          ...classItem,
+          id: groupKey,
+          code: classItem.code || classItem.name,
+          students,
+          semesters: [
+            {
+              classId: classItem.id,
+              semesterNumber,
+              semesterId: classItem.semesterId,
+              isActive: classItem.semester?.isActive,
+              students,
+            },
+          ],
+        });
+        continue;
+      }
+
+      const mergedStudents = new Map<string, Student>();
+      existing.students.forEach((student) => mergedStudents.set(student.id, student));
+      students.forEach((student) => mergedStudents.set(student.id, student));
+
+      existing.students = Array.from(mergedStudents.values()).sort((a, b) => {
+        const noA = a.noUrut || 0;
+        const noB = b.noUrut || 0;
+        return noA - noB;
+      });
+
+      existing.semesters.push({
+        classId: classItem.id,
+        semesterNumber,
+        semesterId: classItem.semesterId,
+        isActive: classItem.semester?.isActive,
+        students,
+      });
+
+      existing.semesters.sort((a, b) => (a.semesterNumber || 0) - (b.semesterNumber || 0));
+    }
+
+    return Array.from(groupMap.values()).sort((a, b) => {
+      const nameCompare = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+      if (nameCompare !== 0) return nameCompare;
+      return (a.schoolYear?.year || '').localeCompare(b.schoolYear?.year || '', undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      });
+    });
+  };
+
+  const getSemesterClassId = (classGroup: ClassWithStudents | undefined, assessmentType?: string) => {
+    if (!classGroup) return '';
+
+    const targetSemester = getAssessmentSemester(assessmentType);
+    if (targetSemester) {
+      const matchedSemester = classGroup.semesters.find((semester) => semester.semesterNumber === targetSemester);
+      if (matchedSemester?.classId) {
+        return matchedSemester.classId;
+      }
+    }
+
+    return classGroup.semesters[0]?.classId || classGroup.id;
+  };
+
   useEffect(() => {
     const loadApprovedStudents = async () => {
       if (!selectedClass || !selectedAssessmentType) {
@@ -67,8 +172,15 @@ function RaportArabPageContent() {
       }
 
       try {
+        const selectedClassObj = classes.find((cls) => cls.id === selectedClass);
+        const classId = getSemesterClassId(selectedClassObj, selectedAssessmentType);
+        if (!classId) {
+          setApprovedStudents(new Set());
+          return;
+        }
+
         const response = await apiFetch(
-          `/api/wali-kelas/nilai-approve?classId=${selectedClass}&limit=1000`
+          `/api/wali-kelas/nilai-approve?classId=${classId}&limit=1000`
         );
 
         if (response.ok) {
@@ -88,7 +200,7 @@ function RaportArabPageContent() {
     };
 
     void loadApprovedStudents();
-  }, [selectedAssessmentType, selectedClass]);
+  }, [classes, selectedAssessmentType, selectedClass]);
 
   useEffect(() => {
     const fetchClasses = async () => {
@@ -96,7 +208,7 @@ function RaportArabPageContent() {
       setError('');
       setIsLoading(true);
 
-      const response = await apiFetch('/api/admin/classes?limit=100');
+      const response = await apiFetch('/api/admin/classes?limit=100&includeInactive=true');
 
       if (response.status === 401) {
         setError('Sesi Anda telah berakhir. Silakan login kembali');
@@ -144,7 +256,7 @@ function RaportArabPageContent() {
           })
         );
 
-        setClasses(classesWithStudents);
+        setClasses(groupClasses(classesWithStudents));
       }
     } catch (error) {
       devError('Error fetching classes:', error);
@@ -197,6 +309,10 @@ function RaportArabPageContent() {
 
   const filteredStudents = getFilteredStudents();
   const selectedClassObj = classes.find((cls) => cls.id === selectedClass);
+  const selectedClassSemesterClassId = getSemesterClassId(selectedClassObj, selectedAssessmentType);
+  const selectedClassSemesterLabel = selectedClassObj?.semesters
+    .map((semester) => `Semester ${semester.semesterNumber || '-'}`)
+    .join(' + ');
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-emerald-100 p-6">
@@ -253,7 +369,7 @@ function RaportArabPageContent() {
                     <option value="">Pilih Kelas</option>
                     {classes.map((cls) => (
                       <option key={cls.id} value={cls.id}>
-                        {cls.name}
+                        {cls.name}{cls.schoolYear?.year ? ` - ${cls.schoolYear.year}` : ''}
                       </option>
                     ))}
                   </select>
@@ -278,6 +394,9 @@ function RaportArabPageContent() {
                   {selectedClass ? (
                     <>
                       Total: {filteredStudents.length} siswa di kelas {selectedClassObj?.name}
+                      {selectedClassSemesterLabel && (
+                        <> • Gabungan: {selectedClassSemesterLabel}</>
+                      )}
                       {selectedAssessmentType && (
                         <> • Jenis: {assessmentTypes.find(t => t.value === selectedAssessmentType)?.label}</>
                       )}
@@ -319,7 +438,7 @@ function RaportArabPageContent() {
                                 <button
                                   onClick={() => {
                                     const params = new URLSearchParams({
-                                      classId: selectedClass,
+                                      classId: selectedClassSemesterClassId || selectedClass,
                                       studentId: student.id,
                                     });
                                     if (selectedAssessmentType) {
@@ -334,7 +453,7 @@ function RaportArabPageContent() {
                                   Sampul
                                 </button>
                                 <button
-                                  onClick={() => handleViewRaport(selectedClass, student.id)}
+                                  onClick={() => handleViewRaport(selectedClassSemesterClassId || selectedClass, student.id)}
                                   className="flex items-center gap-1 px-3 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors text-xs font-medium"
                                   title="Review Individual"
                                 >
@@ -344,7 +463,7 @@ function RaportArabPageContent() {
                                 <button
                                   onClick={() => {
                                     const params = new URLSearchParams({
-                                      classId: selectedClass,
+                                      classId: selectedClassSemesterClassId || selectedClass,
                                     });
                                     if (selectedAssessmentType) {
                                       params.append('assessmentType', selectedAssessmentType);
@@ -360,7 +479,7 @@ function RaportArabPageContent() {
                                 <button
                                   onClick={() => {
                                     const params = new URLSearchParams({
-                                      classId: selectedClass,
+                                      classId: selectedClassSemesterClassId || selectedClass,
                                     });
                                     if (selectedAssessmentType) {
                                       params.append('assessmentType', selectedAssessmentType);
@@ -390,19 +509,6 @@ function RaportArabPageContent() {
           )}
         </div>
 
-        {/* Info Box */}
-        <div className="mt-8 p-6 bg-emerald-50 border-l-4 border-emerald-600 rounded-lg">
-          <h3 className="font-semibold text-emerald-900 mb-2">Panduan Penggunaan</h3>
-          <ul className="text-sm text-emerald-800 space-y-1">
-            <li>• <strong>Pilih Kelas</strong> - Pilih kelas untuk menampilkan daftar siswa</li>
-            <li>• <strong>Pilih Jenis Penilaian</strong> - Filter berdasarkan UTS/UAS/Ujian Akhir</li>
-            <li>• <strong>Sampul</strong> - Lihat dan cetak sampul raport siswa</li>
-            <li>• <strong>Review</strong> - Lihat raport individual siswa</li>
-            <li>• <strong>Semua</strong> - Review raport keseluruhan kelas</li>
-            <li>• <strong>Unduh</strong> - Download raport dalam format PDF</li>
-            <li>• Gunakan pencarian untuk menemukan siswa tertentu</li>
-          </ul>
-        </div>
       </div>
     </div>
   );
