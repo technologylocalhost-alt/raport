@@ -82,9 +82,15 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
       }
 
       const data = await response.json();
-      const subjectsData = data.data?.subjectsByClass || [];
+      const subjectsData = (data.data?.subjectsByClass || []) as SubjectApproval[];
 
-      const classIds = Array.from(new Set(subjectsData.map((subject: SubjectApproval) => subject.classId)));
+      const classIds: string[] = Array.from(
+        new Set(
+          subjectsData
+            .map((subject) => subject.classId)
+            .filter((classId): classId is string => typeof classId === 'string' && classId.length > 0)
+        )
+      );
       const approvalMap = new Map<string, GradeSampleItem[]>();
 
       const approvalResults = await Promise.all(
