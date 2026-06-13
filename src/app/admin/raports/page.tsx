@@ -21,6 +21,14 @@ interface Level {
 interface SchoolYear {
   id: string;
   year: string;
+  schoolId: string;
+  isActive?: boolean;
+}
+
+interface Semester {
+  id: string;
+  number: number;
+  schoolYearId: string;
   isActive?: boolean;
 }
 
@@ -68,6 +76,13 @@ interface ClassResponseItem {
   id: string;
   name: string;
   levelId?: string;
+  schoolYearId?: string;
+  level?: {
+    schoolId?: string;
+  };
+  schoolYear?: {
+    schoolId?: string;
+  };
 }
 
 interface ClassSubjectResponseItem {
@@ -107,11 +122,13 @@ export default function RaportsPage() {
   const [schools, setSchools] = useState<School[]>([]);
   const [levels, setLevels] = useState<Level[]>([]);
   const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
-  const [classes, setClasses] = useState<Array<{ id: string; name: string; levelId?: string }>>([]);
+  const [semesters, setSemesters] = useState<Semester[]>([]);
+  const [classes, setClasses] = useState<Array<{ id: string; name: string; levelId?: string; schoolYearId?: string; schoolId?: string; levelSchoolId?: string }>>([]);
   const [subjects, setSubjects] = useState<Array<{ id: string; name: string; code?: string }>>([]);
   const [students, setStudents] = useState<Array<{ id: string; name: string; no: string }>>([]);
   const [isClient, setIsClient] = useState(false);
   const [filterSchoolYear, setFilterSchoolYear] = useState('');
+  const [filterSemester, setFilterSemester] = useState('');
   const [pivotData, setPivotData] = useState<StudentRowData[]>([]);
   const [pivotColumns, setPivotColumns] = useState<string[]>([]);
 
@@ -170,9 +187,29 @@ export default function RaportsPage() {
 
   const fetchClasses = useCallback(async () => {
     try {
-      const yearsResponse = await apiFetch('/api/admin/school-years?limit=100');
+      const yearsParams = new URLSearchParams({ limit: '100' });
+      if (filterSchool) {
+        yearsParams.set('schoolId', filterSchool);
+      }
+
+      const yearsResponse = await apiFetch(`/api/admin/school-years?${yearsParams.toString()}`);
       const yearsData = await yearsResponse.json();
-      setSchoolYears(yearsData.data || []);
+      const schoolYearsData = yearsData.data || [];
+      if (filterSchool && schoolYearsData.length === 0) {
+        const fallbackResponse = await apiFetch('/api/admin/school-years?limit=100');
+        const fallbackData = await fallbackResponse.json();
+        setSchoolYears(fallbackData.data || []);
+      } else {
+        setSchoolYears(schoolYearsData);
+      }
+
+      if (filterSchoolYear) {
+        const schoolYearResponse = await apiFetch(`/api/admin/school-years/${filterSchoolYear}`);
+        const schoolYearData = await schoolYearResponse.json();
+        setSemesters(schoolYearData.data?.semesters || []);
+      } else {
+        setSemesters([]);
+      }
 
       const schoolsResponse = await apiFetch('/api/admin/schools?limit=1000');
       const schoolsData = await schoolsResponse.json();
@@ -182,7 +219,11 @@ export default function RaportsPage() {
       const levelsData = await levelsResponse.json();
       setLevels(levelsData.data || []);
 
-      const response = await apiFetch(`/api/admin/classes?limit=1000${filterSchoolYear ? `&schoolYearId=${filterSchoolYear}` : ''}`);
+      const classParams = new URLSearchParams({ limit: '1000' });
+      if (filterSchoolYear) classParams.set('schoolYearId', filterSchoolYear);
+      if (filterSemester) classParams.set('semesterId', filterSemester);
+      if (filterSchool) classParams.set('schoolId', filterSchool);
+      const response = await apiFetch(`/api/admin/classes?${classParams.toString()}`);
 
       if (response.status === 401) {
         clearAuthData();
@@ -197,12 +238,19 @@ export default function RaportsPage() {
 
       const data: { success: boolean; data?: ClassResponseItem[] } = await response.json();
       if (data.success && data.data) {
-        setClasses(data.data.map((c) => ({ id: c.id, name: c.name, levelId: c.levelId })));
+        setClasses(data.data.map((c) => ({
+          id: c.id,
+          name: c.name,
+          levelId: c.levelId,
+          schoolYearId: c.schoolYearId,
+          levelSchoolId: c.level?.schoolId,
+          schoolId: c.schoolYear?.schoolId,
+        })));
       }
     } catch (error) {
       devError('Failed to fetch classes:', error);
     }
-  }, [filterSchoolYear, router]);
+  }, [filterSchool, filterSchoolYear, filterSemester, router]);
 
   const fetchSubjectsAndStudents = useCallback(async () => {
     try {
@@ -297,6 +345,15 @@ export default function RaportsPage() {
   }, [fetchRaports, fetchSubjectsAndStudents, filterClass]);
 
   useEffect(() => {
+    if (!filterSchoolYear) {
+      setSemesters([]);
+    }
+    if (!filterSchoolYear) {
+      setFilterSemester('');
+    }
+  }, [filterSchoolYear, fetchClasses]);
+
+  useEffect(() => {
     if (raports.length > 0) {
       transformToPivotTable();
     }
@@ -304,6 +361,12 @@ export default function RaportsPage() {
 
   const getSchoolIdForClass = (classId: string): string | undefined => {
     const classObj = classes.find(c => c.id === classId);
+    if (classObj?.levelSchoolId) return classObj.levelSchoolId;
+    if (classObj?.schoolId) return classObj.schoolId;
+    if (classObj?.schoolYearId) {
+      const year = schoolYears.find((item) => item.id === classObj.schoolYearId);
+      if (year?.schoolId) return year.schoolId;
+    }
     if (!classObj?.levelId) return undefined;
     const level = levels.find(l => l.id === classObj.levelId);
     return level?.schoolId;
@@ -345,6 +408,7 @@ export default function RaportsPage() {
               onChange={(e) => {
                 setFilterSchool(e.target.value);
                 setFilterSchoolYear('');
+                setFilterSemester('');
                 setFilterClass('');
                 setSelectedClassName('');
                 setFilterSubject('');
@@ -373,6 +437,7 @@ export default function RaportsPage() {
               value={filterSchoolYear}
               onChange={(e) => {
                 setFilterSchoolYear(e.target.value);
+                setFilterSemester('');
                 setFilterClass('');
                 setSelectedClassName('');
                 setFilterSubject('');
@@ -380,7 +445,6 @@ export default function RaportsPage() {
                 setFilterAssessmentType('');
                 setSearch('');
                 setPage(1);
-                // Refetch classes when school year changes
                 if (isClient) fetchClasses();
               }}
               className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-gray-900 bg-white"
@@ -389,6 +453,36 @@ export default function RaportsPage() {
               {schoolYears.map((year) => (
                 <option key={year.id} value={year.id}>
                   {year.year} {year.isActive ? '(Aktif)' : '(Nonaktif)'}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Semester */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-900 mb-2">
+              Semester
+            </label>
+            <select
+              value={filterSemester}
+              onChange={(e) => {
+                setFilterSemester(e.target.value);
+                setFilterClass('');
+                setSelectedClassName('');
+                setFilterSubject('');
+                setFilterStudent('');
+                setFilterAssessmentType('');
+                setSearch('');
+                setPage(1);
+                if (isClient) fetchClasses();
+              }}
+              disabled={!filterSchoolYear}
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-gray-900 bg-white disabled:bg-gray-100"
+            >
+              <option value="">-- Semua Semester --</option>
+              {semesters.map((semester) => (
+                <option key={semester.id} value={semester.id}>
+                  Semester {semester.number} {semester.isActive ? '(Aktif)' : '(Nonaktif)'}
                 </option>
               ))}
             </select>

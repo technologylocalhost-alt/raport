@@ -11,9 +11,15 @@ interface Level {
   code: string;
 }
 
+interface School {
+  id: string;
+  name: string;
+}
+
 interface SchoolYear {
   id: string;
   year: string;
+  schoolId: string;
   isActive?: boolean;
 }
 
@@ -69,6 +75,7 @@ interface ClassData {
 
 export default function ClassesPage() {
   const [classes, setClasses] = useState<ClassData[]>([]);
+  const [schools, setSchools] = useState<School[]>([]);
   const [levels, setLevels] = useState<Level[]>([]);
   const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
   const [semesters, setSemesters] = useState<Semester[]>([]);
@@ -78,6 +85,7 @@ export default function ClassesPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [filterSchoolId, setFilterSchoolId] = useState('');
   const [filterSchoolYearId, setFilterSchoolYearId] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -97,7 +105,8 @@ export default function ClassesPage() {
 
   const fetchInitialData = useCallback(async () => {
     try {
-      const [levelsRes, yearsRes, teachersRes, waliKelasRes, subjectsRes] = await Promise.all([
+      const [schoolsRes, levelsRes, yearsRes, teachersRes, waliKelasRes, subjectsRes] = await Promise.all([
+        apiFetch('/api/admin/schools?limit=100'),
         apiFetch('/api/admin/levels?limit=100'),
         apiFetch('/api/admin/school-years?limit=100'),
         apiFetch('/api/admin/users?limit=100&role=TEACHER'),
@@ -105,12 +114,14 @@ export default function ClassesPage() {
         apiFetch('/api/admin/subjects?limit=100'),
       ]);
 
+      const schoolsData = await schoolsRes.json();
       const levelsData = await levelsRes.json();
       const yearsData = await yearsRes.json();
       const teachersData = await teachersRes.json();
       const waliKelasData = await waliKelasRes.json();
       const subjectsData = await subjectsRes.json();
 
+      setSchools(schoolsData.data || []);
       setLevels(levelsData.data || []);
       setSchoolYears(yearsData.data || []);
       // Combine teachers and wali kelas
@@ -131,6 +142,7 @@ export default function ClassesPage() {
         page: page.toString(),
         limit: limit.toString(),
         ...(search && { search }),
+        ...(filterSchoolId && { schoolId: filterSchoolId }),
         ...(filterSchoolYearId && { schoolYearId: filterSchoolYearId }),
       });
 
@@ -142,7 +154,7 @@ export default function ClassesPage() {
     } catch (error) {
       devError('Failed to fetch classes:', error);
     }
-  }, [filterSchoolYearId, limit, page, search]);
+  }, [filterSchoolId, filterSchoolYearId, limit, page, search]);
 
   const fetchSemesters = useCallback(async (schoolYearId: string) => {
     try {
@@ -180,6 +192,13 @@ export default function ClassesPage() {
 
     return () => clearTimeout(timer);
   }, [fetchSemesters, formData.schoolYearId]);
+
+  const filteredSchoolYears = filterSchoolId
+    ? schoolYears.filter((year) => year.schoolId === filterSchoolId)
+    : schoolYears;
+  const visibleSchoolYears = filterSchoolId && filteredSchoolYears.length === 0
+    ? schoolYears
+    : filteredSchoolYears;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -349,6 +368,27 @@ export default function ClassesPage() {
         </div>
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Filter Sekolah
+          </label>
+          <select
+            value={filterSchoolId}
+            onChange={(e) => {
+              setFilterSchoolId(e.target.value);
+              setFilterSchoolYearId('');
+              setPage(1);
+            }}
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-gray-900 bg-white"
+          >
+            <option value="">-- Semua Sekolah --</option>
+            {schools.map((school) => (
+              <option key={school.id} value={school.id}>
+                {school.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
             Filter Tahun Ajaran
           </label>
           <select
@@ -360,7 +400,7 @@ export default function ClassesPage() {
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-gray-900 bg-white"
           >
             <option value="">-- Semua Tahun Ajaran --</option>
-            {schoolYears.map((year) => (
+            {visibleSchoolYears.map((year) => (
               <option key={year.id} value={year.id}>
                 {year.year} {year.isActive ? '(Aktif)' : '(Nonaktif)'}
               </option>

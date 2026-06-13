@@ -26,6 +26,17 @@ export async function GET(request: NextRequest) {
         name: true,
         levelId: true,
         schoolYearId: true,
+        semesterId: true,
+        schoolYear: {
+          select: {
+            schoolId: true,
+          },
+        },
+        level: {
+          select: {
+            schoolId: true,
+          },
+        },
         subjects: {
           include: {
             subject: {
@@ -45,7 +56,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Group by subject and aggregate classes
-    const subjectsMap = new Map<string, { id: string; code: string; name: string; nameArabic: string | null; description: string | null; creditHours: number | null; levelId: string | null; classes: { id: string; name: string; schoolYearId: string; }[] }>();
+    const subjectsMap = new Map<string, { id: string; code: string; name: string; nameArabic: string | null; description: string | null; creditHours: number | null; levelId: string | null; classes: { id: string; name: string; schoolYearId: string; semesterId: string; schoolId: string; }[] }>();
 
     classes.forEach((cls) => {
       cls.subjects.forEach((cs) => {
@@ -59,6 +70,8 @@ export async function GET(request: NextRequest) {
               id: cls.id,
               name: cls.name,
               schoolYearId: cls.schoolYearId,
+              semesterId: cls.semesterId,
+              schoolId: cls.level.schoolId || cls.schoolYear.schoolId,
             });
           }
         } else {
@@ -74,6 +87,8 @@ export async function GET(request: NextRequest) {
               id: cls.id,
               name: cls.name,
               schoolYearId: cls.schoolYearId,
+              semesterId: cls.semesterId,
+              schoolId: cls.level.schoolId || cls.schoolYear.schoolId,
             }],
           });
         }

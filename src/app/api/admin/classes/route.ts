@@ -82,6 +82,7 @@ export async function GET(request: NextRequest) {
 
     // Build where clause with validation
     const where: Prisma.ClassWhereInput = {};
+    const schoolWhereClauses: Prisma.ClassWhereInput[] = [];
     const schoolYearWhere: Prisma.SchoolYearWhereInput = {};
     const levelWhere: Prisma.LevelWhereInput = {};
     
@@ -104,14 +105,10 @@ export async function GET(request: NextRequest) {
       where.levelId = levelId;
     }
     if (schoolId && schoolId.trim() !== '') {
-      where.schoolYear = {
-        ...((where.schoolYear && typeof where.schoolYear === 'object') ? where.schoolYear as Record<string, unknown> : {}),
-        schoolId,
-      } as Prisma.SchoolYearWhereInput;
-      where.level = {
-        ...((where.level && typeof where.level === 'object') ? where.level as Record<string, unknown> : {}),
-        schoolId,
-      } as Prisma.LevelWhereInput;
+      schoolWhereClauses.push(
+        { level: { schoolId } },
+        { schoolYear: { schoolId } }
+      );
     }
     if (schoolYearId && schoolYearId.trim() !== '') {
       where.schoolYearId = schoolYearId;
@@ -138,13 +135,19 @@ export async function GET(request: NextRequest) {
     if (Object.keys(levelWhere).length > 0) {
       where.level = levelWhere;
     }
+    if (schoolWhereClauses.length > 0) {
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : []),
+        { OR: schoolWhereClauses },
+      ];
+    }
 
     const [classes, total] = await Promise.all([
       prisma.class.findMany({
         where,
         include: {
-          level: { select: { id: true, name: true, code: true } },
-          schoolYear: { select: { id: true, year: true, isActive: true } },
+          level: { select: { id: true, name: true, code: true, schoolId: true } },
+          schoolYear: { select: { id: true, year: true, isActive: true, schoolId: true } },
           semester: { select: { id: true, number: true, isActive: true } },
           waliKelas: { select: { id: true, name: true, email: true } },
           teachers: {

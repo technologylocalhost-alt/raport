@@ -220,14 +220,6 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
     }
   }
 
-  if (!isOpen) return null;
-
-  const handleClose = () => {
-    setSelectedSubject(null);
-    setSearchQuery('');
-    onClose();
-  };
-
   const filteredSubjects = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     const classSubjects = subjects.filter((s) => s.className === selectedClass);
@@ -250,6 +242,14 @@ export default function ApprovalModal({ isOpen, onClose, onSuccess, selectedClas
       return searchableText.includes(query);
     });
   }, [searchQuery, subjects, selectedClass]);
+
+  if (!isOpen) return null;
+
+  const handleClose = () => {
+    setSelectedSubject(null);
+    setSearchQuery('');
+    onClose();
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">

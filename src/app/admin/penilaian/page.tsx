@@ -19,6 +19,7 @@ interface Level {
 interface SchoolYear {
   id: string;
   year: string;
+  schoolId: string;
   isActive?: boolean;
 }
 
@@ -30,20 +31,30 @@ interface Subject {
   description?: string;
   creditHours?: number;
   levelId?: string;
-  classes: Array<{ id: string; name: string; schoolYearId?: string }>;
+  classes: Array<{ id: string; name: string; schoolYearId?: string; semesterId?: string; schoolId?: string }>;
+}
+
+interface Semester {
+  id: string;
+  number: number;
+  schoolYearId: string;
+  isActive?: boolean;
 }
 
 export default function AdminPenilaianPage() {
   const [schools, setSchools] = useState<School[]>([]);
   const [levels, setLevels] = useState<Level[]>([]);
   const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
+  const [semesters, setSemesters] = useState<Semester[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingSchoolYears, setIsLoadingSchoolYears] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedSchool, setSelectedSchool] = useState<string>('');
   const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>('');
+  const [selectedSemester, setSelectedSemester] = useState<string>('');
   const [selectedClass, setSelectedClass] = useState<string>('');
   const [searchText, setSearchText] = useState('');
   const itemsPerPage = 10;
@@ -66,11 +77,6 @@ export default function AdminPenilaianPage() {
       const levelsData = await levelsRes.json();
       setLevels(levelsData.data || []);
 
-      // Fetch school years
-      const yearsRes = await apiFetch('/api/admin/school-years?limit=100');
-      const yearsData = await yearsRes.json();
-      setSchoolYears(yearsData.data || []);
-
       // Fetch subjects with their classes
       const subjectsResponse = await apiFetch(`/api/admin/subjects-with-classes`);
       const subjectsData = await subjectsResponse.json();
@@ -91,25 +97,81 @@ export default function AdminPenilaianPage() {
     }
   }
 
+  async function fetchSchoolYearsBySchool(schoolId: string) {
+    try {
+      setIsLoadingSchoolYears(true);
+
+      const params = new URLSearchParams({ limit: '100' });
+      if (schoolId) {
+        params.set('schoolId', schoolId);
+      }
+
+      const yearsRes = await apiFetch(`/api/admin/school-years?${params.toString()}`);
+      const yearsData = await yearsRes.json();
+      const years = yearsData.data || [];
+
+      if (schoolId && years.length === 0) {
+        const fallbackRes = await apiFetch('/api/admin/school-years?limit=100');
+        const fallbackData = await fallbackRes.json();
+        setSchoolYears(fallbackData.data || []);
+        return;
+      }
+
+      setSchoolYears(years);
+    } catch (error) {
+      devError('Error:', error);
+      setSchoolYears([]);
+    } finally {
+      setIsLoadingSchoolYears(false);
+    }
+  }
+
+  async function fetchSemestersBySchoolYear(schoolYearId: string) {
+    try {
+      if (!schoolYearId) {
+        setSemesters([]);
+        return;
+      }
+
+      const response = await apiFetch(`/api/admin/school-years/${schoolYearId}`);
+      const data = await response.json();
+      setSemesters(data.data?.semesters || []);
+    } catch (error) {
+      devError('Error:', error);
+      setSemesters([]);
+    }
+  }
+
+  useEffect(() => {
+    fetchSchoolYearsBySchool(selectedSchool);
+  }, [selectedSchool]);
+
+  useEffect(() => {
+    void fetchSemestersBySchoolYear(selectedSchoolYear);
+    if (!selectedSchoolYear) {
+      setSelectedSemester('');
+    }
+  }, [selectedSchoolYear]);
+
   const sortedSubjects = [...subjects].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' }));
 
-  // Helper function to get school ID for a subject
-  const getSchoolIdForSubject = (subject: Subject): string | undefined => {
-    if (!subject.levelId) return undefined;
-    const level = levels.find(l => l.id === subject.levelId);
-    return level?.schoolId;
+  // Helper function to get school ID for a class
+  const getSchoolIdForClass = (cls: { schoolId?: string; schoolYearId?: string }): string | undefined => {
+    if (cls.schoolId) return cls.schoolId;
+    if (!cls.schoolYearId) return undefined;
+    const year = schoolYears.find((item) => item.id === cls.schoolYearId);
+    return year?.schoolId;
   };
 
   // Get unique classes from all subjects, filtered by selected school and school year
-  const classMap = new Map<string, { id: string; name: string; schoolYearId?: string }>();
+  const classMap = new Map<string, { id: string; name: string; schoolYearId?: string; semesterId?: string; schoolId?: string }>();
   sortedSubjects.forEach(subject => {
-    const subjectSchoolId = getSchoolIdForSubject(subject);
-    // Skip if school filter is set and subject doesn't match
-    if (selectedSchool && subjectSchoolId !== selectedSchool) return;
-    
     subject.classes.forEach(cls => {
+      const classSchoolId = getSchoolIdForClass(cls);
+      if (selectedSchool && classSchoolId !== selectedSchool) return;
       // Only add classes that match the selected school year (if one is selected)
       if (!selectedSchoolYear || cls.schoolYearId === selectedSchoolYear) {
+        if (selectedSemester && cls.semesterId !== selectedSemester) return;
         if (!classMap.has(cls.id)) {
           classMap.set(cls.id, cls);
         }
@@ -120,15 +182,15 @@ export default function AdminPenilaianPage() {
 
   // Filter subjects based on school, school year, class and search
   const filteredSubjects = sortedSubjects.filter((subject) => {
-    const subjectSchoolId = getSchoolIdForSubject(subject);
-    const matchesSchool = !selectedSchool || subjectSchoolId === selectedSchool;
+    const matchesSchool = !selectedSchool || subject.classes.some((c) => getSchoolIdForClass(c) === selectedSchool);
     const matchesSchoolYear = !selectedSchoolYear || subject.classes.some(c => c.schoolYearId === selectedSchoolYear);
+    const matchesSemester = !selectedSemester || subject.classes.some(c => c.semesterId === selectedSemester);
     const matchesClass = !selectedClass || subject.classes.some(c => c.id === selectedClass);
     const matchesSearch = !searchText || 
       subject.code.toLowerCase().includes(searchText.toLowerCase()) ||
       subject.name.toLowerCase().includes(searchText.toLowerCase()) ||
       (subject.nameArabic && subject.nameArabic.includes(searchText));
-    return matchesSchool && matchesSchoolYear && matchesClass && matchesSearch;
+    return matchesSchool && matchesSchoolYear && matchesSemester && matchesClass && matchesSearch;
   });
 
   const paginatedSubjects = filteredSubjects.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -137,12 +199,13 @@ export default function AdminPenilaianPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedSchool, selectedSchoolYear, selectedClass, searchText]);
+  }, [selectedSchool, selectedSchoolYear, selectedSemester, selectedClass, searchText]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
       await fetchInitialData();
+      await fetchSchoolYearsBySchool(selectedSchool);
     } finally {
       setIsRefreshing(false);
     }
@@ -202,6 +265,7 @@ export default function AdminPenilaianPage() {
                   onChange={(e) => {
                     setSelectedSchool(e.target.value);
                     setSelectedSchoolYear('');
+                    setSelectedSemester('');
                     setSelectedClass('');
                   }}
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors bg-white text-gray-900"
@@ -224,14 +288,44 @@ export default function AdminPenilaianPage() {
                   value={selectedSchoolYear}
                   onChange={(e) => {
                     setSelectedSchoolYear(e.target.value);
+                    setSelectedSemester('');
                     setSelectedClass('');
                   }}
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors bg-white text-gray-900"
                 >
                   <option value="">-- Semua Tahun --</option>
-                  {schoolYears.map((year) => (
-                    <option key={year.id} value={year.id}>
-                      {year.year} {year.isActive ? '(Aktif)' : '(Nonaktif)'}
+                  {isLoadingSchoolYears ? (
+                    <option value="" disabled>
+                      Memuat tahun ajaran...
+                    </option>
+                  ) : (
+                    schoolYears.map((year) => (
+                      <option key={year.id} value={year.id}>
+                        {year.year} {year.isActive ? '(Aktif)' : '(Nonaktif)'}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              {/* Semester Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Semester
+                </label>
+                <select
+                  value={selectedSemester}
+                  onChange={(e) => {
+                    setSelectedSemester(e.target.value);
+                    setSelectedClass('');
+                  }}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors bg-white text-gray-900"
+                  disabled={!selectedSchoolYear}
+                >
+                  <option value="">-- Semua Semester --</option>
+                  {semesters.map((semester) => (
+                    <option key={semester.id} value={semester.id}>
+                      Semester {semester.number} {semester.isActive ? '(Aktif)' : '(Nonaktif)'}
                     </option>
                   ))}
                 </select>
@@ -280,6 +374,7 @@ export default function AdminPenilaianPage() {
                   setSearchText('');
                   setSelectedClass('');
                   setSelectedSchoolYear('');
+                  setSelectedSemester('');
                 }}
                 className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
               >
@@ -428,8 +523,8 @@ export default function AdminPenilaianPage() {
           {!selectedClass && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
               <p className="text-blue-800">
-                {!selectedSchoolYear 
-                  ? 'Pilih tahun ajaran dan kelas di atas untuk melihat mata pelajaran yang tersedia.' 
+                {!selectedSchoolYear
+                  ? 'Pilih tahun ajaran, semester, dan kelas di atas untuk melihat mata pelajaran yang tersedia.'
                   : 'Pilih kelas di atas untuk melihat mata pelajaran yang tersedia.'}
               </p>
             </div>
